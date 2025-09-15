@@ -7,8 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { calculateNutritionMetrics } from '@/utils/calculations';
 import { sampleClient, sampleRecipes } from '@/data/sampleData';
-import { Client } from '@/types';
+import { Client, CompletePlan } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { generateCompletePlan } from '@/utils/planGenerator';
+import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
+import { Download, FileJson, FileText } from 'lucide-react';
 
 const Index = () => {
   const [activeClient, setActiveClient] = useState<Client>(sampleClient);
