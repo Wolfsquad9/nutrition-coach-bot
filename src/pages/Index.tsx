@@ -15,14 +15,48 @@ import { Download, FileJson, FileText } from 'lucide-react';
 
 const Index = () => {
   const [activeClient, setActiveClient] = useState<Client>(sampleClient);
+  const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
 
-  const handleGeneratePlan = () => {
-    const metrics = calculateNutritionMetrics(activeClient);
-    
+  const handleGeneratePlan = async () => {
+    setIsGenerating(true);
+    try {
+      const plan = await generateCompletePlan(activeClient);
+      setGeneratedPlan(plan);
+      
+      toast({
+        title: "Plan Generated Successfully!",
+        description: `Complete nutrition and training plan ready for ${activeClient.firstName} ${activeClient.lastName}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error Generating Plan",
+        description: "Please check client data and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownloadPDF = () => {
+    if (!generatedPlan) return;
+    const pdf = generateCompletePlanPDF(generatedPlan);
+    downloadPDF(pdf, `${activeClient.firstName}-${activeClient.lastName}-plan.pdf`);
     toast({
-      title: "Plan Generated Successfully!",
-      description: `TDEE: ${metrics.tdee} cal | Protein: ${metrics.proteinGrams}g | Carbs: ${metrics.carbsGrams}g | Fat: ${metrics.fatGrams}g`,
+      title: "PDF Downloaded",
+      description: "The complete plan has been downloaded as PDF.",
+    });
+  };
+
+  const handleDownloadJSON = () => {
+    if (!generatedPlan) return;
+    const json = exportPlanAsJSON(generatedPlan);
+    downloadJSON(json, `${activeClient.firstName}-${activeClient.lastName}-plan.json`);
+    toast({
+      title: "JSON Downloaded",
+      description: "The complete plan has been downloaded as JSON.",
     });
   };
 
@@ -96,44 +130,71 @@ const Index = () => {
               </div>
               <Button 
                 onClick={handleGeneratePlan}
+                disabled={isGenerating}
                 className="mt-6 bg-gradient-primary text-white shadow-glow hover:shadow-xl"
               >
-                Generate Complete Plan
+                {isGenerating ? 'Generating...' : 'Generate Complete Plan'}
               </Button>
             </Card>
           </TabsContent>
 
           <TabsContent value="nutrition" className="space-y-4">
-            <Card className="p-6 shadow-card">
-              <h2 className="text-2xl font-bold mb-4 text-primary">Nutrition Metrics</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {(() => {
-                  const metrics = calculateNutritionMetrics(activeClient);
-                  return (
-                    <>
-                      <div className="bg-gradient-card p-4 rounded-lg">
-                        <p className="text-muted-foreground text-sm">TDEE</p>
-                        <p className="text-2xl font-bold text-primary">{metrics.tdee}</p>
-                        <p className="text-xs text-muted-foreground">kcal/day</p>
+            {generatedPlan ? (
+              <>
+                <Card className="p-6 shadow-card">
+                  <h2 className="text-2xl font-bold mb-4 text-primary">Nutrition Metrics</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gradient-card p-4 rounded-lg">
+                      <p className="text-muted-foreground text-sm">TDEE</p>
+                      <p className="text-2xl font-bold text-primary">{generatedPlan.nutritionPlan.metrics.tdee}</p>
+                      <p className="text-xs text-muted-foreground">kcal/day</p>
+                    </div>
+                    <div className="bg-gradient-card p-4 rounded-lg">
+                      <p className="text-muted-foreground text-sm">Target</p>
+                      <p className="text-2xl font-bold text-accent">{generatedPlan.nutritionPlan.metrics.targetCalories}</p>
+                      <p className="text-xs text-muted-foreground">kcal/day</p>
+                    </div>
+                    <div className="bg-gradient-card p-4 rounded-lg">
+                      <p className="text-muted-foreground text-sm">Protein</p>
+                      <p className="text-2xl font-bold text-success">{generatedPlan.nutritionPlan.metrics.proteinGrams}g</p>
+                    </div>
+                    <div className="bg-gradient-card p-4 rounded-lg">
+                      <p className="text-muted-foreground text-sm">Carbs</p>
+                      <p className="text-2xl font-bold text-info">{generatedPlan.nutritionPlan.metrics.carbsGrams}g</p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-6 shadow-card">
+                  <h3 className="text-xl font-bold mb-4">Weekly Meal Plan</h3>
+                  <div className="space-y-4">
+                    {generatedPlan.nutritionPlan.weeklyMealPlan.slice(0, 2).map((day) => (
+                      <div key={day.day} className="border border-border rounded-lg p-4">
+                        <h4 className="font-semibold text-primary mb-2">Day {day.day}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {day.meals.map((meal, idx) => (
+                            <div key={idx} className="text-sm">
+                              <span className="font-medium">{meal.time}</span> - {meal.mealType}
+                              <div className="text-xs text-muted-foreground">
+                                {meal.recipes[0]?.recipe.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Total: {day.totalMacros.calories} kcal | P: {day.totalMacros.protein}g | C: {day.totalMacros.carbs}g | F: {day.totalMacros.fat}g
+                        </div>
                       </div>
-                      <div className="bg-gradient-card p-4 rounded-lg">
-                        <p className="text-muted-foreground text-sm">Target</p>
-                        <p className="text-2xl font-bold text-accent">{metrics.targetCalories}</p>
-                        <p className="text-xs text-muted-foreground">kcal/day</p>
-                      </div>
-                      <div className="bg-gradient-card p-4 rounded-lg">
-                        <p className="text-muted-foreground text-sm">Protein</p>
-                        <p className="text-2xl font-bold text-success">{metrics.proteinGrams}g</p>
-                      </div>
-                      <div className="bg-gradient-card p-4 rounded-lg">
-                        <p className="text-muted-foreground text-sm">Carbs</p>
-                        <p className="text-2xl font-bold text-info">{metrics.carbsGrams}g</p>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            </Card>
+                    ))}
+                  </div>
+                </Card>
+              </>
+            ) : (
+              <Card className="p-6 shadow-card">
+                <h2 className="text-2xl font-bold mb-4 text-primary">Nutrition Plan</h2>
+                <p className="text-muted-foreground">Generate a plan to see nutrition details and meal plans.</p>
+              </Card>
+            )}
 
             <Card className="p-6 shadow-card">
               <h3 className="text-xl font-bold mb-4">Sample Recipes</h3>
@@ -154,20 +215,106 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="training">
-            <Card className="p-6 shadow-card">
-              <h2 className="text-2xl font-bold text-primary">Training Plan</h2>
-              <p className="text-muted-foreground">Configure and generate personalized workout plans</p>
-            </Card>
+            {generatedPlan ? (
+              <Card className="p-6 shadow-card">
+                <h2 className="text-2xl font-bold mb-4 text-primary">Training Plan - {generatedPlan.trainingPlan.name}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="bg-gradient-card p-4 rounded-lg">
+                    <p className="text-muted-foreground text-sm">Frequency</p>
+                    <p className="text-xl font-bold">{generatedPlan.trainingPlan.frequency} days/week</p>
+                  </div>
+                  <div className="bg-gradient-card p-4 rounded-lg">
+                    <p className="text-muted-foreground text-sm">Split</p>
+                    <p className="text-xl font-bold">{generatedPlan.trainingPlan.split.replace('_', ' ')}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  {generatedPlan.trainingPlan.workouts.map((workout) => (
+                    <div key={workout.dayNumber} className="border border-border rounded-lg p-4">
+                      <h4 className="font-semibold text-primary mb-2">Day {workout.dayNumber}: {workout.name}</h4>
+                      <p className="text-sm text-muted-foreground mb-2">Duration: {workout.duration} minutes</p>
+                      <div className="space-y-2">
+                        {workout.exercises.slice(0, 3).map((exercise, idx) => (
+                          <div key={idx} className="text-sm">
+                            <span className="font-medium">{exercise.exercise.name}</span>
+                            <span className="text-muted-foreground ml-2">
+                              {exercise.sets} × {exercise.reps} @ {exercise.intensity}
+                            </span>
+                          </div>
+                        ))}
+                        {workout.exercises.length > 3 && (
+                          <p className="text-xs text-muted-foreground">+ {workout.exercises.length - 3} more exercises</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : (
+              <Card className="p-6 shadow-card">
+                <h2 className="text-2xl font-bold text-primary">Training Plan</h2>
+                <p className="text-muted-foreground">Generate a plan to see your personalized workout program.</p>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="export">
-            <Card className="p-6 shadow-card">
-              <h2 className="text-2xl font-bold text-primary">Export Plans</h2>
-              <div className="flex gap-4 mt-4">
-                <Button variant="gradient">Export as PDF</Button>
-                <Button variant="outline">Send via Email</Button>
-              </div>
-            </Card>
+            {generatedPlan ? (
+              <Card className="p-6 shadow-card">
+                <h2 className="text-2xl font-bold mb-4 text-primary">Export Plans</h2>
+                <p className="text-muted-foreground mb-6">Download your complete nutrition and training plan in various formats.</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card className="p-4 border border-border">
+                    <div className="flex items-center gap-3 mb-3">
+                      <FileText className="h-8 w-8 text-primary" />
+                      <div>
+                        <h3 className="font-semibold">PDF Export</h3>
+                        <p className="text-sm text-muted-foreground">Complete formatted plan for clients</p>
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={handleDownloadPDF}
+                      className="w-full bg-gradient-primary text-white"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download PDF
+                    </Button>
+                  </Card>
+                  
+                  <Card className="p-4 border border-border">
+                    <div className="flex items-center gap-3 mb-3">
+                      <FileJson className="h-8 w-8 text-accent" />
+                      <div>
+                        <h3 className="font-semibold">JSON Export</h3>
+                        <p className="text-sm text-muted-foreground">Raw data for integrations</p>
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={handleDownloadJSON}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download JSON
+                    </Button>
+                  </Card>
+                </div>
+                
+                <div className="mt-6 p-4 bg-gradient-card rounded-lg">
+                  <h3 className="font-semibold mb-2">Grocery List Included</h3>
+                  <p className="text-sm text-muted-foreground">
+                    The PDF includes a complete weekly grocery list with quantities organized by category.
+                  </p>
+                </div>
+              </Card>
+            ) : (
+              <Card className="p-6 shadow-card">
+                <h2 className="text-2xl font-bold text-primary">Export Plans</h2>
+                <p className="text-muted-foreground">Generate a plan first to enable export options.</p>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </main>
