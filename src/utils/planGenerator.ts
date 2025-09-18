@@ -429,25 +429,210 @@ export function generateNutritionPlan(client: Client): NutritionPlan {
 }
 
 /**
- * Génère un plan complet (nutrition + entraînement)
+ * Génère un plan complet (nutrition + entraînement) avec IA
  */
-export function generateCompletePlan(client: Client): CompletePlan {
+export async function generateCompletePlan(client: Client): Promise<CompletePlan> {
   // Vérifier les red flags
   const redFlags = checkForRedFlags(client);
   if (redFlags.length > 0) {
     throw new Error(`⚠️ Red flags detected: ${redFlags.join(', ')}. Manual review required.`);
   }
   
-  const nutritionPlan = generateNutritionPlan(client);
-  const trainingPlan = generateTrainingPlan(client);
+  try {
+    // Appeler la fonction Supabase Edge pour générer le plan avec OpenAI
+    const response = await fetch('https://ennbxdpthjtzsobnqvqw.supabase.co/functions/v1/generate-fitness-plan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ client })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate plan with AI');
+    }
+
+    const { plan: aiGeneratedPlan } = await response.json();
+    
+    // Transformer la réponse AI en format attendu par l'application
+    const nutritionPlan = transformAINutritionPlan(aiGeneratedPlan.nutrition_plan, client);
+    const trainingPlan = transformAITrainingPlan(aiGeneratedPlan.training_plan, client);
+    
+    return {
+      client,
+      nutritionPlan,
+      trainingPlan,
+      generatedAt: new Date().toISOString(),
+      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'active',
+      aiRecommendations: aiGeneratedPlan.recommendations
+    };
+  } catch (error) {
+    console.error('Error generating AI plan, falling back to local generation:', error);
+    // Fallback to local generation if AI fails
+    const nutritionPlan = generateNutritionPlan(client);
+    const trainingPlan = generateTrainingPlan(client);
+    
+    return {
+      client,
+      nutritionPlan,
+      trainingPlan,
+      generatedAt: new Date().toISOString(),
+      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'active'
+    };
+  }
+}
+
+/**
+ * Transforme le plan nutrition AI en format de l'app
+ */
+function transformAINutritionPlan(aiPlan: any, client: Client): NutritionPlan {
+  const weeklyMealPlan: MealPlan[] = [];
+  
+  aiPlan.meal_plans.forEach((dayPlan: any) => {
+    const meals: Meal[] = dayPlan.meals.map((meal: any, index: number) => {
+      const recipes: RecipeServing[] = [{
+        recipe: {
+          id: `ai-recipe-${dayPlan.day}-${index}`,
+          name: meal.foods.map((f: any) => f.name).join(', '),
+          category: meal.meal_type,
+          prepTime: 10,
+          cookTime: 15,
+          servings: 1,
+          ingredients: meal.foods.map((food: any) => ({
+            id: `ing-${dayPlan.day}-${index}`,
+            name: food.name,
+            amount: food.amount,
+            unit: food.unit,
+            category: 'various',
+            macrosPer100g: { calories: 0, protein: 0, carbs: 0, fat: 0 }
+          })),
+          instructions: [],
+          macrosPerServing: {
+            calories: meal.foods.reduce((sum: number, f: any) => sum + f.calories, 0),
+            protein: meal.foods.reduce((sum: number, f: any) => sum + f.protein, 0),
+            carbs: meal.foods.reduce((sum: number, f: any) => sum + f.carbs, 0),
+            fat: meal.foods.reduce((sum: number, f: any) => sum + f.fat, 0)
+          },
+          allergens: [],
+          dietTypes: [],
+          tags: [],
+          equipment: [],
+          difficulty: 'easy' as const
+        },
+        servings: 1,
+        adjustedMacros: {
+          calories: meal.foods.reduce((sum: number, f: any) => sum + f.calories, 0),
+          protein: meal.foods.reduce((sum: number, f: any) => sum + f.protein, 0),
+          carbs: meal.foods.reduce((sum: number, f: any) => sum + f.carbs, 0),
+          fat: meal.foods.reduce((sum: number, f: any) => sum + f.fat, 0)
+        }
+      }];
+      
+      return {
+        id: `meal-${dayPlan.day}-${index}`,
+        mealNumber: meal.meal_number,
+        mealType: meal.meal_type,
+        time: meal.time,
+        recipes,
+        totalMacros: recipes[0].adjustedMacros
+      };
+    });
+    
+    const totalDayMacros = meals.reduce((acc, meal) => ({
+      calories: acc.calories + meal.totalMacros.calories,
+      protein: acc.protein + meal.totalMacros.protein,
+      carbs: acc.carbs + meal.totalMacros.carbs,
+      fat: acc.fat + meal.totalMacros.fat,
+      fiber: 0
+    }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+    
+    weeklyMealPlan.push({
+      day: dayPlan.day,
+      meals,
+      totalMacros: totalDayMacros,
+      hydration: Math.round(client.weight * 0.033)
+    });
+  });
+  
+  // Transformer la liste de courses
+  const groceryList: GroceryItem[] = [];
+  aiPlan.grocery_list?.forEach((category: any) => {
+    category.items.forEach((item: any) => {
+      groceryList.push({
+        ingredient: item.name,
+        totalAmount: item.amount,
+        unit: item.unit,
+        category: category.category,
+        estimatedCost: item.amount * 0.05
+      });
+    });
+  });
   
   return {
-    client,
-    nutritionPlan,
-    trainingPlan,
-    generatedAt: new Date().toISOString(),
-    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Valide 30 jours
-    status: 'active'
+    id: `nutrition-${Date.now()}`,
+    clientId: client.id,
+    name: `${client.primaryGoal.replace('_', ' ')} AI Nutrition Plan`,
+    startDate: new Date().toISOString(),
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    metrics: {
+      tdee: aiPlan.daily_calories,
+      bmr: Math.round(aiPlan.daily_calories / 1.5), // Estimation du BMR
+      targetCalories: aiPlan.daily_calories,
+      proteinGrams: aiPlan.daily_macros.protein,
+      carbsGrams: aiPlan.daily_macros.carbs,
+      fatGrams: aiPlan.daily_macros.fat,
+      fiberGrams: 30,
+      waterLiters: Math.round(client.weight * 0.033)
+    },
+    weeklyMealPlan,
+    groceryList,
+    notes: `AI-generated plan optimized for ${client.primaryGoal}`,
+    createdAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Transforme le plan training AI en format de l'app
+ */
+function transformAITrainingPlan(aiPlan: any, client: Client): TrainingPlan {
+  const workouts: WorkoutSession[] = aiPlan.workouts.map((workout: any) => ({
+    id: `session-${workout.day}`,
+    dayNumber: workout.day,
+    sessionType: workout.name.toLowerCase().replace(' ', '_'),
+    name: workout.name,
+    duration: client.sessionDuration,
+    exercises: workout.exercises.map((ex: any) => ({
+      exercise: {
+        id: `ex-${workout.day}-${ex.name}`,
+        name: ex.name,
+        category: 'various',
+        equipment: client.equipmentAvailable,
+        difficulty: client.trainingExperience
+      },
+      sets: ex.sets,
+      reps: ex.reps,
+      rest: ex.rest,
+      intensity: ex.intensity,
+      tempo: '2-0-2-0',
+      notes: ex.notes
+    })),
+    notes: 'AI-optimized workout'
+  }));
+  
+  return {
+    id: `training-${Date.now()}`,
+    clientId: client.id,
+    name: `AI ${client.primaryGoal.replace('_', ' ')} Training Program`,
+    duration: 4,
+    frequency: client.trainingDaysPerWeek,
+    split: aiPlan.split || 'custom',
+    phase: client.primaryGoal === 'muscle_gain' ? 'hypertrophy' : 
+           client.primaryGoal === 'fat_loss' ? 'endurance' : 'strength',
+    workouts,
+    progressionScheme: 'AI-optimized progressive overload',
+    createdAt: new Date().toISOString()
   };
 }
 

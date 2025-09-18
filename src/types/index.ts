@@ -9,6 +9,7 @@ export interface Client {
   phone: string;
   birthDate: string;
   gender: 'male' | 'female';
+  age?: number;
   
   // Physical metrics
   height: number; // cm
@@ -26,6 +27,7 @@ export interface Client {
   sessionDuration: number; // minutes
   preferredTrainingStyle: 'strength' | 'hypertrophy' | 'powerlifting' | 'crossfit' | 'bodybuilding';
   equipment: string[]; // Available equipment
+  equipmentAvailable?: string[]; // Alternative name for equipment
   
   // Nutrition preferences
   dietType: 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian' | 'keto' | 'paleo';
@@ -188,4 +190,5 @@ export interface CompletePlan {
   generatedAt: string;
   validUntil: string;
   status: 'active' | 'pending_review' | 'archived';
+  aiRecommendations?: any;
 }
