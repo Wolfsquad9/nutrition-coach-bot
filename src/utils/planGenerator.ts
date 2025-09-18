@@ -435,7 +435,7 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
   // Vérifier les red flags
   const redFlags = checkForRedFlags(client);
   if (redFlags.length > 0) {
-    throw new Error(`⚠️ Red flags detected: ${redFlags.join(', ')}. Manual review required.`);
+    throw new Error(`⚠️ Red flags détectés: ${redFlags.join(', ')}. Révision manuelle requise.`);
   }
   
   try {
@@ -444,32 +444,38 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVubmJ4ZHB0aGp0enNvYm5xdnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjA2OTUsImV4cCI6MjA3MzUzNjY5NX0.QK19cuza0iptrdkoDctEI9iOOvx0tYzy_UPSPrm00dU',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVubmJ4ZHB0aGp0enNvYm5xdnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjA2OTUsImV4cCI6MjA3MzUzNjY5NX0.QK19cuza0iptrdkoDctEI9iOOvx0tYzy_UPSPrm00dU'
       },
       body: JSON.stringify({ client })
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate plan with AI');
+      throw new Error('Service IA temporairement indisponible');
     }
 
-    const { plan: aiGeneratedPlan } = await response.json();
+    const data = await response.json();
     
-    // Transformer la réponse AI en format attendu par l'application
-    const nutritionPlan = transformAINutritionPlan(aiGeneratedPlan.nutrition_plan, client);
-    const trainingPlan = transformAITrainingPlan(aiGeneratedPlan.training_plan, client);
-    
-    return {
-      client,
-      nutritionPlan,
-      trainingPlan,
-      generatedAt: new Date().toISOString(),
-      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      status: 'active',
-      aiRecommendations: aiGeneratedPlan.recommendations
-    };
-  } catch (error) {
-    console.error('Error generating AI plan, falling back to local generation:', error);
-    // Fallback to local generation if AI fails
+    if (data.success && data.plan) {
+      // Transformer la réponse AI en format attendu par l'application
+      const nutritionPlan = transformAINutritionPlan(data.plan.nutrition_plan, client);
+      const trainingPlan = transformAITrainingPlan(data.plan.training_plan, client);
+      
+      return {
+        client,
+        nutritionPlan,
+        trainingPlan,
+        generatedAt: new Date().toISOString(),
+        validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'active',
+        aiRecommendations: data.plan.recommendations
+      };
+    } else {
+      throw new Error('Format de réponse invalide');
+    }
+  } catch (error: any) {
+    console.error('Erreur génération IA, utilisation du générateur local:', error);
+    // Fallback automatique vers la génération locale si l'IA échoue
     const nutritionPlan = generateNutritionPlan(client);
     const trainingPlan = generateTrainingPlan(client);
     
@@ -479,7 +485,12 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
       trainingPlan,
       generatedAt: new Date().toISOString(),
       validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      status: 'active'
+      status: 'active',
+      aiRecommendations: {
+        nutrition_tips: ["Plan généré localement (service IA temporairement indisponible)"],
+        training_tips: ["Suivez le programme avec progression régulière"],
+        adherence_strategies: ["Restez constant et patient pour voir les résultats"]
+      }
     };
   }
 }

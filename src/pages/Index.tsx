@@ -11,28 +11,44 @@ import { Client, CompletePlan } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { generateCompletePlan } from '@/utils/planGenerator';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
-import { Download, FileJson, FileText } from 'lucide-react';
+import { Download, FileJson, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Index = () => {
   const [activeClient, setActiveClient] = useState<Client>(sampleClient);
   const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const handleInputChange = (field: keyof Client, value: any) => {
+    setActiveClient(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
 
   const handleGeneratePlan = async () => {
     setIsGenerating(true);
+    setError(null);
+    
     try {
       const plan = await generateCompletePlan(activeClient);
       setGeneratedPlan(plan);
       
       toast({
-        title: "Plan Generated Successfully!",
-        description: `Complete nutrition and training plan ready for ${activeClient.firstName} ${activeClient.lastName}`,
+        title: "Plan généré avec succès !",
+        description: `Plan nutrition et entraînement complet prêt pour ${activeClient.firstName} ${activeClient.lastName}`,
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error generating plan:', error);
+      
+      const errorMessage = error.message || "Impossible de générer le plan, réessayez plus tard";
+      setError(errorMessage);
+      
       toast({
-        title: "Error Generating Plan",
-        description: "Please check client data and try again.",
+        title: "Erreur lors de la génération",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -83,57 +99,152 @@ const Index = () => {
               <h2 className="text-2xl font-bold mb-4 text-primary">Client Information</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" value={activeClient.firstName} className="mt-1" />
+                  <Label htmlFor="firstName">Prénom</Label>
+                  <Input 
+                    id="firstName" 
+                    value={activeClient.firstName} 
+                    onChange={(e) => handleInputChange('firstName', e.target.value)}
+                    className="mt-1" 
+                  />
                 </div>
                 <div>
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" value={activeClient.lastName} className="mt-1" />
+                  <Label htmlFor="lastName">Nom</Label>
+                  <Input 
+                    id="lastName" 
+                    value={activeClient.lastName} 
+                    onChange={(e) => handleInputChange('lastName', e.target.value)}
+                    className="mt-1" 
+                  />
                 </div>
                 <div>
-                  <Label htmlFor="weight">Weight (kg)</Label>
-                  <Input id="weight" type="number" value={activeClient.weight} className="mt-1" />
+                  <Label htmlFor="age">Âge</Label>
+                  <Input 
+                    id="age" 
+                    type="number" 
+                    value={activeClient.age} 
+                    onChange={(e) => handleInputChange('age', parseInt(e.target.value))}
+                    className="mt-1" 
+                  />
                 </div>
                 <div>
-                  <Label htmlFor="height">Height (cm)</Label>
-                  <Input id="height" type="number" value={activeClient.height} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="goal">Primary Goal</Label>
-                  <Select defaultValue={activeClient.primaryGoal}>
+                  <Label htmlFor="gender">Genre</Label>
+                  <Select 
+                    value={activeClient.gender} 
+                    onValueChange={(value) => handleInputChange('gender', value)}
+                  >
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fat_loss">Fat Loss</SelectItem>
-                      <SelectItem value="muscle_gain">Muscle Gain</SelectItem>
-                      <SelectItem value="recomposition">Body Recomposition</SelectItem>
+                      <SelectItem value="male">Homme</SelectItem>
+                      <SelectItem value="female">Femme</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="weight">Poids (kg)</Label>
+                  <Input 
+                    id="weight" 
+                    type="number" 
+                    value={activeClient.weight} 
+                    onChange={(e) => handleInputChange('weight', parseFloat(e.target.value))}
+                    className="mt-1" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="height">Taille (cm)</Label>
+                  <Input 
+                    id="height" 
+                    type="number" 
+                    value={activeClient.height} 
+                    onChange={(e) => handleInputChange('height', parseFloat(e.target.value))}
+                    className="mt-1" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="goal">Objectif Principal</Label>
+                  <Select 
+                    value={activeClient.primaryGoal} 
+                    onValueChange={(value) => handleInputChange('primaryGoal', value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fat_loss">Perte de graisse</SelectItem>
+                      <SelectItem value="muscle_gain">Prise de muscle</SelectItem>
+                      <SelectItem value="recomposition">Recomposition corporelle</SelectItem>
                       <SelectItem value="maintenance">Maintenance</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="activity">Activity Level</Label>
-                  <Select defaultValue={activeClient.activityLevel}>
+                  <Label htmlFor="activity">Niveau d'activité</Label>
+                  <Select 
+                    value={activeClient.activityLevel} 
+                    onValueChange={(value) => handleInputChange('activityLevel', value)}
+                  >
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sedentary">Sedentary</SelectItem>
-                      <SelectItem value="lightly_active">Lightly Active</SelectItem>
-                      <SelectItem value="moderately_active">Moderately Active</SelectItem>
-                      <SelectItem value="very_active">Very Active</SelectItem>
-                      <SelectItem value="extra_active">Extra Active</SelectItem>
+                      <SelectItem value="sedentary">Sédentaire</SelectItem>
+                      <SelectItem value="lightly_active">Légèrement actif</SelectItem>
+                      <SelectItem value="moderately_active">Modérément actif</SelectItem>
+                      <SelectItem value="very_active">Très actif</SelectItem>
+                      <SelectItem value="extra_active">Extrêmement actif</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="trainingDays">Jours d'entraînement/semaine</Label>
+                  <Input 
+                    id="trainingDays" 
+                    type="number" 
+                    min="1" 
+                    max="7"
+                    value={activeClient.trainingDaysPerWeek} 
+                    onChange={(e) => handleInputChange('trainingDaysPerWeek', parseInt(e.target.value))}
+                    className="mt-1" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="experience">Expérience d'entraînement</Label>
+                  <Select 
+                    value={activeClient.trainingExperience} 
+                    onValueChange={(value) => handleInputChange('trainingExperience', value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="beginner">Débutant</SelectItem>
+                      <SelectItem value="intermediate">Intermédiaire</SelectItem>
+                      <SelectItem value="advanced">Avancé</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+              
+              {error && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
               <Button 
                 onClick={handleGeneratePlan}
                 disabled={isGenerating}
                 className="mt-6 bg-gradient-primary text-white shadow-glow hover:shadow-xl"
               >
-                {isGenerating ? 'Generating...' : 'Generate Complete Plan'}
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Plan en cours de génération...
+                  </>
+                ) : (
+                  'Générer le plan complet'
+                )}
               </Button>
             </Card>
           </TabsContent>
