@@ -7,12 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { calculateNutritionMetrics } from '@/utils/calculations';
 import { sampleClient, sampleRecipes } from '@/data/sampleData';
-import { Client, CompletePlan } from '@/types';
+import { Client, CompletePlan, Recipe } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { generateCompletePlan } from '@/utils/planGenerator';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
-import { Download, FileJson, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ProgressTracker } from '@/components/ProgressTracker';
+import { MealSwapper } from '@/components/MealSwapper';
+import { ExerciseLibrary } from '@/components/ExerciseLibrary';
+import { NotificationCenter } from '@/components/NotificationCenter';
 
 const Index = () => {
   const [activeClient, setActiveClient] = useState<Client>(sampleClient);
@@ -76,6 +80,23 @@ const Index = () => {
     });
   };
 
+  const handleMealSwap = (dayNumber: number, mealIndex: number, newRecipe: Recipe) => {
+    if (!generatedPlan) return;
+    
+    const updatedPlan = { ...generatedPlan };
+    const dayPlan = updatedPlan.nutritionPlan.weeklyMealPlan.find(d => d.day === dayNumber);
+    if (dayPlan && dayPlan.meals[mealIndex]) {
+      dayPlan.meals[mealIndex].recipes = [{
+        recipe: newRecipe,
+        servings: 1,
+        adjustedMacros: newRecipe.macrosPerServing
+      }];
+      dayPlan.meals[mealIndex].totalMacros = newRecipe.macrosPerServing;
+    }
+    
+    setGeneratedPlan(updatedPlan);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-card-hover">
       <header className="bg-gradient-hero text-white py-6 px-4 shadow-xl">
@@ -87,11 +108,22 @@ const Index = () => {
 
       <main className="container mx-auto p-6">
         <Tabs defaultValue="client" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 bg-card shadow-card">
-            <TabsTrigger value="client">Client Data</TabsTrigger>
-            <TabsTrigger value="nutrition">Nutrition Plan</TabsTrigger>
-            <TabsTrigger value="training">Training Plan</TabsTrigger>
-            <TabsTrigger value="export">Export</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-6 bg-card shadow-card">
+            <TabsTrigger value="client">Client</TabsTrigger>
+            <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
+            <TabsTrigger value="training">Training</TabsTrigger>
+            <TabsTrigger value="progress" className="flex items-center gap-1">
+              <TrendingUp className="w-4 h-4" />
+              Progress
+            </TabsTrigger>
+            <TabsTrigger value="videos" className="flex items-center gap-1">
+              <Video className="w-4 h-4" />
+              Videos
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="flex items-center gap-1">
+              <Bell className="w-4 h-4" />
+              Alerts
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="client" className="space-y-4">
