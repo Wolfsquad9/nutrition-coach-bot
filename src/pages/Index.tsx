@@ -17,12 +17,15 @@ import { ProgressTracker } from '@/components/ProgressTracker';
 import { MealSwapper } from '@/components/MealSwapper';
 import { ExerciseLibrary } from '@/components/ExerciseLibrary';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import IngredientManager from '@/components/IngredientManager';
+import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 const Index = () => {
   const [activeClient, setActiveClient] = useState<Client>(sampleClient);
   const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const { toast } = useToast();
 
   const handleInputChange = (field: keyof Client, value: any) => {
@@ -108,8 +111,9 @@ const Index = () => {
 
       <main className="container mx-auto p-6">
         <Tabs defaultValue="client" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-card shadow-card">
+          <TabsList className="grid w-full grid-cols-7 bg-card shadow-card">
             <TabsTrigger value="client">Client</TabsTrigger>
+            <TabsTrigger value="ingredients">Ingrédients</TabsTrigger>
             <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
             <TabsTrigger value="training">Training</TabsTrigger>
             <TabsTrigger value="progress" className="flex items-center gap-1">
