@@ -17,7 +17,7 @@ import { ProgressTracker } from '@/components/ProgressTracker';
 import { MealSwapper } from '@/components/MealSwapper';
 import { ExerciseLibrary } from '@/components/ExerciseLibrary';
 import { NotificationCenter } from '@/components/NotificationCenter';
-import IngredientManager from '@/components/IngredientManager';
+import EnhancedIngredientManager from '@/components/EnhancedIngredientManager';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 const Index = () => {
@@ -129,6 +129,13 @@ const Index = () => {
               Alerts
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="ingredients" className="space-y-4">
+            <EnhancedIngredientManager 
+              clients={[activeClient]}
+              onRestrictionsUpdate={setClientRestrictions}
+            />
+          </TabsContent>
 
           <TabsContent value="client" className="space-y-4">
             <Card className="p-6 shadow-card">
