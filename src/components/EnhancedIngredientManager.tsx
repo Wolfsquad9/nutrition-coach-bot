@@ -20,6 +20,9 @@ import { useToast } from '@/hooks/use-toast';
 import { MacroDonutChart } from './MacroDonutChart';
 import { DietPlanDisplay } from './DietPlanDisplay';
 import { TrainingPlanDisplay } from './TrainingPlanDisplay';
+import { formatMacro, formatCalories } from '@/utils/formatters';
+import { generateCompletePlanPDF, downloadPDF } from '@/utils/pdfExport';
+import { supabase } from '@/integrations/supabase/client';
 
 interface EnhancedIngredientManagerProps {
   clients: Client[];
@@ -114,12 +117,15 @@ export default function EnhancedIngredientManager({
       !restriction.blockedIngredients.includes(ing.id)
     );
 
-    const total = allowedIngredients.reduce((acc, ing) => ({
-      calories: acc.calories + ing.macros_per_100g.kcal,
-      protein: acc.protein + ing.macros_per_100g.protein,
-      carbs: acc.carbs + ing.macros_per_100g.carbs,
-      fat: acc.fat + ing.macros_per_100g.fat,
-    }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+    const total = allowedIngredients.reduce((acc, ing) => {
+      const servingFactor = ing.typical_serving_size_g / 100;
+      return {
+        calories: acc.calories + (ing.macros_per_100g.kcal * servingFactor),
+        protein: acc.protein + (ing.macros_per_100g.protein * servingFactor),
+        carbs: acc.carbs + (ing.macros_per_100g.carbs * servingFactor),
+        fat: acc.fat + (ing.macros_per_100g.fat * servingFactor),
+      };
+    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
     return total;
   }, [selectedClient, clientRestrictions]);
@@ -270,17 +276,86 @@ export default function EnhancedIngredientManager({
     });
   };
 
-  const handleSendWhatsApp = () => {
-    if (!selectedClient_obj) return;
-    
-    const message = `Bonjour ${selectedClient_obj.firstName}, votre plan nutrition et entraînement personnalisé est prêt !`;
-    const phoneNumber = selectedClient_obj.phone?.replace(/\D/g, '');
-    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
-    
-    toast({
-      title: "WhatsApp ouvert",
-      description: "Envoyez le plan à votre client",
-    });
+  const handleExportPDF = async () => {
+    if (!selectedClient_obj || !generatedDietPlan || !generatedTrainingPlan) {
+      toast({
+        title: "Données manquantes",
+        description: "Générez d'abord un plan complet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Mock CompletePlan structure for PDF export
+      const completePlan = {
+        client: selectedClient_obj,
+        nutritionPlan: {
+          metrics: {
+            tdee: generatedDietPlan.totalCalories,
+            targetCalories: generatedDietPlan.totalCalories,
+            proteinGrams: generatedDietPlan.macros.protein,
+            carbsGrams: generatedDietPlan.macros.carbs,
+            fatGrams: generatedDietPlan.macros.fat,
+            fiberGrams: 30,
+            waterLiters: 3,
+          },
+          weeklyMealPlan: generatedDietPlan.meals,
+          groceryList: generatedDietPlan.shoppingList || [],
+        },
+        trainingPlan: generatedTrainingPlan,
+      };
+
+      const pdf = generateCompletePlanPDF(completePlan as any);
+      downloadPDF(pdf, `${selectedClient_obj.firstName}_${selectedClient_obj.lastName}_plan.pdf`);
+
+      toast({
+        title: "PDF exporté",
+        description: "Le plan a été téléchargé avec succès",
+      });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast({
+        title: "Erreur d'export",
+        description: "Impossible de générer le PDF",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!selectedClient_obj || !generatedDietPlan || !generatedTrainingPlan) {
+      toast({
+        title: "Données manquantes",
+        description: "Générez d'abord un plan complet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          clientPhone: selectedClient_obj.phone,
+          planData: { diet: generatedDietPlan, training: generatedTrainingPlan },
+          planType: 'complete',
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "WhatsApp - Prêt",
+        description: data.note || "Intégration Twilio/Make.com requise",
+      });
+    } catch (error) {
+      console.error('WhatsApp send error:', error);
+      toast({
+        title: "Erreur WhatsApp",
+        description: "Impossible d'envoyer le plan",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -450,7 +525,7 @@ export default function EnhancedIngredientManager({
                             <div className="flex-1">
                               <div className="font-medium text-foreground">{ingredient.name}</div>
                               <div className="text-sm text-muted-foreground">
-                                {ingredient.macros_per_100g.protein}g P | {ingredient.macros_per_100g.carbs}g C | {ingredient.macros_per_100g.fat}g F | {ingredient.macros_per_100g.kcal} kcal
+                                {formatMacro(ingredient.macros_per_100g.protein)}g P | {formatMacro(ingredient.macros_per_100g.carbs)}g C | {formatMacro(ingredient.macros_per_100g.fat)}g F | {formatCalories(ingredient.macros_per_100g.kcal)} kcal
                               </div>
                               <div className="flex gap-1 mt-1">
                                 {ingredient.tags.slice(0, 3).map(tag => (
@@ -544,6 +619,10 @@ export default function EnhancedIngredientManager({
                   <Button variant="outline" size="sm" onClick={handlePrintPlan}>
                     <Printer className="mr-2 h-4 w-4" />
                     Imprimer
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleExportPDF}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export PDF
                   </Button>
                   <Button variant="outline" size="sm" onClick={exportRestrictions}>
                     <FileJson className="mr-2 h-4 w-4" />

@@ -203,7 +203,7 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
                         <div className="flex-1">
                           <div className="font-medium">{ingredient.name}</div>
                           <div className="text-sm text-muted-foreground">
-                            {ingredient.macros_per_100g.protein}g P | {ingredient.macros_per_100g.carbs}g C | {ingredient.macros_per_100g.fat}g F
+                            {ingredient.macros_per_100g.protein.toFixed(1)}g P | {ingredient.macros_per_100g.carbs.toFixed(1)}g C | {ingredient.macros_per_100g.fat.toFixed(1)}g F | {Math.round(ingredient.macros_per_100g.kcal)} kcal
                           </div>
                           <div className="flex gap-1 mt-1">
                             {ingredient.tags.slice(0, 3).map(tag => (

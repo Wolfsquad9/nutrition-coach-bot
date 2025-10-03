@@ -1,5 +1,6 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { formatCalories, formatMacro, formatPercentage } from '@/utils/formatters';
 
 interface MacroDonutChartProps {
   macros: {
@@ -51,24 +52,24 @@ export function MacroDonutChart({ macros }: MacroDonutChartProps) {
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="p-2 rounded bg-success/10 border border-success/20">
           <p className="text-xs text-muted-foreground">Protéines</p>
-          <p className="text-lg font-bold text-success">{macros.protein}g</p>
-          <p className="text-xs text-muted-foreground">{total > 0 ? Math.round((macros.protein * 4 / total) * 100) : 0}%</p>
+          <p className="text-lg font-bold text-success">{formatMacro(macros.protein)}g</p>
+          <p className="text-xs text-muted-foreground">{total > 0 ? formatPercentage((macros.protein * 4 / total) * 100) : 0}%</p>
         </div>
         <div className="p-2 rounded bg-info/10 border border-info/20">
           <p className="text-xs text-muted-foreground">Glucides</p>
-          <p className="text-lg font-bold text-info">{macros.carbs}g</p>
-          <p className="text-xs text-muted-foreground">{total > 0 ? Math.round((macros.carbs * 4 / total) * 100) : 0}%</p>
+          <p className="text-lg font-bold text-info">{formatMacro(macros.carbs)}g</p>
+          <p className="text-xs text-muted-foreground">{total > 0 ? formatPercentage((macros.carbs * 4 / total) * 100) : 0}%</p>
         </div>
         <div className="p-2 rounded bg-warning/10 border border-warning/20">
           <p className="text-xs text-muted-foreground">Lipides</p>
-          <p className="text-lg font-bold text-warning">{macros.fat}g</p>
-          <p className="text-xs text-muted-foreground">{total > 0 ? Math.round((macros.fat * 9 / total) * 100) : 0}%</p>
+          <p className="text-lg font-bold text-warning">{formatMacro(macros.fat)}g</p>
+          <p className="text-xs text-muted-foreground">{total > 0 ? formatPercentage((macros.fat * 9 / total) * 100) : 0}%</p>
         </div>
       </div>
 
       <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg text-center">
         <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Calories</p>
-        <p className="text-2xl font-bold text-primary">{macros.calories}</p>
+        <p className="text-2xl font-bold text-primary">{formatCalories(macros.calories)}</p>
         <p className="text-xs text-muted-foreground">kcal</p>
       </div>
     </div>
