@@ -14,16 +14,340 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clients: {
+        Row: {
+          activity_level: string
+          allergies: string[] | null
+          birth_date: string
+          created_at: string
+          diet_type: string | null
+          dietary_restrictions: string[] | null
+          disliked_foods: string[] | null
+          gender: string
+          height: number
+          id: string
+          medical_conditions: string[] | null
+          primary_goal: string
+          training_experience: string | null
+          training_frequency: number | null
+          updated_at: string
+          user_profile_id: string | null
+          weight: number
+        }
+        Insert: {
+          activity_level: string
+          allergies?: string[] | null
+          birth_date: string
+          created_at?: string
+          diet_type?: string | null
+          dietary_restrictions?: string[] | null
+          disliked_foods?: string[] | null
+          gender: string
+          height: number
+          id?: string
+          medical_conditions?: string[] | null
+          primary_goal: string
+          training_experience?: string | null
+          training_frequency?: number | null
+          updated_at?: string
+          user_profile_id?: string | null
+          weight: number
+        }
+        Update: {
+          activity_level?: string
+          allergies?: string[] | null
+          birth_date?: string
+          created_at?: string
+          diet_type?: string | null
+          dietary_restrictions?: string[] | null
+          disliked_foods?: string[] | null
+          gender?: string
+          height?: number
+          id?: string
+          medical_conditions?: string[] | null
+          primary_goal?: string
+          training_experience?: string | null
+          training_frequency?: number | null
+          updated_at?: string
+          user_profile_id?: string | null
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_user_profile_id_fkey"
+            columns: ["user_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercises: {
+        Row: {
+          created_at: string
+          difficulty: string
+          equipment: string[] | null
+          id: string
+          instructions: string[] | null
+          is_compound: boolean | null
+          muscle_groups: string[]
+          name: string
+          progression_metadata: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          difficulty: string
+          equipment?: string[] | null
+          id?: string
+          instructions?: string[] | null
+          is_compound?: boolean | null
+          muscle_groups: string[]
+          name: string
+          progression_metadata?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          difficulty?: string
+          equipment?: string[] | null
+          id?: string
+          instructions?: string[] | null
+          is_compound?: boolean | null
+          muscle_groups?: string[]
+          name?: string
+          progression_metadata?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      nutrition_plans: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string
+          id: string
+          plan_data: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          plan_data: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          plan_data?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nutrition_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_history: {
+        Row: {
+          event_type: string
+          id: string
+          modifications: Json | null
+          plan_id: string
+          plan_type: string
+          timestamp: string
+        }
+        Insert: {
+          event_type: string
+          id?: string
+          modifications?: Json | null
+          plan_id: string
+          plan_type: string
+          timestamp?: string
+        }
+        Update: {
+          event_type?: string
+          id?: string
+          modifications?: Json | null
+          plan_id?: string
+          plan_type?: string
+          timestamp?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          phone: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          trainer_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          phone?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          trainer_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          trainer_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipes: {
+        Row: {
+          allergens: string[] | null
+          category: string
+          cook_time: number | null
+          created_at: string
+          diet_types: string[] | null
+          id: string
+          ingredients: Json
+          instructions: string[] | null
+          macros: Json
+          name: string
+          prep_time: number | null
+          updated_at: string
+        }
+        Insert: {
+          allergens?: string[] | null
+          category: string
+          cook_time?: number | null
+          created_at?: string
+          diet_types?: string[] | null
+          id?: string
+          ingredients: Json
+          instructions?: string[] | null
+          macros: Json
+          name: string
+          prep_time?: number | null
+          updated_at?: string
+        }
+        Update: {
+          allergens?: string[] | null
+          category?: string
+          cook_time?: number | null
+          created_at?: string
+          diet_types?: string[] | null
+          id?: string
+          ingredients?: Json
+          instructions?: string[] | null
+          macros?: Json
+          name?: string
+          prep_time?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      training_plans: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string
+          id: string
+          plan_data: Json
+          status: string
+          updated_at: string
+          weeks: number
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          plan_data: Json
+          status?: string
+          updated_at?: string
+          weeks?: number
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          plan_data?: Json
+          status?: string
+          updated_at?: string
+          weeks?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_trainer_client_ids: {
+        Args: { _trainer_id: string }
+        Returns: {
+          client_id: string
+        }[]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "client" | "trainer" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +474,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["client", "trainer", "admin"],
+    },
   },
 } as const
