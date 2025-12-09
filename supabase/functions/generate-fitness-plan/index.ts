@@ -37,25 +37,32 @@ Consider the client's:
 - Training experience
 - Schedule constraints`;
 
+    // Handle field name variations and provide defaults for arrays
+    const allergies = client.allergies || [];
+    const intolerances = client.intolerances || [];
+    const dislikedFoods = client.dislikedFoods || [];
+    const medicalConditions = client.medicalConditions || [];
+    const equipment = client.equipmentAvailable || client.equipment || [];
+
     const userPrompt = `Generate a complete fitness plan for this client:
 
-Name: ${client.firstName} ${client.lastName}
-Age: ${client.age} years
-Gender: ${client.gender}
-Height: ${client.height} cm
-Weight: ${client.weight} kg
-Goal: ${client.primaryGoal}
-Training Experience: ${client.trainingExperience}
-Activity Level: ${client.activityLevel}
-Training Days Per Week: ${client.trainingDaysPerWeek}
-Session Duration: ${client.sessionDuration} minutes
-Diet Type: ${client.dietType}
-Meals Per Day: ${client.mealsPerDay}
-Allergies: ${client.allergies.join(', ')}
-Intolerances: ${client.intolerances.join(', ')}
-Disliked Foods: ${client.dislikedFoods.join(', ')}
-Medical Conditions: ${client.medicalConditions.join(', ')}
-Equipment Available: ${client.equipmentAvailable.join(', ')}
+Name: ${client.firstName || ''} ${client.lastName || ''}
+Age: ${client.age || 'unknown'} years
+Gender: ${client.gender || 'unknown'}
+Height: ${client.height || 'unknown'} cm
+Weight: ${client.weight || 'unknown'} kg
+Goal: ${client.primaryGoal || 'general fitness'}
+Training Experience: ${client.trainingExperience || 'beginner'}
+Activity Level: ${client.activityLevel || 'moderately_active'}
+Training Days Per Week: ${client.trainingDaysPerWeek || 3}
+Session Duration: ${client.sessionDuration || 60} minutes
+Diet Type: ${client.dietType || 'omnivore'}
+Meals Per Day: ${client.mealsPerDay || 3}
+Allergies: ${allergies.length > 0 ? allergies.join(', ') : 'None'}
+Intolerances: ${intolerances.length > 0 ? intolerances.join(', ') : 'None'}
+Disliked Foods: ${dislikedFoods.length > 0 ? dislikedFoods.join(', ') : 'None'}
+Medical Conditions: ${medicalConditions.length > 0 ? medicalConditions.join(', ') : 'None'}
+Equipment Available: ${equipment.length > 0 ? equipment.join(', ') : 'Bodyweight only'}
 
 Generate a JSON response with this exact structure:
 {
