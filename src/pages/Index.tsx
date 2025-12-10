@@ -9,7 +9,7 @@ import { calculateNutritionMetrics } from '@/utils/calculations';
 import { sampleClient, sampleRecipes } from '@/data/sampleData';
 import { Client, CompletePlan, Recipe } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { generateCompletePlan } from '@/utils/planGenerator';
+import { generatePersonalizedPlan } from '@/services/planService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
 import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -28,6 +28,12 @@ const Index = () => {
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const { toast } = useToast();
 
+  // Get liked foods from the current client's restrictions
+  const getLikedFoods = (): string[] => {
+    const restriction = clientRestrictions.find(r => r.clientId === activeClient.id);
+    return restriction?.preferredIngredients || [];
+  };
+
   const handleInputChange = (field: keyof Client, value: any) => {
     setActiveClient(prev => ({
       ...prev,
@@ -40,12 +46,22 @@ const Index = () => {
     setError(null);
     
     try {
-      const plan = await generateCompletePlan(activeClient);
+      const likedFoods = getLikedFoods();
+      
+      // Warn if not enough liked foods selected
+      if (likedFoods.length < 5) {
+        toast({
+          title: "Conseil",
+          description: "Sélectionnez au moins 5 aliments aimés dans l'onglet Ingrédients pour un plan repas personnalisé.",
+        });
+      }
+      
+      const plan = await generatePersonalizedPlan(activeClient, likedFoods);
       setGeneratedPlan(plan);
       
       toast({
         title: "Plan généré avec succès !",
-        description: `Plan nutrition et entraînement complet prêt pour ${activeClient.firstName} ${activeClient.lastName}`,
+        description: `Plan personnalisé basé sur vos données: ${plan.nutritionPlan.metrics.targetCalories} kcal/jour`,
       });
     } catch (error: any) {
       console.error('Error generating plan:', error);
