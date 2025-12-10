@@ -1,0 +1,362 @@
+import { coreIngredients, type IngredientData, calculateMacros } from '@/data/ingredientDatabase';
+import { Recipe, Ingredient, Macros } from '@/types';
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+// Meal suitability mapping for each ingredient
+const MEAL_SUITABILITY: Record<string, MealType[]> = {
+  // Proteins
+  'chicken-breast': ['lunch', 'dinner'],
+  'eggs': ['breakfast', 'lunch', 'snack'],
+  'salmon': ['lunch', 'dinner'],
+  'tofu': ['lunch', 'dinner'],
+  'greek-yogurt': ['breakfast', 'snack'],
+  'lentils': ['lunch', 'dinner'],
+  'turkey-breast': ['lunch', 'dinner'],
+  'cottage-cheese': ['breakfast', 'snack'],
+  'tuna': ['lunch', 'dinner', 'snack'],
+  'black-beans': ['lunch', 'dinner'],
+  
+  // Carbs
+  'brown-rice': ['lunch', 'dinner'],
+  'oats': ['breakfast', 'snack'],
+  'sweet-potato': ['lunch', 'dinner'],
+  'quinoa': ['lunch', 'dinner'],
+  'whole-wheat-pasta': ['lunch', 'dinner'],
+  'white-potato': ['lunch', 'dinner'],
+  'whole-wheat-bread': ['breakfast', 'lunch', 'snack'],
+  'barley': ['lunch', 'dinner'],
+  
+  // Fats
+  'olive-oil': ['breakfast', 'lunch', 'dinner'],
+  'avocado': ['breakfast', 'lunch', 'dinner', 'snack'],
+  'almonds': ['breakfast', 'snack'],
+  'walnuts': ['breakfast', 'snack'],
+  'peanut-butter': ['breakfast', 'snack'],
+  'chia-seeds': ['breakfast', 'snack'],
+  'flax-seeds': ['breakfast', 'snack'],
+  'coconut-oil': ['breakfast', 'lunch', 'dinner'],
+  
+  // Fruits
+  'banana': ['breakfast', 'snack'],
+  'apple': ['breakfast', 'snack'],
+  'berries-mixed': ['breakfast', 'snack'],
+  'orange': ['breakfast', 'snack'],
+  'mango': ['breakfast', 'snack'],
+  'grapes': ['snack'],
+  
+  // Vegetables
+  'broccoli': ['lunch', 'dinner'],
+  'spinach': ['breakfast', 'lunch', 'dinner'],
+  'tomato': ['breakfast', 'lunch', 'dinner'],
+  'carrot': ['lunch', 'dinner', 'snack'],
+  'bell-pepper': ['lunch', 'dinner'],
+  'cucumber': ['lunch', 'dinner', 'snack'],
+  'cauliflower': ['lunch', 'dinner'],
+  'zucchini': ['lunch', 'dinner'],
+  'kale': ['breakfast', 'lunch', 'dinner'],
+  'asparagus': ['lunch', 'dinner'],
+  
+  // Misc
+  'garlic': ['lunch', 'dinner'],
+  'ginger': ['breakfast', 'lunch', 'dinner'],
+  'lemon': ['breakfast', 'lunch', 'dinner'],
+  'herbs-mixed': ['lunch', 'dinner'],
+  'cinnamon': ['breakfast', 'snack'],
+};
+
+// Target macros per meal type (approximate)
+const MEAL_MACRO_TARGETS: Record<MealType, { calorieRatio: number; proteinRatio: number }> = {
+  breakfast: { calorieRatio: 0.25, proteinRatio: 0.25 },
+  lunch: { calorieRatio: 0.35, proteinRatio: 0.35 },
+  dinner: { calorieRatio: 0.30, proteinRatio: 0.30 },
+  snack: { calorieRatio: 0.10, proteinRatio: 0.10 },
+};
+
+// Recipe name templates by meal type
+const RECIPE_TEMPLATES: Record<MealType, string[]> = {
+  breakfast: [
+    'Power {protein} Bowl',
+    'Energizing {protein} with {carb}',
+    '{protein} & {fruit} Morning Boost',
+    'Healthy {carb} Delight',
+  ],
+  lunch: [
+    '{protein} & {carb} Power Plate',
+    'Grilled {protein} with {vegetable}',
+    'Mediterranean {protein} Bowl',
+    '{protein} Salad with {vegetable}',
+  ],
+  dinner: [
+    'Savory {protein} with {carb}',
+    'Roasted {protein} & {vegetable}',
+    '{protein} Stir-fry with {vegetable}',
+    'Herb-Crusted {protein} Dinner',
+  ],
+  snack: [
+    '{protein} & {fruit} Bites',
+    'Quick {protein} Snack',
+    '{fat} Energy Mix',
+    'Protein-Packed {protein}',
+  ],
+};
+
+export interface GeneratedRecipe extends Recipe {
+  suitableFor: MealType;
+  selectedIngredients: IngredientData[];
+}
+
+function getSuitableIngredients(
+  selectedFoods: string[],
+  mealType: MealType
+): IngredientData[] {
+  return coreIngredients.filter(ing => {
+    const isSelected = selectedFoods.includes(ing.id);
+    const suitableMeals = MEAL_SUITABILITY[ing.id] || ['lunch', 'dinner']; // Default to lunch/dinner
+    const isSuitable = suitableMeals.includes(mealType);
+    return isSelected && isSuitable;
+  });
+}
+
+function selectBalancedIngredients(
+  suitableIngredients: IngredientData[],
+  mealType: MealType
+): IngredientData[] {
+  const selected: IngredientData[] = [];
+  
+  // Must have protein
+  const proteins = suitableIngredients.filter(ing => ing.category === 'protein');
+  if (proteins.length > 0) {
+    selected.push(proteins[Math.floor(Math.random() * proteins.length)]);
+  }
+  
+  // Add carb for main meals
+  if (mealType !== 'snack') {
+    const carbs = suitableIngredients.filter(ing => ing.category === 'carbohydrate');
+    if (carbs.length > 0) {
+      selected.push(carbs[Math.floor(Math.random() * carbs.length)]);
+    }
+  }
+  
+  // Add vegetable for lunch/dinner
+  if (mealType === 'lunch' || mealType === 'dinner') {
+    const vegetables = suitableIngredients.filter(ing => ing.category === 'vegetable');
+    if (vegetables.length > 0) {
+      const numVeggies = Math.min(2, vegetables.length);
+      const shuffled = vegetables.sort(() => Math.random() - 0.5);
+      selected.push(...shuffled.slice(0, numVeggies));
+    }
+  }
+  
+  // Add fruit for breakfast/snack
+  if (mealType === 'breakfast' || mealType === 'snack') {
+    const fruits = suitableIngredients.filter(ing => ing.category === 'fruit');
+    if (fruits.length > 0) {
+      selected.push(fruits[Math.floor(Math.random() * fruits.length)]);
+    }
+  }
+  
+  // Add fat
+  const fats = suitableIngredients.filter(ing => ing.category === 'fat');
+  if (fats.length > 0) {
+    selected.push(fats[Math.floor(Math.random() * fats.length)]);
+  }
+  
+  // Add misc/seasoning
+  const misc = suitableIngredients.filter(ing => ing.category === 'misc');
+  if (misc.length > 0 && (mealType === 'lunch' || mealType === 'dinner')) {
+    selected.push(misc[Math.floor(Math.random() * misc.length)]);
+  }
+  
+  return selected;
+}
+
+function generateRecipeName(
+  ingredients: IngredientData[],
+  mealType: MealType
+): string {
+  const templates = RECIPE_TEMPLATES[mealType];
+  const template = templates[Math.floor(Math.random() * templates.length)];
+  
+  const protein = ingredients.find(i => i.category === 'protein')?.name || 'Protein';
+  const carb = ingredients.find(i => i.category === 'carbohydrate')?.name || 'Grains';
+  const vegetable = ingredients.find(i => i.category === 'vegetable')?.name || 'Vegetables';
+  const fruit = ingredients.find(i => i.category === 'fruit')?.name || 'Fruits';
+  const fat = ingredients.find(i => i.category === 'fat')?.name || 'Nuts';
+  
+  return template
+    .replace('{protein}', protein.split(' ')[0])
+    .replace('{carb}', carb.split(' ')[0])
+    .replace('{vegetable}', vegetable.split(' ')[0])
+    .replace('{fruit}', fruit.split(' ')[0])
+    .replace('{fat}', fat.split(' ')[0]);
+}
+
+function generateInstructions(
+  ingredients: IngredientData[],
+  mealType: MealType
+): string[] {
+  const instructions: string[] = [];
+  const protein = ingredients.find(i => i.category === 'protein');
+  const carb = ingredients.find(i => i.category === 'carbohydrate');
+  const vegetables = ingredients.filter(i => i.category === 'vegetable');
+  
+  if (mealType === 'breakfast') {
+    instructions.push('Prepare all ingredients and measure portions.');
+    if (carb) instructions.push(`Cook ${carb.name.toLowerCase()} according to package directions.`);
+    if (protein) instructions.push(`Prepare ${protein.name.toLowerCase()} (scramble, poach, or as desired).`);
+    instructions.push('Combine all ingredients in a bowl.');
+    instructions.push('Season to taste and serve warm.');
+  } else if (mealType === 'snack') {
+    instructions.push('Gather all ingredients.');
+    instructions.push('Combine in a small bowl or container.');
+    instructions.push('Mix well and enjoy immediately or refrigerate.');
+  } else {
+    instructions.push('Prep all vegetables by washing and cutting into bite-sized pieces.');
+    if (protein) instructions.push(`Season ${protein.name.toLowerCase()} with salt, pepper, and preferred spices.`);
+    if (protein) instructions.push(`Cook ${protein.name.toLowerCase()} in a pan over medium-high heat until done.`);
+    if (carb) instructions.push(`Meanwhile, prepare ${carb.name.toLowerCase()} according to directions.`);
+    if (vegetables.length > 0) {
+      instructions.push(`Sauté vegetables until tender-crisp, about 5-7 minutes.`);
+    }
+    instructions.push('Plate the protein with carbs and vegetables.');
+    instructions.push('Drizzle with olive oil if desired and serve hot.');
+  }
+  
+  return instructions;
+}
+
+function calculateTotalMacros(ingredients: IngredientData[]): Macros {
+  return ingredients.reduce((total, ing) => {
+    const macros = calculateMacros(ing, ing.typical_serving_size_g);
+    return {
+      calories: total.calories + macros.kcal,
+      protein: total.protein + macros.protein,
+      carbs: total.carbs + macros.carbs,
+      fat: total.fat + macros.fat,
+      fiber: (total.fiber || 0) + (macros.fiber || 0),
+    };
+  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+}
+
+export function generateRecipe(
+  selectedFoods: string[],
+  mealType: MealType
+): GeneratedRecipe {
+  // Filter for suitable ingredients
+  const suitableIngredients = getSuitableIngredients(selectedFoods, mealType);
+  
+  if (suitableIngredients.length === 0) {
+    throw new Error(`No suitable ingredients selected for ${mealType}. Please select foods that are appropriate for this meal type.`);
+  }
+  
+  // Select balanced combination
+  const selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType);
+  
+  if (selectedIngredients.length === 0) {
+    throw new Error(`Could not build a balanced recipe. Please select more variety of ingredients.`);
+  }
+  
+  // Generate recipe details
+  const name = generateRecipeName(selectedIngredients, mealType);
+  const instructions = generateInstructions(selectedIngredients, mealType);
+  const totalMacros = calculateTotalMacros(selectedIngredients);
+  
+  // Convert to Recipe format
+  const recipeIngredients: Ingredient[] = selectedIngredients.map(ing => ({
+    id: ing.id,
+    name: ing.name,
+    amount: ing.typical_serving_size_g,
+    unit: 'g' as const,
+    category: ing.category === 'carbohydrate' ? 'carb' : ing.category === 'misc' ? 'spice' : ing.category as any,
+    macrosPer100g: {
+      calories: ing.macros_per_100g.kcal,
+      protein: ing.macros_per_100g.protein,
+      carbs: ing.macros_per_100g.carbs,
+      fat: ing.macros_per_100g.fat,
+      fiber: ing.macros_per_100g.fiber,
+    },
+  }));
+  
+  const recipe: GeneratedRecipe = {
+    id: `generated-${Date.now()}`,
+    name,
+    category: mealType,
+    prepTime: mealType === 'snack' ? 5 : 10,
+    cookTime: mealType === 'snack' ? 0 : mealType === 'breakfast' ? 10 : 20,
+    servings: 1,
+    ingredients: recipeIngredients,
+    instructions,
+    macrosPerServing: {
+      calories: Math.round(totalMacros.calories),
+      protein: Math.round(totalMacros.protein),
+      carbs: Math.round(totalMacros.carbs),
+      fat: Math.round(totalMacros.fat),
+      fiber: Math.round(totalMacros.fiber || 0),
+    },
+    tags: selectedIngredients.flatMap(i => i.tags).slice(0, 5),
+    dietTypes: determineDietTypes(selectedIngredients),
+    allergens: determineAllergens(selectedIngredients),
+    equipment: determineEquipment(mealType),
+    difficulty: mealType === 'snack' ? 'easy' : 'medium',
+    suitableFor: mealType,
+    selectedIngredients,
+  };
+  
+  return recipe;
+}
+
+function determineDietTypes(ingredients: IngredientData[]): string[] {
+  const dietTypes: string[] = [];
+  const hasAnimalProtein = ingredients.some(i => 
+    ['chicken-breast', 'salmon', 'turkey-breast', 'tuna'].includes(i.id)
+  );
+  const hasDairy = ingredients.some(i => 
+    ['greek-yogurt', 'cottage-cheese'].includes(i.id)
+  );
+  const hasEggs = ingredients.some(i => i.id === 'eggs');
+  
+  if (!hasAnimalProtein && !hasDairy && !hasEggs) {
+    dietTypes.push('vegan');
+  } else if (!hasAnimalProtein) {
+    dietTypes.push('vegetarian');
+  }
+  
+  const isGlutenFree = !ingredients.some(i => 
+    ['whole-wheat-pasta', 'whole-wheat-bread', 'barley', 'oats'].includes(i.id)
+  );
+  if (isGlutenFree) dietTypes.push('gluten-free');
+  
+  return dietTypes;
+}
+
+function determineAllergens(ingredients: IngredientData[]): string[] {
+  const allergens: string[] = [];
+  
+  if (ingredients.some(i => i.id === 'eggs')) allergens.push('eggs');
+  if (ingredients.some(i => ['greek-yogurt', 'cottage-cheese'].includes(i.id))) allergens.push('dairy');
+  if (ingredients.some(i => ['almonds', 'walnuts', 'peanut-butter'].includes(i.id))) allergens.push('nuts');
+  if (ingredients.some(i => ['salmon', 'tuna'].includes(i.id))) allergens.push('fish');
+  if (ingredients.some(i => i.id === 'tofu')) allergens.push('soy');
+  if (ingredients.some(i => ['whole-wheat-pasta', 'whole-wheat-bread', 'barley'].includes(i.id))) allergens.push('gluten');
+  
+  return allergens;
+}
+
+function determineEquipment(mealType: MealType): string[] {
+  switch (mealType) {
+    case 'breakfast':
+      return ['stove', 'pan', 'bowl'];
+    case 'lunch':
+    case 'dinner':
+      return ['stove', 'pan', 'cutting board', 'knife'];
+    case 'snack':
+      return ['bowl'];
+    default:
+      return ['bowl'];
+  }
+}
+
+export function getMealSuitability(ingredientId: string): MealType[] {
+  return MEAL_SUITABILITY[ingredientId] || ['lunch', 'dinner'];
+}
