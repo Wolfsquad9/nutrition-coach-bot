@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Check, X, Download, Upload, FileJson, Printer, Send, Loader2, Sparkles } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { Search, Check, X, Download, Upload, FileJson, Printer, Send, Loader2, Sparkles, Clock, Utensils, Flame } from 'lucide-react';
 import { coreIngredients, type IngredientData } from '@/data/ingredientDatabase';
 import { Client } from '@/types';
 import { 
@@ -23,6 +24,14 @@ import { TrainingPlanDisplay } from './TrainingPlanDisplay';
 import { formatMacro, formatCalories } from '@/utils/formatters';
 import { generateCompletePlanPDF, downloadPDF } from '@/utils/pdfExport';
 import { supabase } from '@/integrations/supabase/client';
+import { generateRecipe, type GeneratedRecipe, type MealType } from '@/services/recipeService';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface EnhancedIngredientManagerProps {
   clients: Client[];
@@ -40,8 +49,11 @@ export default function EnhancedIngredientManager({
   const [autoSubstitute, setAutoSubstitute] = useState(false);
   const [substitutionMatrix, setSubstitutionMatrix] = useState<Map<string, SubstitutionRule[]>>(new Map());
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
   const [generatedDietPlan, setGeneratedDietPlan] = useState<any>(null);
   const [generatedTrainingPlan, setGeneratedTrainingPlan] = useState<any>(null);
+  const [generatedRecipe, setGeneratedRecipe] = useState<GeneratedRecipe | null>(null);
+  const [selectedMealType, setSelectedMealType] = useState<MealType>('lunch');
   const { toast } = useToast();
 
   const categories = ['all', 'protein', 'carbohydrate', 'fat', 'fruit', 'vegetable', 'misc'];
@@ -169,7 +181,54 @@ export default function EnhancedIngredientManager({
     }
   };
 
-  const generateAIPlan = async (planType: 'recipe' | 'full') => {
+  const handleGenerateRecipe = async () => {
+    if (!selectedClient_obj) {
+      toast({
+        title: "Sélectionnez un client",
+        description: "Veuillez d'abord sélectionner un client",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const restriction = getClientRestriction(selectedClient);
+    const preferredIngredients = restriction.preferredIngredients;
+
+    if (preferredIngredients.length === 0) {
+      toast({
+        title: "Aucun ingrédient sélectionné",
+        description: "Marquez d'abord des ingrédients comme 'aimés' (étoile verte)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingRecipe(true);
+
+    try {
+      // Small delay for UX
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const recipe = generateRecipe(preferredIngredients, selectedMealType);
+      setGeneratedRecipe(recipe);
+
+      toast({
+        title: "Recette générée !",
+        description: `${recipe.name} créée avec succès`,
+      });
+    } catch (error) {
+      console.error('Recipe generation error:', error);
+      toast({
+        title: "Erreur de génération",
+        description: error instanceof Error ? error.message : "Impossible de générer la recette",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingRecipe(false);
+    }
+  };
+
+  const generateAIPlan = async (planType: 'full') => {
     if (!selectedClient_obj) {
       toast({
         title: "Sélectionnez un client",
@@ -186,27 +245,6 @@ export default function EnhancedIngredientManager({
       const allowedIngredients = coreIngredients.filter(ing => 
         !restriction.blockedIngredients.includes(ing.id)
       );
-
-      const prompt = planType === 'recipe' 
-        ? `Generate a single optimized recipe for ${selectedClient_obj.firstName} ${selectedClient_obj.lastName}.
-           Client stats: Weight ${selectedClient_obj.weight}kg, Goal: ${selectedClient_obj.primaryGoal}, Activity: ${selectedClient_obj.activityLevel}
-           Available ingredients: ${allowedIngredients.map(i => i.name).join(', ')}
-           Preferred ingredients: ${restriction.preferredIngredients.map(id => coreIngredients.find(i => i.id === id)?.name).join(', ')}
-           Return a detailed recipe with macros breakdown.`
-        : `Generate a complete 7-day diet and training plan for ${selectedClient_obj.firstName} ${selectedClient_obj.lastName}.
-           Client profile: Age ${selectedClient_obj.age}, Weight ${selectedClient_obj.weight}kg, Height ${selectedClient_obj.height}cm
-           Goal: ${selectedClient_obj.primaryGoal}, Activity: ${selectedClient_obj.activityLevel}
-           Training: ${selectedClient_obj.trainingDaysPerWeek} days/week, Experience: ${selectedClient_obj.trainingExperience}
-           Available ingredients: ${allowedIngredients.slice(0, 30).map(i => i.name).join(', ')}
-           Preferred ingredients: ${restriction.preferredIngredients.map(id => coreIngredients.find(i => i.id === id)?.name).join(', ')}
-           
-           Generate:
-           1. Complete meal plan (7 days) with recipes and macros
-           2. Shopping list organized by category
-           3. Training program (${selectedClient_obj.trainingDaysPerWeek} workouts)
-           4. Weekly schedule overview
-           
-           Return as structured JSON with: dietPlan, trainingPlan, shoppingList, weeklyOverview`;
 
       // Mock AI response for demo (replace with actual AI endpoint call)
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -246,14 +284,12 @@ export default function EnhancedIngredientManager({
         ]
       };
 
-      if (planType === 'full') {
-        setGeneratedDietPlan(mockResponse.dietPlan);
-        setGeneratedTrainingPlan(mockResponse.trainingPlan);
-      }
+      setGeneratedDietPlan(mockResponse.dietPlan);
+      setGeneratedTrainingPlan(mockResponse.trainingPlan);
 
       toast({
         title: "Plan généré !",
-        description: planType === 'recipe' ? "Recette créée avec succès" : "Plan complet généré avec succès",
+        description: "Plan complet généré avec succès",
       });
 
     } catch (error) {
@@ -578,25 +614,143 @@ export default function EnhancedIngredientManager({
                 </div>
               </ScrollArea>
 
-              {/* Action Buttons */}
-              <div className="flex gap-4">
-                <Button
-                  onClick={() => generateAIPlan('recipe')}
-                  disabled={isGeneratingPlan}
-                  className="flex-1 bg-gradient-primary text-white shadow-glow"
-                >
-                  {isGeneratingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  Générer une Recette
-                </Button>
-                <Button
-                  onClick={() => generateAIPlan('full')}
-                  disabled={isGeneratingPlan}
-                  className="flex-1 bg-gradient-accent text-white shadow-glow"
-                >
-                  {isGeneratingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  Générer Plan Complet
-                </Button>
+              {/* Recipe Generation */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Label className="text-foreground whitespace-nowrap">Type de repas:</Label>
+                  <Select value={selectedMealType} onValueChange={(v) => setSelectedMealType(v as MealType)}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="breakfast">Petit-déjeuner</SelectItem>
+                      <SelectItem value="lunch">Déjeuner</SelectItem>
+                      <SelectItem value="dinner">Dîner</SelectItem>
+                      <SelectItem value="snack">Collation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-4">
+                  <Button
+                    onClick={handleGenerateRecipe}
+                    disabled={isGeneratingRecipe || isGeneratingPlan}
+                    className="flex-1 bg-gradient-primary text-white shadow-glow"
+                  >
+                    {isGeneratingRecipe ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Générer une Recette
+                  </Button>
+                  <Button
+                    onClick={() => generateAIPlan('full')}
+                    disabled={isGeneratingPlan || isGeneratingRecipe}
+                    className="flex-1 bg-gradient-accent text-white shadow-glow"
+                  >
+                    {isGeneratingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Générer Plan Complet
+                  </Button>
+                </div>
               </div>
+
+              {/* Generated Recipe Display */}
+              {generatedRecipe && (
+                <Card className="bg-gradient-card border-primary/20 shadow-elegant mt-6">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                        <Utensils className="h-5 w-5 text-primary" />
+                        {generatedRecipe.name}
+                      </CardTitle>
+                      <Badge variant="secondary" className="capitalize">
+                        {selectedMealType === 'breakfast' ? 'Petit-déjeuner' : 
+                         selectedMealType === 'lunch' ? 'Déjeuner' : 
+                         selectedMealType === 'dinner' ? 'Dîner' : 'Collation'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Préparation: {generatedRecipe.prepTime}min
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Cuisson: {generatedRecipe.cookTime}min
+                      </span>
+                      <Badge variant="outline" className="capitalize">{generatedRecipe.difficulty}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Macros Display */}
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
+                        <Flame className="h-4 w-4 mx-auto mb-1 text-orange-500" />
+                        <p className="text-lg font-bold text-foreground">{generatedRecipe.macrosPerServing.calories}</p>
+                        <p className="text-xs text-muted-foreground">kcal</p>
+                      </div>
+                      <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
+                        <p className="text-lg font-bold text-primary">{generatedRecipe.macrosPerServing.protein}g</p>
+                        <p className="text-xs text-muted-foreground">Protéines</p>
+                      </div>
+                      <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
+                        <p className="text-lg font-bold text-amber-500">{generatedRecipe.macrosPerServing.carbs}g</p>
+                        <p className="text-xs text-muted-foreground">Glucides</p>
+                      </div>
+                      <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
+                        <p className="text-lg font-bold text-emerald-500">{generatedRecipe.macrosPerServing.fat}g</p>
+                        <p className="text-xs text-muted-foreground">Lipides</p>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Ingredients */}
+                    <div>
+                      <h4 className="font-semibold text-foreground mb-2">Ingrédients</h4>
+                      <ul className="space-y-1">
+                        {generatedRecipe.ingredients.map((ing, idx) => (
+                          <li key={idx} className="flex items-center justify-between text-sm">
+                            <span className="text-foreground">{ing.name}</span>
+                            <span className="text-muted-foreground">{ing.amount}{ing.unit}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <Separator />
+
+                    {/* Instructions */}
+                    <div>
+                      <h4 className="font-semibold text-foreground mb-2">Instructions</h4>
+                      <ol className="space-y-2">
+                        {generatedRecipe.instructions.map((step, idx) => (
+                          <li key={idx} className="flex gap-3 text-sm">
+                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-medium">
+                              {idx + 1}
+                            </span>
+                            <span className="text-muted-foreground">{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    {/* Tags */}
+                    {generatedRecipe.dietTypes.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {generatedRecipe.dietTypes.map((diet, idx) => (
+                          <Badge key={idx} variant="outline" className="text-xs capitalize">
+                            {diet}
+                          </Badge>
+                        ))}
+                        {generatedRecipe.allergens.length > 0 && (
+                          <Badge variant="destructive" className="text-xs">
+                            Allergènes: {generatedRecipe.allergens.join(', ')}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </>
           )}
 
