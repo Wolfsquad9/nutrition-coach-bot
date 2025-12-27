@@ -530,8 +530,8 @@ function adjustMealIngredients(
         adjustedMacros.carbs += macroChange.carbs;
         adjustedMacros.fat += macroChange.fat;
 
-        // Update recipe text to reflect new quantities
-        meal.recipeText = regenerateMealRecipeText(meal.ingredients);
+        // Note: Recipe text will be regenerated ONCE after convergence completes
+        // (not during each iteration to avoid unnecessary regeneration)
 
         // Reduce remaining deficit
         remainingDeficit -= (macroPerGram * servingChange);
@@ -554,16 +554,180 @@ function adjustMealIngredients(
 }
 
 /**
- * Regenerates recipe text after ingredient adjustments
+ * Generates a deterministic recipe name based on main ingredients
  */
-function regenerateMealRecipeText(ingredients: IngredientData[]): string {
-  if (ingredients.length === 0) return '';
+function generateDeterministicRecipeName(
+  ingredients: IngredientData[],
+  mealType: MealType
+): string {
+  const protein = ingredients.find(i => i.category === 'protein');
+  const carb = ingredients.find(i => i.category === 'carbohydrate');
+  const vegetable = ingredients.find(i => i.category === 'vegetable');
+  const fruit = ingredients.find(i => i.category === 'fruit');
+
+  const proteinName = protein?.name.split(' ')[0] || '';
+  const carbName = carb?.name.split(' ')[0] || '';
+  const vegName = vegetable?.name.split(' ')[0] || '';
+  const fruitName = fruit?.name.split(' ')[0] || '';
+
+  switch (mealType) {
+    case 'breakfast':
+      if (proteinName && carbName) return `${proteinName} Power Bowl avec ${carbName}`;
+      if (proteinName && fruitName) return `${proteinName} & ${fruitName} Énergisant`;
+      if (proteinName) return `Petit-déjeuner Protéiné au ${proteinName}`;
+      return 'Petit-déjeuner Équilibré';
+    case 'lunch':
+      if (proteinName && vegName) return `${proteinName} Grillé aux ${vegName}`;
+      if (proteinName && carbName) return `Assiette ${proteinName} & ${carbName}`;
+      if (proteinName) return `Déjeuner au ${proteinName}`;
+      return 'Déjeuner Nutritif';
+    case 'dinner':
+      if (proteinName && vegName) return `${proteinName} Rôti avec ${vegName}`;
+      if (proteinName && carbName) return `${proteinName} Savoureux et ${carbName}`;
+      if (proteinName) return `Dîner au ${proteinName}`;
+      return 'Dîner Complet';
+    case 'snack':
+      if (proteinName && fruitName) return `Snack ${proteinName} & ${fruitName}`;
+      if (proteinName) return `Collation Protéinée`;
+      return 'Snack Énergétique';
+    default:
+      return 'Repas Équilibré';
+  }
+}
+
+/**
+ * Generates deterministic cooking instructions based on ingredients and meal type
+ */
+function generateDeterministicInstructions(
+  ingredients: IngredientData[],
+  mealType: MealType
+): string[] {
+  const protein = ingredients.find(i => i.category === 'protein');
+  const carb = ingredients.find(i => i.category === 'carbohydrate');
+  const vegetables = ingredients.filter(i => i.category === 'vegetable');
+  const fats = ingredients.filter(i => i.category === 'fat');
+  const fruits = ingredients.filter(i => i.category === 'fruit');
   
+  const instructions: string[] = [];
+
+  if (mealType === 'breakfast') {
+    instructions.push('Rassembler et peser tous les ingrédients selon les quantités indiquées.');
+    if (carb) {
+      const carbName = carb.name.toLowerCase();
+      if (carbName.includes('oat') || carbName.includes('avoine')) {
+        instructions.push(`Cuire ${carb.typical_serving_size_g}g de ${carbName} dans de l'eau ou du lait pendant 5 minutes.`);
+      } else {
+        instructions.push(`Préparer ${carb.typical_serving_size_g}g de ${carbName} selon les indications.`);
+      }
+    }
+    if (protein) {
+      const proteinName = protein.name.toLowerCase();
+      if (proteinName.includes('egg') || proteinName.includes('œuf')) {
+        instructions.push(`Cuire ${protein.typical_serving_size_g}g d'œufs (brouillés ou pochés) à feu moyen.`);
+      } else if (proteinName.includes('yogurt') || proteinName.includes('yaourt')) {
+        instructions.push(`Ajouter ${protein.typical_serving_size_g}g de ${proteinName} dans un bol.`);
+      } else {
+        instructions.push(`Préparer ${protein.typical_serving_size_g}g de ${proteinName}.`);
+      }
+    }
+    if (fruits.length > 0) {
+      const fruitList = fruits.map(f => `${f.typical_serving_size_g}g de ${f.name.toLowerCase()}`).join(', ');
+      instructions.push(`Laver et couper les fruits: ${fruitList}.`);
+    }
+    if (fats.length > 0) {
+      const fatList = fats.map(f => `${f.typical_serving_size_g}g de ${f.name.toLowerCase()}`).join(', ');
+      instructions.push(`Ajouter les matières grasses: ${fatList}.`);
+    }
+    instructions.push('Assembler tous les éléments dans un bol et servir immédiatement.');
+  } else if (mealType === 'snack') {
+    instructions.push('Peser les ingrédients selon les quantités spécifiées.');
+    if (protein) {
+      instructions.push(`Préparer ${protein.typical_serving_size_g}g de ${protein.name.toLowerCase()}.`);
+    }
+    if (fruits.length > 0 || fats.length > 0) {
+      const items = [...fruits, ...fats].map(i => `${i.typical_serving_size_g}g de ${i.name.toLowerCase()}`);
+      instructions.push(`Ajouter: ${items.join(', ')}.`);
+    }
+    instructions.push('Mélanger et consommer frais ou réfrigérer pour plus tard.');
+  } else {
+    // Lunch or Dinner
+    instructions.push('Peser et préparer tous les ingrédients avant de commencer la cuisson.');
+    if (vegetables.length > 0) {
+      const vegList = vegetables.map(v => v.name.toLowerCase()).join(', ');
+      instructions.push(`Laver et découper les légumes (${vegList}) en morceaux de taille uniforme.`);
+    }
+    if (protein) {
+      const proteinName = protein.name.toLowerCase();
+      instructions.push(`Assaisonner ${protein.typical_serving_size_g}g de ${proteinName} avec sel, poivre et épices au choix.`);
+      if (proteinName.includes('chicken') || proteinName.includes('poulet') || 
+          proteinName.includes('turkey') || proteinName.includes('dinde')) {
+        instructions.push(`Cuire le ${proteinName} dans une poêle à feu moyen-vif, 6-8 minutes de chaque côté jusqu'à cuisson complète.`);
+      } else if (proteinName.includes('salmon') || proteinName.includes('saumon') ||
+                 proteinName.includes('fish') || proteinName.includes('poisson')) {
+        instructions.push(`Cuire le ${proteinName} à la poêle ou au four, 4-5 minutes de chaque côté.`);
+      } else {
+        instructions.push(`Cuire le ${proteinName} à feu moyen jusqu'à la température désirée.`);
+      }
+    }
+    if (carb) {
+      const carbName = carb.name.toLowerCase();
+      instructions.push(`Pendant ce temps, cuire ${carb.typical_serving_size_g}g de ${carbName} selon les instructions du paquet.`);
+    }
+    if (vegetables.length > 0) {
+      const totalVegGrams = vegetables.reduce((sum, v) => sum + v.typical_serving_size_g, 0);
+      instructions.push(`Faire sauter les légumes (${totalVegGrams}g au total) dans un peu d'huile pendant 5-7 minutes jusqu'à tendreté.`);
+    }
+    if (fats.length > 0) {
+      const fatItem = fats[0];
+      instructions.push(`Finaliser avec ${fatItem.typical_serving_size_g}g de ${fatItem.name.toLowerCase()} pour l'assaisonnement.`);
+    }
+    instructions.push('Dresser la protéine avec les accompagnements dans une assiette et servir chaud.');
+  }
+
+  // Limit to 3-6 steps
+  return instructions.slice(0, 6);
+}
+
+/**
+ * Generates complete, high-quality recipe text for a meal with final ingredient quantities.
+ * This should be called ONCE after macro convergence is complete.
+ */
+function generateFinalRecipeText(
+  ingredients: IngredientData[],
+  mealType: MealType
+): string {
+  if (ingredients.length === 0) {
+    return `Aucun ingrédient disponible pour ce repas. Veuillez sélectionner plus d'aliments adaptés.`;
+  }
+  
+  // Generate deterministic recipe name
+  const recipeName = generateDeterministicRecipeName(ingredients, mealType);
+  
+  // Build ingredient list with quantities
   const ingredientList = ingredients
     .map(ing => `• ${ing.name}: ${ing.typical_serving_size_g}g`)
     .join('\n');
   
-  return `**Repas ajusté**\n\nIngredients:\n${ingredientList}`;
+  // Generate deterministic instructions with actual quantities
+  const instructions = generateDeterministicInstructions(ingredients, mealType);
+  const instructionList = instructions
+    .map((inst, idx) => `${idx + 1}. ${inst}`)
+    .join('\n');
+  
+  // Calculate and display meal macros summary
+  const mealMacros = ingredients.reduce((acc, ing) => {
+    const factor = ing.typical_serving_size_g / 100;
+    return {
+      calories: acc.calories + Math.round(ing.macros.calories * factor),
+      protein: acc.protein + Math.round(ing.macros.protein * factor),
+      carbs: acc.carbs + Math.round(ing.macros.carbs * factor),
+      fat: acc.fat + Math.round(ing.macros.fat * factor),
+    };
+  }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+  
+  const macroSummary = `Macros: ${mealMacros.calories} kcal | P: ${mealMacros.protein}g | G: ${mealMacros.carbs}g | L: ${mealMacros.fat}g`;
+  
+  return `**${recipeName}**\n\n${macroSummary}\n\n**Ingrédients:**\n${ingredientList}\n\n**Préparation:**\n${instructionList}`;
 }
 
 /**
@@ -709,6 +873,43 @@ export function generateFullDayMealPlan(
       dailyPlan = bestResult.plan;
       totalMacros = bestResult.macros;
     }
+  }
+
+  // FINAL STEP: Regenerate all recipe texts with final adjusted quantities
+  // This happens ONCE after convergence completes (not during iterations)
+  for (const mealType of mealTypes) {
+    const meal = dailyPlan[mealType];
+    if (meal.ingredients && meal.ingredients.length > 0) {
+      meal.recipeText = generateFinalRecipeText(meal.ingredients, mealType);
+      
+      // Also recalculate and update the meal macros to ensure accuracy
+      const recalculatedMacros = meal.ingredients.reduce((acc, ing) => {
+        const factor = ing.typical_serving_size_g / 100;
+        return {
+          calories: acc.calories + Math.round(ing.macros.calories * factor),
+          protein: acc.protein + Math.round(ing.macros.protein * factor),
+          carbs: acc.carbs + Math.round(ing.macros.carbs * factor),
+          fat: acc.fat + Math.round(ing.macros.fat * factor),
+        };
+      }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+      
+      meal.macros = recalculatedMacros;
+    }
+  }
+  
+  // Recalculate total macros after final adjustments
+  totalMacros = {
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    fiber: 0,
+  };
+  for (const mealType of mealTypes) {
+    totalMacros.calories += dailyPlan[mealType].macros.calories;
+    totalMacros.protein += dailyPlan[mealType].macros.protein;
+    totalMacros.carbs += dailyPlan[mealType].macros.carbs;
+    totalMacros.fat += dailyPlan[mealType].macros.fat;
   }
 
   // Calculate final variance from targets
