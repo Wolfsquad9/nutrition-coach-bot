@@ -1,5 +1,16 @@
 import { coreIngredients, type IngredientData, calculateMacros, type MealTimeType } from '@/data/ingredientDatabase';
 import { Recipe, Ingredient, Macros } from '@/types';
+import {
+  enhanceIngredientWithRole,
+  calculateIngredientRole,
+  type IngredientWithRole,
+  type IngredientRole,
+  MACRO_ADJUSTMENT_ORDER,
+  MACRO_TO_ROLE,
+  type ConvergenceConstraints,
+  createEmptyConstraints,
+  recordConstraintHit,
+} from '@/utils/nutritionScience';
 
 export type MealType = MealTimeType;
 
@@ -318,21 +329,8 @@ const MACRO_TOLERANCES = {
 // Maximum convergence iterations
 const MAX_CONVERGENCE_ITERATIONS = 5;
 
-// Neutral ingredients for macro adjustments (id -> category)
-const ADJUSTMENT_INGREDIENTS: Record<string, 'carb' | 'fat' | 'protein'> = {
-  'brown-rice': 'carb',
-  'oats': 'carb',
-  'quinoa': 'carb',
-  'sweet-potato': 'carb',
-  'olive-oil': 'fat',
-  'avocado': 'fat',
-  'almonds': 'fat',
-  'banana': 'carb',
-  'apple': 'carb',
-  'chicken-breast': 'protein',
-  'eggs': 'protein',
-  'greek-yogurt': 'protein',
-};
+// Minimum ingredient serving size (grams) - never go below this
+const MIN_INGREDIENT_GRAMS = 10;
 
 export interface MacroTargets {
   calories: number;
@@ -374,6 +372,14 @@ export interface FullDayMealPlanResult {
     converged: boolean;
     iterations: number;
     warningMessage?: string;
+    /** True if scientific constraints prevented full macro convergence */
+    realismConstraintHit: boolean;
+    constraintsHitDetails?: Array<{
+      ingredientId: string;
+      ingredientName: string;
+      maxGrams: number;
+      requestedGrams: number;
+    }>;
   };
 }
 
@@ -424,17 +430,30 @@ function checkMacroTolerance(
 }
 
 /**
- * Adjusts ingredient quantities proportionally to correct macro deficits/excesses
+ * Adjusts ingredient quantities using science-based hierarchy and constraints.
+ * 
+ * Adjustment order (nutrition science priority):
+ * 1. Protein first - preserve lean mass and satiety
+ * 2. Carbohydrates second - primary performance/energy substrate  
+ * 3. Fats last - energy-dense, avoid large swings
+ * 
+ * Respects maximum portion constraints per ingredient role.
  */
 function adjustMealIngredients(
   dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan,
   totalMacros: Macros,
   targetMacros: MacroTargets,
-  toleranceCheck: ToleranceCheckResult
-): { adjustedPlan: import('@/data/ingredientDatabase').DailyMealPlan; adjustedMacros: Macros } {
+  toleranceCheck: ToleranceCheckResult,
+  bodyweightKg?: number
+): { 
+  adjustedPlan: import('@/data/ingredientDatabase').DailyMealPlan; 
+  adjustedMacros: Macros;
+  constraints: ConvergenceConstraints;
+} {
   const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
   const adjustedPlan = JSON.parse(JSON.stringify(dailyPlan));
   const adjustedMacros = { ...totalMacros };
+  const constraints = createEmptyConstraints();
 
   // Calculate how much adjustment is needed for each macro
   const deficits = {
@@ -444,25 +463,19 @@ function adjustMealIngredients(
     fat: targetMacros.fat - totalMacros.fat,
   };
 
-  // Determine which macro needs the most correction
+  // Build adjustment list following science-based order: protein → carbs → fat
   const priorityAdjustments: Array<{ macro: 'protein' | 'carbs' | 'fat'; deficit: number }> = [];
   
-  if (toleranceCheck.outOfTolerance.protein) {
-    priorityAdjustments.push({ macro: 'protein', deficit: deficits.protein });
+  for (const macro of MACRO_ADJUSTMENT_ORDER) {
+    if (toleranceCheck.outOfTolerance[macro]) {
+      priorityAdjustments.push({ macro, deficit: deficits[macro] });
+    }
   }
-  if (toleranceCheck.outOfTolerance.carbs) {
-    priorityAdjustments.push({ macro: 'carbs', deficit: deficits.carbs });
-  }
-  if (toleranceCheck.outOfTolerance.fat) {
-    priorityAdjustments.push({ macro: 'fat', deficit: deficits.fat });
-  }
-
-  // Sort by absolute deficit (largest first)
-  priorityAdjustments.sort((a, b) => Math.abs(b.deficit) - Math.abs(a.deficit));
 
   for (const adjustment of priorityAdjustments) {
     const { macro, deficit } = adjustment;
     let remainingDeficit = deficit;
+    const targetRole = MACRO_TO_ROLE[macro];
     
     // Find ingredients in meals that can be adjusted for this macro
     for (const mealType of mealTypes) {
@@ -472,15 +485,17 @@ function adjustMealIngredients(
       for (let i = 0; i < meal.ingredients.length; i++) {
         const ing = meal.ingredients[i];
         
+        // Calculate ingredient role based on its macro profile (not hardcoded by name)
+        const ingRole = calculateIngredientRole(ing.macros);
+        
         // Check if this ingredient is good for adjusting the target macro
-        const adjustmentCategory = ADJUSTMENT_INGREDIENTS[ing.id];
-        const isGoodForMacro = 
-          (macro === 'protein' && (adjustmentCategory === 'protein' || ing.category === 'protein')) ||
-          (macro === 'carbs' && (adjustmentCategory === 'carb' || ing.category === 'carbohydrate')) ||
-          (macro === 'fat' && (adjustmentCategory === 'fat' || ing.category === 'fat'));
+        const isGoodForMacro = ingRole === targetRole;
 
         if (!isGoodForMacro) continue;
 
+        // Enhance ingredient with science-based constraints
+        const enhancedIng = enhanceIngredientWithRole(ing, bodyweightKg);
+        
         // Calculate how much to adjust this ingredient
         const macrosPer100g = ing.macros;
         const macroPerGram = macro === 'protein' ? macrosPer100g.protein / 100 :
@@ -491,18 +506,32 @@ function adjustMealIngredients(
 
         // Calculate grams needed to correct deficit
         const gramsNeeded = remainingDeficit / macroPerGram;
+        const newServingRaw = ing.typical_serving_size_g + gramsNeeded;
         
-        // Clamp adjustment to reasonable bounds (±50% of current serving)
-        const maxAdjustment = ing.typical_serving_size_g * 0.5;
-        const clampedAdjustment = Math.max(-maxAdjustment, Math.min(maxAdjustment, gramsNeeded));
+        // Apply science-based constraints
+        const maxGrams = enhancedIng.maxPerMealGrams;
+        const minGrams = MIN_INGREDIENT_GRAMS;
         
-        // Only adjust if significant (>5g change)
-        if (Math.abs(clampedAdjustment) < 5) continue;
-
-        // Apply adjustment
-        const newServing = Math.max(10, ing.typical_serving_size_g + clampedAdjustment);
+        // Clamp to science-based bounds
+        let newServing = Math.max(minGrams, Math.min(maxGrams, newServingRaw));
+        
+        // Track if constraint was hit
+        if (newServingRaw > maxGrams) {
+          recordConstraintHit(
+            constraints,
+            ing.id,
+            ing.name,
+            maxGrams,
+            newServingRaw
+          );
+        }
+        
+        // Calculate actual change applied
         const servingChange = newServing - ing.typical_serving_size_g;
         
+        // Only adjust if significant (>5g change)
+        if (Math.abs(servingChange) < 5) continue;
+
         // Update ingredient serving
         meal.ingredients[i] = {
           ...ing,
@@ -530,15 +559,63 @@ function adjustMealIngredients(
         adjustedMacros.carbs += macroChange.carbs;
         adjustedMacros.fat += macroChange.fat;
 
-        // Note: Recipe text will be regenerated ONCE after convergence completes
-        // (not during each iteration to avoid unnecessary regeneration)
-
-        // Reduce remaining deficit
+        // Reduce remaining deficit by actual change (not requested)
         remainingDeficit -= (macroPerGram * servingChange);
 
         // Move to next macro if this one is mostly corrected
         if (Math.abs(remainingDeficit) < targetMacros[macro] * MACRO_TOLERANCES[macro]) {
           break;
+        }
+      }
+      
+      // If constraint hit and deficit still large, try secondary ingredients of same role
+      if (constraints.realismConstraintHit && Math.abs(remainingDeficit) > targetMacros[macro] * MACRO_TOLERANCES[macro]) {
+        // Try to find another ingredient of the same role in this meal
+        for (let i = 0; i < meal.ingredients.length; i++) {
+          const ing = meal.ingredients[i];
+          const ingRole = calculateIngredientRole(ing.macros);
+          
+          // Skip if not the target role or already at limit
+          if (ingRole !== targetRole) continue;
+          
+          const enhancedIng = enhanceIngredientWithRole(ing, bodyweightKg);
+          if (ing.typical_serving_size_g >= enhancedIng.maxPerMealGrams) continue;
+          
+          const macroPerGram = macro === 'protein' ? ing.macros.protein / 100 :
+                               macro === 'carbs' ? ing.macros.carbs / 100 :
+                               ing.macros.fat / 100;
+          
+          if (macroPerGram <= 0) continue;
+          
+          const gramsNeeded = remainingDeficit / macroPerGram;
+          const maxAdditional = enhancedIng.maxPerMealGrams - ing.typical_serving_size_g;
+          const addGrams = Math.min(maxAdditional, Math.max(0, gramsNeeded));
+          
+          if (addGrams < 5) continue;
+          
+          const newServing = ing.typical_serving_size_g + addGrams;
+          meal.ingredients[i] = { ...ing, typical_serving_size_g: Math.round(newServing) };
+          
+          const macroChange = {
+            calories: (ing.macros.calories / 100) * addGrams,
+            protein: (ing.macros.protein / 100) * addGrams,
+            carbs: (ing.macros.carbs / 100) * addGrams,
+            fat: (ing.macros.fat / 100) * addGrams,
+          };
+          
+          meal.macros = {
+            calories: Math.round(meal.macros.calories + macroChange.calories),
+            protein: Math.round(meal.macros.protein + macroChange.protein),
+            carbs: Math.round(meal.macros.carbs + macroChange.carbs),
+            fat: Math.round(meal.macros.fat + macroChange.fat),
+          };
+          
+          adjustedMacros.calories += macroChange.calories;
+          adjustedMacros.protein += macroChange.protein;
+          adjustedMacros.carbs += macroChange.carbs;
+          adjustedMacros.fat += macroChange.fat;
+          
+          remainingDeficit -= (macroPerGram * addGrams);
         }
       }
     }
@@ -550,7 +627,7 @@ function adjustMealIngredients(
   adjustedMacros.carbs = Math.round(adjustedMacros.carbs);
   adjustedMacros.fat = Math.round(adjustedMacros.fat);
 
-  return { adjustedPlan, adjustedMacros };
+  return { adjustedPlan, adjustedMacros, constraints };
 }
 
 /**
@@ -812,11 +889,12 @@ export function generateFullDayMealPlan(
     }
   }
 
-  // Convergence loop to fine-tune macros
+  // Convergence loop to fine-tune macros using science-based adjustments
   let iteration = 0;
   let converged = false;
   let bestResult = { plan: JSON.parse(JSON.stringify(dailyPlan)), macros: { ...totalMacros } };
   let bestVariance = Infinity;
+  let accumulatedConstraints = createEmptyConstraints();
 
   while (iteration < MAX_CONVERGENCE_ITERATIONS && !converged) {
     const toleranceCheck = checkMacroTolerance(totalMacros, macroTargets);
@@ -842,13 +920,20 @@ export function generateFullDayMealPlan(
       };
     }
 
-    // Adjust ingredients to correct macros
-    const { adjustedPlan, adjustedMacros } = adjustMealIngredients(
+    // Adjust ingredients using science-based hierarchy and constraints
+    // Bodyweight could be passed from client data if available
+    const { adjustedPlan, adjustedMacros, constraints } = adjustMealIngredients(
       dailyPlan,
       totalMacros,
       macroTargets,
       toleranceCheck
     );
+
+    // Accumulate constraint hits across iterations
+    if (constraints.realismConstraintHit) {
+      accumulatedConstraints.realismConstraintHit = true;
+      accumulatedConstraints.constraintsHitDetails.push(...constraints.constraintsHitDetails);
+    }
 
     dailyPlan = adjustedPlan;
     totalMacros = adjustedMacros;
@@ -920,12 +1005,24 @@ export function generateFullDayMealPlan(
     fat: totalMacros.fat - macroTargets.fat,
   };
 
-  // Build convergence info
+  // Build convergence info with realism constraint tracking
+  let warningMessage: string | undefined;
+  if (!converged) {
+    if (accumulatedConstraints.realismConstraintHit) {
+      warningMessage = `Convergence limitée par contraintes physiologiques après ${iteration} itérations. Certains ingrédients ont atteint leurs limites maximales.`;
+    } else {
+      warningMessage = `Convergence partielle après ${iteration} itérations. Un ajustement manuel mineur peut être nécessaire.`;
+    }
+  }
+
   const convergenceInfo = {
     converged,
     iterations: iteration,
-    warningMessage: converged ? undefined : 
-      `Convergence partielle après ${iteration} itérations. Un ajustement manuel mineur peut être nécessaire.`,
+    warningMessage,
+    realismConstraintHit: accumulatedConstraints.realismConstraintHit,
+    constraintsHitDetails: accumulatedConstraints.constraintsHitDetails.length > 0 
+      ? accumulatedConstraints.constraintsHitDetails 
+      : undefined,
   };
 
   return {
