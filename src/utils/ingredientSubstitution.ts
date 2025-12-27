@@ -27,18 +27,18 @@ export interface ClientIngredientRestrictions {
  * Calculate macro similarity score between two ingredients
  */
 function calculateMacroSimilarity(ing1: IngredientData, ing2: IngredientData): number {
-  const proteinDiff = Math.abs(ing1.macros_per_100g.protein - ing2.macros_per_100g.protein);
-  const carbsDiff = Math.abs(ing1.macros_per_100g.carbs - ing2.macros_per_100g.carbs);
-  const fatDiff = Math.abs(ing1.macros_per_100g.fat - ing2.macros_per_100g.fat);
-  const kcalDiff = Math.abs(ing1.macros_per_100g.kcal - ing2.macros_per_100g.kcal);
+  const proteinDiff = Math.abs(ing1.macros.protein - ing2.macros.protein);
+  const carbsDiff = Math.abs(ing1.macros.carbs - ing2.macros.carbs);
+  const fatDiff = Math.abs(ing1.macros.fat - ing2.macros.fat);
+  const caloriesDiff = Math.abs(ing1.macros.calories - ing2.macros.calories);
   
   // Weighted scoring (protein most important for substitution)
   const proteinScore = Math.max(0, 1 - proteinDiff / 30) * 0.4;
   const carbsScore = Math.max(0, 1 - carbsDiff / 50) * 0.2;
   const fatScore = Math.max(0, 1 - fatDiff / 30) * 0.2;
-  const kcalScore = Math.max(0, 1 - kcalDiff / 200) * 0.2;
+  const caloriesScore = Math.max(0, 1 - caloriesDiff / 200) * 0.2;
   
-  return proteinScore + carbsScore + fatScore + kcalScore;
+  return proteinScore + carbsScore + fatScore + caloriesScore;
 }
 
 /**
@@ -57,7 +57,7 @@ export function findBestSubstitute(
     const preferredSubId = restrictions.substitutionRules[blockedIngredientId][0];
     const substitute = coreIngredients.find(ing => ing.id === preferredSubId);
     if (substitute && !restrictions.blockedIngredients.includes(preferredSubId)) {
-      const ratio = blocked.macros_per_100g.kcal / substitute.macros_per_100g.kcal;
+      const ratio = blocked.macros.calories / substitute.macros.calories;
       return {
         originalId: blockedIngredientId,
         substituteId: preferredSubId,
@@ -109,7 +109,7 @@ export function findBestSubstitute(
   
   const bestMatch = scoredCandidates[0];
   const ratio = preserveMacros ? 
-    blocked.macros_per_100g.kcal / bestMatch.ingredient.macros_per_100g.kcal : 1;
+    blocked.macros.calories / bestMatch.ingredient.macros.calories : 1;
   
   return {
     originalId: blockedIngredientId,
@@ -203,11 +203,11 @@ function recalculateRecipeMacros(ingredients: Ingredient[]) {
     
     if (ingredientData) {
       const ratio = ingredient.amount / 100; // Assuming amount is in grams
-      totalMacros.calories += ingredientData.macros_per_100g.kcal * ratio;
-      totalMacros.protein += ingredientData.macros_per_100g.protein * ratio;
-      totalMacros.carbs += ingredientData.macros_per_100g.carbs * ratio;
-      totalMacros.fat += ingredientData.macros_per_100g.fat * ratio;
-      totalMacros.fiber += (ingredientData.macros_per_100g.fiber || 0) * ratio;
+      totalMacros.calories += ingredientData.macros.calories * ratio;
+      totalMacros.protein += ingredientData.macros.protein * ratio;
+      totalMacros.carbs += ingredientData.macros.carbs * ratio;
+      totalMacros.fat += ingredientData.macros.fat * ratio;
+      totalMacros.fiber += (ingredientData.macros.fiber || 0) * ratio;
     }
   }
   
