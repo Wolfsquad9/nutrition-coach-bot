@@ -307,6 +307,33 @@ const MEAL_MACRO_SPLIT: Record<MealType, number> = {
   snack: 0.10,
 };
 
+// Macro tolerance thresholds (percentage)
+const MACRO_TOLERANCES = {
+  calories: 0.05, // ±5%
+  protein: 0.05,  // ±5%
+  carbs: 0.08,    // ±8%
+  fat: 0.08,      // ±8%
+};
+
+// Maximum convergence iterations
+const MAX_CONVERGENCE_ITERATIONS = 5;
+
+// Neutral ingredients for macro adjustments (id -> category)
+const ADJUSTMENT_INGREDIENTS: Record<string, 'carb' | 'fat' | 'protein'> = {
+  'brown-rice': 'carb',
+  'oats': 'carb',
+  'quinoa': 'carb',
+  'sweet-potato': 'carb',
+  'olive-oil': 'fat',
+  'avocado': 'fat',
+  'almonds': 'fat',
+  'banana': 'carb',
+  'apple': 'carb',
+  'chicken-breast': 'protein',
+  'eggs': 'protein',
+  'greek-yogurt': 'protein',
+};
+
 export interface MacroTargets {
   calories: number;
   protein: number;
@@ -315,15 +342,38 @@ export interface MacroTargets {
   fiber?: number;
 }
 
-export interface FullDayMealPlanResult {
-  dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan;
-  totalMacros: Macros;
-  targetMacros: MacroTargets;
-  variance: {
+interface MacroVariance {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+interface ToleranceCheckResult {
+  withinTolerance: boolean;
+  outOfTolerance: {
+    calories: boolean;
+    protein: boolean;
+    carbs: boolean;
+    fat: boolean;
+  };
+  percentageVariance: {
     calories: number;
     protein: number;
     carbs: number;
     fat: number;
+  };
+}
+
+export interface FullDayMealPlanResult {
+  dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan;
+  totalMacros: Macros;
+  targetMacros: MacroTargets;
+  variance: MacroVariance;
+  convergenceInfo?: {
+    converged: boolean;
+    iterations: number;
+    warningMessage?: string;
   };
 }
 
@@ -344,8 +394,182 @@ export interface WeeklyMealPlanResult {
 }
 
 /**
+ * Checks if macros are within acceptable tolerance of targets
+ */
+function checkMacroTolerance(
+  actual: Macros,
+  target: MacroTargets
+): ToleranceCheckResult {
+  const calcPercentVariance = (actualVal: number, targetVal: number) => 
+    targetVal > 0 ? (actualVal - targetVal) / targetVal : 0;
+
+  const percentageVariance = {
+    calories: calcPercentVariance(actual.calories, target.calories),
+    protein: calcPercentVariance(actual.protein, target.protein),
+    carbs: calcPercentVariance(actual.carbs, target.carbs),
+    fat: calcPercentVariance(actual.fat, target.fat),
+  };
+
+  const outOfTolerance = {
+    calories: Math.abs(percentageVariance.calories) > MACRO_TOLERANCES.calories,
+    protein: Math.abs(percentageVariance.protein) > MACRO_TOLERANCES.protein,
+    carbs: Math.abs(percentageVariance.carbs) > MACRO_TOLERANCES.carbs,
+    fat: Math.abs(percentageVariance.fat) > MACRO_TOLERANCES.fat,
+  };
+
+  const withinTolerance = !outOfTolerance.calories && !outOfTolerance.protein && 
+                          !outOfTolerance.carbs && !outOfTolerance.fat;
+
+  return { withinTolerance, outOfTolerance, percentageVariance };
+}
+
+/**
+ * Adjusts ingredient quantities proportionally to correct macro deficits/excesses
+ */
+function adjustMealIngredients(
+  dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan,
+  totalMacros: Macros,
+  targetMacros: MacroTargets,
+  toleranceCheck: ToleranceCheckResult
+): { adjustedPlan: import('@/data/ingredientDatabase').DailyMealPlan; adjustedMacros: Macros } {
+  const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+  const adjustedPlan = JSON.parse(JSON.stringify(dailyPlan));
+  const adjustedMacros = { ...totalMacros };
+
+  // Calculate how much adjustment is needed for each macro
+  const deficits = {
+    calories: targetMacros.calories - totalMacros.calories,
+    protein: targetMacros.protein - totalMacros.protein,
+    carbs: targetMacros.carbs - totalMacros.carbs,
+    fat: targetMacros.fat - totalMacros.fat,
+  };
+
+  // Determine which macro needs the most correction
+  const priorityAdjustments: Array<{ macro: 'protein' | 'carbs' | 'fat'; deficit: number }> = [];
+  
+  if (toleranceCheck.outOfTolerance.protein) {
+    priorityAdjustments.push({ macro: 'protein', deficit: deficits.protein });
+  }
+  if (toleranceCheck.outOfTolerance.carbs) {
+    priorityAdjustments.push({ macro: 'carbs', deficit: deficits.carbs });
+  }
+  if (toleranceCheck.outOfTolerance.fat) {
+    priorityAdjustments.push({ macro: 'fat', deficit: deficits.fat });
+  }
+
+  // Sort by absolute deficit (largest first)
+  priorityAdjustments.sort((a, b) => Math.abs(b.deficit) - Math.abs(a.deficit));
+
+  for (const adjustment of priorityAdjustments) {
+    const { macro, deficit } = adjustment;
+    let remainingDeficit = deficit;
+    
+    // Find ingredients in meals that can be adjusted for this macro
+    for (const mealType of mealTypes) {
+      const meal = adjustedPlan[mealType];
+      if (!meal.ingredients || meal.ingredients.length === 0) continue;
+
+      for (let i = 0; i < meal.ingredients.length; i++) {
+        const ing = meal.ingredients[i];
+        
+        // Check if this ingredient is good for adjusting the target macro
+        const adjustmentCategory = ADJUSTMENT_INGREDIENTS[ing.id];
+        const isGoodForMacro = 
+          (macro === 'protein' && (adjustmentCategory === 'protein' || ing.category === 'protein')) ||
+          (macro === 'carbs' && (adjustmentCategory === 'carb' || ing.category === 'carbohydrate')) ||
+          (macro === 'fat' && (adjustmentCategory === 'fat' || ing.category === 'fat'));
+
+        if (!isGoodForMacro) continue;
+
+        // Calculate how much to adjust this ingredient
+        const macrosPer100g = ing.macros;
+        const macroPerGram = macro === 'protein' ? macrosPer100g.protein / 100 :
+                             macro === 'carbs' ? macrosPer100g.carbs / 100 :
+                             macrosPer100g.fat / 100;
+
+        if (macroPerGram <= 0) continue;
+
+        // Calculate grams needed to correct deficit
+        const gramsNeeded = remainingDeficit / macroPerGram;
+        
+        // Clamp adjustment to reasonable bounds (±50% of current serving)
+        const maxAdjustment = ing.typical_serving_size_g * 0.5;
+        const clampedAdjustment = Math.max(-maxAdjustment, Math.min(maxAdjustment, gramsNeeded));
+        
+        // Only adjust if significant (>5g change)
+        if (Math.abs(clampedAdjustment) < 5) continue;
+
+        // Apply adjustment
+        const newServing = Math.max(10, ing.typical_serving_size_g + clampedAdjustment);
+        const servingChange = newServing - ing.typical_serving_size_g;
+        
+        // Update ingredient serving
+        meal.ingredients[i] = {
+          ...ing,
+          typical_serving_size_g: Math.round(newServing),
+        };
+
+        // Update meal macros
+        const macroChange = {
+          calories: (ing.macros.calories / 100) * servingChange,
+          protein: (ing.macros.protein / 100) * servingChange,
+          carbs: (ing.macros.carbs / 100) * servingChange,
+          fat: (ing.macros.fat / 100) * servingChange,
+        };
+
+        meal.macros = {
+          calories: Math.round(meal.macros.calories + macroChange.calories),
+          protein: Math.round(meal.macros.protein + macroChange.protein),
+          carbs: Math.round(meal.macros.carbs + macroChange.carbs),
+          fat: Math.round(meal.macros.fat + macroChange.fat),
+        };
+
+        // Update total macros
+        adjustedMacros.calories += macroChange.calories;
+        adjustedMacros.protein += macroChange.protein;
+        adjustedMacros.carbs += macroChange.carbs;
+        adjustedMacros.fat += macroChange.fat;
+
+        // Update recipe text to reflect new quantities
+        meal.recipeText = regenerateMealRecipeText(meal.ingredients);
+
+        // Reduce remaining deficit
+        remainingDeficit -= (macroPerGram * servingChange);
+
+        // Move to next macro if this one is mostly corrected
+        if (Math.abs(remainingDeficit) < targetMacros[macro] * MACRO_TOLERANCES[macro]) {
+          break;
+        }
+      }
+    }
+  }
+
+  // Round final macros
+  adjustedMacros.calories = Math.round(adjustedMacros.calories);
+  adjustedMacros.protein = Math.round(adjustedMacros.protein);
+  adjustedMacros.carbs = Math.round(adjustedMacros.carbs);
+  adjustedMacros.fat = Math.round(adjustedMacros.fat);
+
+  return { adjustedPlan, adjustedMacros };
+}
+
+/**
+ * Regenerates recipe text after ingredient adjustments
+ */
+function regenerateMealRecipeText(ingredients: IngredientData[]): string {
+  if (ingredients.length === 0) return '';
+  
+  const ingredientList = ingredients
+    .map(ing => `• ${ing.name}: ${ing.typical_serving_size_g}g`)
+    .join('\n');
+  
+  return `**Repas ajusté**\n\nIngredients:\n${ingredientList}`;
+}
+
+/**
  * Generates a complete daily meal plan with breakfast, lunch, dinner, and snack.
  * Uses allowedMeals on ingredients to filter per meal and allocates macros using the split.
+ * Includes convergence loop to ensure macros are within tolerance.
  */
 export function generateFullDayMealPlan(
   selectedFoods: string[],
@@ -353,21 +577,21 @@ export function generateFullDayMealPlan(
 ): FullDayMealPlanResult {
   const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
   
-  const dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan = {
+  let dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan = {
     breakfast: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
     lunch: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
     dinner: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
     snack: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
   };
 
-  const totalMacros: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+  let totalMacros: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
 
+  // Initial generation pass
   for (const mealType of mealTypes) {
     const mealSplit = MEAL_MACRO_SPLIT[mealType];
     
     // Calculate target macros for this meal
     const mealTargetCalories = Math.round(macroTargets.calories * mealSplit);
-    const mealTargetProtein = Math.round(macroTargets.protein * mealSplit);
     
     try {
       // Generate recipe for this meal using existing logic
@@ -424,7 +648,70 @@ export function generateFullDayMealPlan(
     }
   }
 
-  // Calculate variance from targets
+  // Convergence loop to fine-tune macros
+  let iteration = 0;
+  let converged = false;
+  let bestResult = { plan: JSON.parse(JSON.stringify(dailyPlan)), macros: { ...totalMacros } };
+  let bestVariance = Infinity;
+
+  while (iteration < MAX_CONVERGENCE_ITERATIONS && !converged) {
+    const toleranceCheck = checkMacroTolerance(totalMacros, macroTargets);
+    
+    if (toleranceCheck.withinTolerance) {
+      converged = true;
+      break;
+    }
+
+    // Calculate current variance score (sum of absolute percentage variances)
+    const currentVariance = 
+      Math.abs(toleranceCheck.percentageVariance.calories) +
+      Math.abs(toleranceCheck.percentageVariance.protein) +
+      Math.abs(toleranceCheck.percentageVariance.carbs) +
+      Math.abs(toleranceCheck.percentageVariance.fat);
+
+    // Track best result
+    if (currentVariance < bestVariance) {
+      bestVariance = currentVariance;
+      bestResult = { 
+        plan: JSON.parse(JSON.stringify(dailyPlan)), 
+        macros: { ...totalMacros } 
+      };
+    }
+
+    // Adjust ingredients to correct macros
+    const { adjustedPlan, adjustedMacros } = adjustMealIngredients(
+      dailyPlan,
+      totalMacros,
+      macroTargets,
+      toleranceCheck
+    );
+
+    dailyPlan = adjustedPlan;
+    totalMacros = adjustedMacros;
+    iteration++;
+  }
+
+  // Final check after loop
+  const finalCheck = checkMacroTolerance(totalMacros, macroTargets);
+  if (finalCheck.withinTolerance) {
+    converged = true;
+  }
+
+  // If not converged, use best result
+  if (!converged) {
+    const finalVariance = 
+      Math.abs(finalCheck.percentageVariance.calories) +
+      Math.abs(finalCheck.percentageVariance.protein) +
+      Math.abs(finalCheck.percentageVariance.carbs) +
+      Math.abs(finalCheck.percentageVariance.fat);
+
+    if (finalVariance > bestVariance) {
+      dailyPlan = bestResult.plan;
+      totalMacros = bestResult.macros;
+    }
+  }
+
+  // Calculate final variance from targets
   const variance = {
     calories: totalMacros.calories - macroTargets.calories,
     protein: totalMacros.protein - macroTargets.protein,
@@ -432,11 +719,20 @@ export function generateFullDayMealPlan(
     fat: totalMacros.fat - macroTargets.fat,
   };
 
+  // Build convergence info
+  const convergenceInfo = {
+    converged,
+    iterations: iteration,
+    warningMessage: converged ? undefined : 
+      `Convergence partielle après ${iteration} itérations. Un ajustement manuel mineur peut être nécessaire.`,
+  };
+
   return {
     dailyPlan,
     totalMacros,
     targetMacros: macroTargets,
     variance,
+    convergenceInfo,
   };
 }
 

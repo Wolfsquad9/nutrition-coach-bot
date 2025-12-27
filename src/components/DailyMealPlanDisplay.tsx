@@ -21,6 +21,11 @@ interface DailyMealPlanDisplayProps {
     carbs: number;
     fat: number;
   };
+  convergenceInfo?: {
+    converged: boolean;
+    iterations: number;
+    warningMessage?: string;
+  };
 }
 
 const MEAL_CONFIG = {
@@ -125,12 +130,26 @@ export function DailyMealPlanDisplay({
   totalMacros,
   targetMacros,
   variance,
+  convergenceInfo,
 }: DailyMealPlanDisplayProps) {
-  const getVarianceColor = (value: number) => {
-    const absValue = Math.abs(value);
+  // Calculate percentage variance for display
+  const percentVariance = {
+    calories: targetMacros.calories > 0 ? (variance.calories / targetMacros.calories) * 100 : 0,
+    protein: targetMacros.protein > 0 ? (variance.protein / targetMacros.protein) * 100 : 0,
+    carbs: targetMacros.carbs > 0 ? (variance.carbs / targetMacros.carbs) * 100 : 0,
+    fat: targetMacros.fat > 0 ? (variance.fat / targetMacros.fat) * 100 : 0,
+  };
+
+  const getVarianceColor = (percent: number) => {
+    const absValue = Math.abs(percent);
     if (absValue <= 5) return 'text-success';
     if (absValue <= 10) return 'text-warning';
     return 'text-destructive';
+  };
+
+  const formatVariance = (percent: number) => {
+    const sign = percent > 0 ? '+' : '';
+    return `${sign}${percent.toFixed(1)}%`;
   };
 
   return (
@@ -142,34 +161,54 @@ export function DailyMealPlanDisplay({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6 space-y-6">
+        {/* Convergence Warning */}
+        {convergenceInfo && !convergenceInfo.converged && convergenceInfo.warningMessage && (
+          <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
+            <p className="text-sm text-warning flex items-center gap-2">
+              <span className="text-warning">⚠️</span>
+              {convergenceInfo.warningMessage}
+            </p>
+          </div>
+        )}
+
+        {/* Convergence Success */}
+        {convergenceInfo?.converged && (
+          <div className="p-3 rounded-lg bg-success/10 border border-success/20">
+            <p className="text-sm text-success flex items-center gap-2">
+              <span>✓</span>
+              Macros optimisés après {convergenceInfo.iterations} itération(s)
+            </p>
+          </div>
+        )}
+
         {/* Daily Totals Summary */}
         <div className="grid grid-cols-4 gap-3">
           <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Calories</p>
             <p className="text-xl font-bold text-primary">{totalMacros.calories}</p>
-            <p className={`text-xs ${getVarianceColor(variance.calories)}`}>
-              ({variance.calories > 0 ? '+' : ''}{variance.calories}%)
+            <p className={`text-xs font-medium ${getVarianceColor(percentVariance.calories)}`}>
+              {formatVariance(percentVariance.calories)}
             </p>
           </div>
           <div className="p-3 rounded-lg bg-success/10 border border-success/20 text-center">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Protéines</p>
             <p className="text-xl font-bold text-success">{totalMacros.protein}g</p>
-            <p className={`text-xs ${getVarianceColor(variance.protein)}`}>
-              ({variance.protein > 0 ? '+' : ''}{variance.protein}%)
+            <p className={`text-xs font-medium ${getVarianceColor(percentVariance.protein)}`}>
+              {formatVariance(percentVariance.protein)}
             </p>
           </div>
           <div className="p-3 rounded-lg bg-info/10 border border-info/20 text-center">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Glucides</p>
             <p className="text-xl font-bold text-info">{totalMacros.carbs}g</p>
-            <p className={`text-xs ${getVarianceColor(variance.carbs)}`}>
-              ({variance.carbs > 0 ? '+' : ''}{variance.carbs}%)
+            <p className={`text-xs font-medium ${getVarianceColor(percentVariance.carbs)}`}>
+              {formatVariance(percentVariance.carbs)}
             </p>
           </div>
           <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-center">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Lipides</p>
             <p className="text-xl font-bold text-warning">{totalMacros.fat}g</p>
-            <p className={`text-xs ${getVarianceColor(variance.fat)}`}>
-              ({variance.fat > 0 ? '+' : ''}{variance.fat}%)
+            <p className={`text-xs font-medium ${getVarianceColor(percentVariance.fat)}`}>
+              {formatVariance(percentVariance.fat)}
             </p>
           </div>
         </div>

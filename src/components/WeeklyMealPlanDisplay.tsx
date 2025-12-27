@@ -100,19 +100,37 @@ function DayCard({ dayNumber, dayName, plan }: {
   const [isOpen, setIsOpen] = useState(dayNumber === 1);
   const mealTypes: MealTimeType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
+  // Calculate percentage variance
+  const percentVariance = {
+    calories: plan.targetMacros.calories > 0 
+      ? ((plan.totalMacros.calories - plan.targetMacros.calories) / plan.targetMacros.calories) * 100 
+      : 0,
+    protein: plan.targetMacros.protein > 0 
+      ? ((plan.totalMacros.protein - plan.targetMacros.protein) / plan.targetMacros.protein) * 100 
+      : 0,
+  };
+
+  const hasWarning = plan.convergenceInfo && !plan.convergenceInfo.converged;
+
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger className="w-full">
-        <Card className="p-4 hover:bg-card-hover transition-colors cursor-pointer">
+        <Card className={`p-4 hover:bg-card-hover transition-colors cursor-pointer ${hasWarning ? 'border-warning/50' : ''}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="font-bold text-primary">{dayNumber}</span>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${hasWarning ? 'bg-warning/10' : 'bg-primary/10'}`}>
+                <span className={`font-bold ${hasWarning ? 'text-warning' : 'text-primary'}`}>{dayNumber}</span>
               </div>
               <div className="text-left">
-                <h3 className="font-semibold">{dayName}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">{dayName}</h3>
+                  {hasWarning && <span className="text-warning text-xs">⚠️</span>}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {plan.totalMacros.calories} kcal | P: {plan.totalMacros.protein}g | C: {plan.totalMacros.carbs}g | F: {plan.totalMacros.fat}g
+                </p>
+                <p className={`text-xs ${Math.abs(percentVariance.calories) <= 5 ? 'text-success' : Math.abs(percentVariance.calories) <= 10 ? 'text-warning' : 'text-destructive'}`}>
+                  Variance: {percentVariance.calories > 0 ? '+' : ''}{percentVariance.calories.toFixed(1)}% cal
                 </p>
               </div>
             </div>
@@ -122,6 +140,11 @@ function DayCard({ dayNumber, dayName, plan }: {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="mt-2 ml-6 space-y-2">
+          {hasWarning && plan.convergenceInfo?.warningMessage && (
+            <div className="p-2 rounded-lg bg-warning/10 border border-warning/20">
+              <p className="text-xs text-warning">{plan.convergenceInfo.warningMessage}</p>
+            </div>
+          )}
           {mealTypes.map(mealType => (
             <MealSection 
               key={mealType} 
