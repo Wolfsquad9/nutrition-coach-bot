@@ -298,3 +298,175 @@ export function getMealSuitability(ingredientId: string): MealType[] {
   const ingredient = coreIngredients.find(ing => ing.id === ingredientId);
   return ingredient?.allowedMeals || ['lunch', 'dinner'];
 }
+
+// Macro allocation per meal (must sum to 1.0)
+const MEAL_MACRO_SPLIT: Record<MealType, number> = {
+  breakfast: 0.25,
+  lunch: 0.35,
+  dinner: 0.30,
+  snack: 0.10,
+};
+
+export interface MacroTargets {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+}
+
+export interface FullDayMealPlanResult {
+  dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan;
+  totalMacros: Macros;
+  targetMacros: MacroTargets;
+  variance: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+}
+
+/**
+ * Generates a complete daily meal plan with breakfast, lunch, dinner, and snack.
+ * Uses allowedMeals on ingredients to filter per meal and allocates macros using the split.
+ */
+export function generateFullDayMealPlan(
+  selectedFoods: string[],
+  macroTargets: MacroTargets
+): FullDayMealPlanResult {
+  const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+  
+  const dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan = {
+    breakfast: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
+    lunch: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
+    dinner: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
+    snack: { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0 } },
+  };
+
+  const totalMacros: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+
+  for (const mealType of mealTypes) {
+    const mealSplit = MEAL_MACRO_SPLIT[mealType];
+    
+    // Calculate target macros for this meal
+    const mealTargetCalories = Math.round(macroTargets.calories * mealSplit);
+    const mealTargetProtein = Math.round(macroTargets.protein * mealSplit);
+    
+    try {
+      // Generate recipe for this meal using existing logic
+      const recipe = generateRecipe(selectedFoods, mealType);
+      
+      // Scale ingredients to meet calorie target for this meal
+      const scaleFactor = recipe.macrosPerServing.calories > 0 
+        ? mealTargetCalories / recipe.macrosPerServing.calories 
+        : 1;
+      
+      // Clamp scale factor to reasonable range
+      const clampedScale = Math.max(0.5, Math.min(2.5, scaleFactor));
+      
+      // Scale the ingredients
+      const scaledIngredients = recipe.selectedIngredients.map(ing => ({
+        ...ing,
+        typical_serving_size_g: Math.round(ing.typical_serving_size_g * clampedScale),
+      }));
+      
+      // Recalculate macros with scaled ingredients
+      const scaledMacros = {
+        calories: Math.round(recipe.macrosPerServing.calories * clampedScale),
+        protein: Math.round(recipe.macrosPerServing.protein * clampedScale),
+        carbs: Math.round(recipe.macrosPerServing.carbs * clampedScale),
+        fat: Math.round(recipe.macrosPerServing.fat * clampedScale),
+        fiber: Math.round((recipe.macrosPerServing.fiber || 0) * clampedScale),
+      };
+      
+      // Generate recipe text
+      const recipeText = generateMealRecipeText(recipe.name, scaledIngredients, recipe.instructions);
+      
+      // Populate the meal data
+      dailyPlan[mealType] = {
+        ingredients: scaledIngredients,
+        recipeText,
+        macros: scaledMacros,
+      };
+      
+      // Accumulate total macros
+      totalMacros.calories += scaledMacros.calories;
+      totalMacros.protein += scaledMacros.protein;
+      totalMacros.carbs += scaledMacros.carbs;
+      totalMacros.fat += scaledMacros.fat;
+      totalMacros.fiber = (totalMacros.fiber || 0) + scaledMacros.fiber;
+      
+    } catch (error) {
+      // If no suitable ingredients for this meal, create an empty placeholder
+      console.warn(`Could not generate ${mealType}: ${error}`);
+      dailyPlan[mealType] = {
+        ingredients: [],
+        recipeText: `No suitable ingredients available for ${mealType}. Please add more ${mealType}-appropriate foods.`,
+        macros: { protein: 0, carbs: 0, fat: 0, calories: 0 },
+      };
+    }
+  }
+
+  // Calculate variance from targets
+  const variance = {
+    calories: totalMacros.calories - macroTargets.calories,
+    protein: totalMacros.protein - macroTargets.protein,
+    carbs: totalMacros.carbs - macroTargets.carbs,
+    fat: totalMacros.fat - macroTargets.fat,
+  };
+
+  return {
+    dailyPlan,
+    totalMacros,
+    targetMacros: macroTargets,
+    variance,
+  };
+}
+
+/**
+ * Generates formatted recipe text for a meal
+ */
+function generateMealRecipeText(
+  recipeName: string,
+  ingredients: IngredientData[],
+  instructions: string[]
+): string {
+  const ingredientList = ingredients
+    .map(ing => `• ${ing.name}: ${ing.typical_serving_size_g}g`)
+    .join('\n');
+  
+  const instructionList = instructions
+    .map((inst, idx) => `${idx + 1}. ${inst}`)
+    .join('\n');
+  
+  return `**${recipeName}**\n\nIngredients:\n${ingredientList}\n\nInstructions:\n${instructionList}`;
+}
+
+/**
+ * Helper to check if there are enough ingredients for a full day
+ */
+export function canGenerateFullDayPlan(selectedFoods: string[]): {
+  canGenerate: boolean;
+  missingMeals: MealType[];
+} {
+  const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+  const missingMeals: MealType[] = [];
+  
+  for (const mealType of mealTypes) {
+    const suitableIngredients = coreIngredients.filter(ing => 
+      selectedFoods.includes(ing.id) && ing.allowedMeals.includes(mealType)
+    );
+    
+    // Need at least one protein source for each meal
+    const hasProtein = suitableIngredients.some(ing => ing.category === 'protein');
+    if (!hasProtein || suitableIngredients.length < 2) {
+      missingMeals.push(mealType);
+    }
+  }
+  
+  return {
+    canGenerate: missingMeals.length === 0,
+    missingMeals,
+  };
+}
