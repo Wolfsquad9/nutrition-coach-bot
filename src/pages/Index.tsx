@@ -472,6 +472,7 @@ const Index = () => {
                 totalMacros={dailyMealPlan.totalMacros}
                 targetMacros={dailyMealPlan.targetMacros}
                 variance={dailyMealPlan.variance}
+                convergenceInfo={dailyMealPlan.convergenceInfo}
               />
             )}
 
