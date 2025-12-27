@@ -25,6 +25,7 @@ interface DailyMealPlanDisplayProps {
     converged: boolean;
     iterations: number;
     warningMessage?: string;
+    realismConstraintHit?: boolean;
   };
 }
 
