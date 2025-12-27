@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { calculateNutritionMetrics } from '@/utils/calculations';
-import { sampleClient, sampleRecipes } from '@/data/sampleData';
+import { sampleClient } from '@/data/sampleData';
 import { Client, CompletePlan, Recipe } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { generatePersonalizedPlan } from '@/services/planService';
@@ -458,22 +458,6 @@ const Index = () => {
               </Card>
             )}
 
-            <Card className="p-6 shadow-card">
-              <h3 className="text-xl font-bold mb-4">Sample Recipes</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {sampleRecipes.slice(0, 4).map(recipe => (
-                  <div key={recipe.id} className="border border-border rounded-lg p-4 hover:bg-card-hover transition-all">
-                    <h4 className="font-semibold text-primary">{recipe.name}</h4>
-                    <p className="text-sm text-muted-foreground">{recipe.category} • {recipe.prepTime + recipe.cookTime} min</p>
-                    <div className="flex gap-4 mt-2 text-xs">
-                      <span>P: {recipe.macrosPerServing.protein}g</span>
-                      <span>C: {recipe.macrosPerServing.carbs}g</span>
-                      <span>F: {recipe.macrosPerServing.fat}g</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
           </TabsContent>
 
           <TabsContent value="training">
