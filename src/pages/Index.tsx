@@ -10,9 +10,9 @@ import { sampleClient } from '@/data/sampleData';
 import { Client, CompletePlan, Recipe } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { generatePersonalizedPlan } from '@/services/planService';
-import { generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
+import { generateFullDayMealPlan, generateWeeklyMealPlan, type FullDayMealPlanResult, type WeeklyMealPlanResult } from '@/services/recipeService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
-import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays } from 'lucide-react';
+import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays, Calendar } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ProgressTracker } from '@/components/ProgressTracker';
 import { MealSwapper } from '@/components/MealSwapper';
@@ -20,14 +20,17 @@ import { ExerciseLibrary } from '@/components/ExerciseLibrary';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import EnhancedIngredientManager from '@/components/EnhancedIngredientManager';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
+import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 const Index = () => {
   const [activeClient, setActiveClient] = useState<Client>(sampleClient);
   const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
   const [dailyMealPlan, setDailyMealPlan] = useState<FullDayMealPlanResult | null>(null);
+  const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlanResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingDailyPlan, setIsGeneratingDailyPlan] = useState(false);
+  const [isGeneratingWeeklyPlan, setIsGeneratingWeeklyPlan] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const { toast } = useToast();
@@ -148,6 +151,7 @@ const Index = () => {
 
       const result = generateFullDayMealPlan(likedFoods, macroTargets);
       setDailyMealPlan(result);
+      setWeeklyMealPlan(null);
 
       toast({
         title: "Plan repas généré !",
@@ -163,6 +167,52 @@ const Index = () => {
       });
     } finally {
       setIsGeneratingDailyPlan(false);
+    }
+  };
+
+  const handleGenerateWeeklyMealPlan = () => {
+    setIsGeneratingWeeklyPlan(true);
+    setError(null);
+
+    try {
+      const likedFoods = getLikedFoods();
+
+      if (likedFoods.length < 5) {
+        toast({
+          title: "Ingrédients insuffisants",
+          description: "Sélectionnez au moins 5 ingrédients aimés pour un plan hebdomadaire varié.",
+          variant: "destructive",
+        });
+        setIsGeneratingWeeklyPlan(false);
+        return;
+      }
+
+      const metrics = calculateNutritionMetrics(activeClient);
+      const macroTargets = {
+        calories: metrics.targetCalories,
+        protein: metrics.proteinGrams,
+        carbs: metrics.carbsGrams,
+        fat: metrics.fatGrams,
+      };
+
+      const result = generateWeeklyMealPlan(likedFoods, macroTargets);
+      setWeeklyMealPlan(result);
+      setDailyMealPlan(null);
+
+      toast({
+        title: "Plan hebdomadaire généré !",
+        description: `7 jours de repas: ${result.weeklyTotalMacros.calories} kcal total`,
+      });
+    } catch (err: any) {
+      console.error('Error generating weekly meal plan:', err);
+      setError(err.message || "Erreur lors de la génération du plan hebdomadaire");
+      toast({
+        title: "Erreur",
+        description: err.message || "Impossible de générer le plan hebdomadaire",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingWeeklyPlan(false);
     }
   };
 
@@ -359,37 +409,61 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="nutrition" className="space-y-4">
-            {/* Daily Meal Plan Generator */}
+            {/* Meal Plan Generators */}
             <Card className="p-6 shadow-card">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
                     <CalendarDays className="h-6 w-6" />
-                    Plan Repas Journalier
+                    Génération de Plans Repas
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Générez un plan complet avec petit-déjeuner, déjeuner, dîner et collation
+                    Générez un plan journalier ou hebdomadaire basé sur vos ingrédients préférés
                   </p>
                 </div>
-                <Button
-                  onClick={handleGenerateDailyMealPlan}
-                  disabled={isGeneratingDailyPlan}
-                  className="bg-gradient-primary text-white shadow-glow hover:shadow-xl"
-                >
-                  {isGeneratingDailyPlan ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Génération...
-                    </>
-                  ) : (
-                    <>
-                      <CalendarDays className="mr-2 h-4 w-4" />
-                      Générer Plan Journalier
-                    </>
-                  )}
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleGenerateDailyMealPlan}
+                    disabled={isGeneratingDailyPlan || isGeneratingWeeklyPlan}
+                    variant="outline"
+                  >
+                    {isGeneratingDailyPlan ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Génération...
+                      </>
+                    ) : (
+                      <>
+                        <CalendarDays className="mr-2 h-4 w-4" />
+                        Plan Journalier
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleGenerateWeeklyMealPlan}
+                    disabled={isGeneratingDailyPlan || isGeneratingWeeklyPlan}
+                    className="bg-gradient-primary text-white shadow-glow hover:shadow-xl"
+                  >
+                    {isGeneratingWeeklyPlan ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Génération...
+                      </>
+                    ) : (
+                      <>
+                        <Calendar className="mr-2 h-4 w-4" />
+                        Plan Hebdomadaire
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </Card>
+
+            {/* Display Weekly Meal Plan if generated */}
+            {weeklyMealPlan && (
+              <WeeklyMealPlanDisplay weeklyPlan={weeklyMealPlan} />
+            )}
 
             {/* Display Daily Meal Plan if generated */}
             {dailyMealPlan && (
