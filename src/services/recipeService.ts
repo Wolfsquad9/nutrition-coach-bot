@@ -1,69 +1,7 @@
-import { coreIngredients, type IngredientData, calculateMacros } from '@/data/ingredientDatabase';
+import { coreIngredients, type IngredientData, calculateMacros, type MealTimeType } from '@/data/ingredientDatabase';
 import { Recipe, Ingredient, Macros } from '@/types';
 
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-
-// Meal suitability mapping for each ingredient
-const MEAL_SUITABILITY: Record<string, MealType[]> = {
-  // Proteins
-  'chicken-breast': ['lunch', 'dinner'],
-  'eggs': ['breakfast', 'lunch', 'snack'],
-  'salmon': ['lunch', 'dinner'],
-  'tofu': ['lunch', 'dinner'],
-  'greek-yogurt': ['breakfast', 'snack'],
-  'lentils': ['lunch', 'dinner'],
-  'turkey-breast': ['lunch', 'dinner'],
-  'cottage-cheese': ['breakfast', 'snack'],
-  'tuna': ['lunch', 'dinner', 'snack'],
-  'black-beans': ['lunch', 'dinner'],
-  
-  // Carbs
-  'brown-rice': ['lunch', 'dinner'],
-  'oats': ['breakfast', 'snack'],
-  'sweet-potato': ['lunch', 'dinner'],
-  'quinoa': ['lunch', 'dinner'],
-  'whole-wheat-pasta': ['lunch', 'dinner'],
-  'white-potato': ['lunch', 'dinner'],
-  'whole-wheat-bread': ['breakfast', 'lunch', 'snack'],
-  'barley': ['lunch', 'dinner'],
-  
-  // Fats
-  'olive-oil': ['breakfast', 'lunch', 'dinner'],
-  'avocado': ['breakfast', 'lunch', 'dinner', 'snack'],
-  'almonds': ['breakfast', 'snack'],
-  'walnuts': ['breakfast', 'snack'],
-  'peanut-butter': ['breakfast', 'snack'],
-  'chia-seeds': ['breakfast', 'snack'],
-  'flax-seeds': ['breakfast', 'snack'],
-  'coconut-oil': ['breakfast', 'lunch', 'dinner'],
-  
-  // Fruits
-  'banana': ['breakfast', 'snack'],
-  'apple': ['breakfast', 'snack'],
-  'berries-mixed': ['breakfast', 'snack'],
-  'orange': ['breakfast', 'snack'],
-  'mango': ['breakfast', 'snack'],
-  'grapes': ['snack'],
-  
-  // Vegetables
-  'broccoli': ['lunch', 'dinner'],
-  'spinach': ['breakfast', 'lunch', 'dinner'],
-  'tomato': ['breakfast', 'lunch', 'dinner'],
-  'carrot': ['lunch', 'dinner', 'snack'],
-  'bell-pepper': ['lunch', 'dinner'],
-  'cucumber': ['lunch', 'dinner', 'snack'],
-  'cauliflower': ['lunch', 'dinner'],
-  'zucchini': ['lunch', 'dinner'],
-  'kale': ['breakfast', 'lunch', 'dinner'],
-  'asparagus': ['lunch', 'dinner'],
-  
-  // Misc
-  'garlic': ['lunch', 'dinner'],
-  'ginger': ['breakfast', 'lunch', 'dinner'],
-  'lemon': ['breakfast', 'lunch', 'dinner'],
-  'herbs-mixed': ['lunch', 'dinner'],
-  'cinnamon': ['breakfast', 'snack'],
-};
+export type MealType = MealTimeType;
 
 // Target macros per meal type (approximate)
 const MEAL_MACRO_TARGETS: Record<MealType, { calorieRatio: number; proteinRatio: number }> = {
@@ -112,8 +50,7 @@ function getSuitableIngredients(
 ): IngredientData[] {
   return coreIngredients.filter(ing => {
     const isSelected = selectedFoods.includes(ing.id);
-    const suitableMeals = MEAL_SUITABILITY[ing.id] || ['lunch', 'dinner']; // Default to lunch/dinner
-    const isSuitable = suitableMeals.includes(mealType);
+    const isSuitable = ing.allowedMeals.includes(mealType);
     return isSelected && isSuitable;
   });
 }
@@ -230,7 +167,7 @@ function calculateTotalMacros(ingredients: IngredientData[]): Macros {
   return ingredients.reduce((total, ing) => {
     const macros = calculateMacros(ing, ing.typical_serving_size_g);
     return {
-      calories: total.calories + macros.kcal,
+      calories: total.calories + macros.calories,
       protein: total.protein + macros.protein,
       carbs: total.carbs + macros.carbs,
       fat: total.fat + macros.fat,
@@ -270,11 +207,11 @@ export function generateRecipe(
     unit: 'g' as const,
     category: ing.category === 'carbohydrate' ? 'carb' : ing.category === 'misc' ? 'spice' : ing.category as any,
     macrosPer100g: {
-      calories: ing.macros_per_100g.kcal,
-      protein: ing.macros_per_100g.protein,
-      carbs: ing.macros_per_100g.carbs,
-      fat: ing.macros_per_100g.fat,
-      fiber: ing.macros_per_100g.fiber,
+      calories: ing.macros.calories,
+      protein: ing.macros.protein,
+      carbs: ing.macros.carbs,
+      fat: ing.macros.fat,
+      fiber: ing.macros.fiber,
     },
   }));
   
@@ -358,5 +295,6 @@ function determineEquipment(mealType: MealType): string[] {
 }
 
 export function getMealSuitability(ingredientId: string): MealType[] {
-  return MEAL_SUITABILITY[ingredientId] || ['lunch', 'dinner'];
+  const ingredient = coreIngredients.find(ing => ing.id === ingredientId);
+  return ingredient?.allowedMeals || ['lunch', 'dinner'];
 }

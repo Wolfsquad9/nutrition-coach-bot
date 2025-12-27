@@ -132,10 +132,10 @@ export default function EnhancedIngredientManager({
     const total = allowedIngredients.reduce((acc, ing) => {
       const servingFactor = ing.typical_serving_size_g / 100;
       return {
-        calories: acc.calories + (ing.macros_per_100g.kcal * servingFactor),
-        protein: acc.protein + (ing.macros_per_100g.protein * servingFactor),
-        carbs: acc.carbs + (ing.macros_per_100g.carbs * servingFactor),
-        fat: acc.fat + (ing.macros_per_100g.fat * servingFactor),
+        calories: acc.calories + (ing.macros.calories * servingFactor),
+        protein: acc.protein + (ing.macros.protein * servingFactor),
+        carbs: acc.carbs + (ing.macros.carbs * servingFactor),
+        fat: acc.fat + (ing.macros.fat * servingFactor),
       };
     }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
@@ -561,7 +561,7 @@ export default function EnhancedIngredientManager({
                             <div className="flex-1">
                               <div className="font-medium text-foreground">{ingredient.name}</div>
                               <div className="text-sm text-muted-foreground">
-                                {formatMacro(ingredient.macros_per_100g.protein)}g P | {formatMacro(ingredient.macros_per_100g.carbs)}g C | {formatMacro(ingredient.macros_per_100g.fat)}g F | {formatCalories(ingredient.macros_per_100g.kcal)} kcal
+                                {formatMacro(ingredient.macros.protein)}g P | {formatMacro(ingredient.macros.carbs)}g C | {formatMacro(ingredient.macros.fat)}g F | {formatCalories(ingredient.macros.calories)} kcal
                               </div>
                               <div className="flex gap-1 mt-1">
                                 {ingredient.tags.slice(0, 3).map(tag => (
