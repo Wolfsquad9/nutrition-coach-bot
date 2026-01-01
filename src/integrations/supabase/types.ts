@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_progress_snapshots: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          metrics: Json
+          plan_version_id: string
+          snapshot_type: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metrics: Json
+          plan_version_id: string
+          snapshot_type: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metrics?: Json
+          plan_version_id?: string
+          snapshot_type?: string
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           activity_level: string
@@ -121,11 +151,42 @@ export type Database = {
         }
         Relationships: []
       }
+      macro_tolerance_rules: {
+        Row: {
+          calories_pct_max: number
+          carbs_pct_max: number
+          created_at: string
+          fats_pct_max: number
+          id: string
+          protein_pct_max: number
+          scope: string
+        }
+        Insert: {
+          calories_pct_max: number
+          carbs_pct_max: number
+          created_at?: string
+          fats_pct_max: number
+          id?: string
+          protein_pct_max: number
+          scope: string
+        }
+        Update: {
+          calories_pct_max?: number
+          carbs_pct_max?: number
+          created_at?: string
+          fats_pct_max?: number
+          id?: string
+          protein_pct_max?: number
+          scope?: string
+        }
+        Relationships: []
+      }
       nutrition_plans: {
         Row: {
           client_id: string
           created_at: string
           created_by: string
+          current_version_id: string | null
           id: string
           plan_data: Json
           status: string
@@ -135,6 +196,7 @@ export type Database = {
           client_id: string
           created_at?: string
           created_by: string
+          current_version_id?: string | null
           id?: string
           plan_data: Json
           status?: string
@@ -144,6 +206,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           created_by?: string
+          current_version_id?: string | null
           id?: string
           plan_data?: Json
           status?: string
@@ -190,6 +253,98 @@ export type Database = {
           plan_id?: string
           plan_type?: string
           timestamp?: string
+        }
+        Relationships: []
+      }
+      plan_overrides: {
+        Row: {
+          approved_by: string | null
+          archived: boolean
+          client_id: string
+          created_at: string
+          id: string
+          macro_delta: Json
+          meal_type: string
+          original_ingredient: string
+          plan_version_id: string
+          replacement_ingredient: string
+          requires_recipe_regeneration: boolean
+          suggested_by: string
+          within_tolerance: boolean
+        }
+        Insert: {
+          approved_by?: string | null
+          archived?: boolean
+          client_id: string
+          created_at?: string
+          id?: string
+          macro_delta: Json
+          meal_type: string
+          original_ingredient: string
+          plan_version_id: string
+          replacement_ingredient: string
+          requires_recipe_regeneration?: boolean
+          suggested_by: string
+          within_tolerance?: boolean
+        }
+        Update: {
+          approved_by?: string | null
+          archived?: boolean
+          client_id?: string
+          created_at?: string
+          id?: string
+          macro_delta?: Json
+          meal_type?: string
+          original_ingredient?: string
+          plan_version_id?: string
+          replacement_ingredient?: string
+          requires_recipe_regeneration?: boolean
+          suggested_by?: string
+          within_tolerance?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_overrides_plan_version_fk"
+            columns: ["plan_version_id"]
+            isOneToOne: false
+            referencedRelation: "plan_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_versions: {
+        Row: {
+          archived: boolean
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          payload_hash: string
+          plan_id: string
+          plan_payload: Json
+          version_number: number
+        }
+        Insert: {
+          archived?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          payload_hash: string
+          plan_id: string
+          plan_payload: Json
+          version_number: number
+        }
+        Update: {
+          archived?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          payload_hash?: string
+          plan_id?: string
+          plan_payload?: Json
+          version_number?: number
         }
         Relationships: []
       }
@@ -242,6 +397,7 @@ export type Database = {
           created_at: string
           diet_types: string[] | null
           id: string
+          immutable: boolean
           ingredients: Json
           instructions: string[] | null
           macros: Json
@@ -256,6 +412,7 @@ export type Database = {
           created_at?: string
           diet_types?: string[] | null
           id?: string
+          immutable?: boolean
           ingredients: Json
           instructions?: string[] | null
           macros: Json
@@ -270,6 +427,7 @@ export type Database = {
           created_at?: string
           diet_types?: string[] | null
           id?: string
+          immutable?: boolean
           ingredients?: Json
           instructions?: string[] | null
           macros?: Json
@@ -332,6 +490,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_next_plan_version_number: {
+        Args: { p_plan_id: string }
+        Returns: number
+      }
       get_trainer_client_ids: {
         Args: { _trainer_id: string }
         Returns: {
@@ -345,6 +507,11 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_macro_delta_within_tolerance: {
+        Args: { delta_macros: Json; scope: string; target_macros: Json }
+        Returns: boolean
+      }
+      is_plan_locked: { Args: { plan_version_uuid: string }; Returns: boolean }
     }
     Enums: {
       app_role: "client" | "trainer" | "admin"
