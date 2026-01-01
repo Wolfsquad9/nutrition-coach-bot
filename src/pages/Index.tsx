@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { generatePersonalizedPlan } from '@/services/planService';
 import { generateFullDayMealPlan, generateWeeklyMealPlan, type FullDayMealPlanResult, type WeeklyMealPlanResult } from '@/services/recipeService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
-import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays, Calendar } from 'lucide-react';
+import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays, Calendar, Save } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ProgressTracker } from '@/components/ProgressTracker';
 import { MealSwapper } from '@/components/MealSwapper';
@@ -21,10 +21,35 @@ import { NotificationCenter } from '@/components/NotificationCenter';
 import EnhancedIngredientManager from '@/components/EnhancedIngredientManager';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
+import { DataSourceIndicator, PlanLockIndicator, EmptyState } from '@/components/DataSourceIndicator';
+import { useSupabaseClients } from '@/hooks/useSupabaseClients';
+import { useNutritionPlan } from '@/hooks/useNutritionPlan';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 const Index = () => {
-  const [activeClient, setActiveClient] = useState<Client>(sampleClient);
+  // Supabase client management
+  const {
+    clients,
+    activeClient,
+    isLoading: isLoadingClients,
+    isMockData,
+    error: clientError,
+    setActiveClient,
+    handleCreateClient,
+    refreshClients,
+  } = useSupabaseClients();
+
+  // Supabase plan management
+  const {
+    currentPlan,
+    lockStatus,
+    isPersisted: isPlanPersisted,
+    isLoading: isLoadingPlan,
+    isSaving: isSavingPlan,
+    savePlan,
+    loadPlan,
+  } = useNutritionPlan();
+
   const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
   const [dailyMealPlan, setDailyMealPlan] = useState<FullDayMealPlanResult | null>(null);
   const [weeklyMealPlan, setWeeklyMealPlan] = useState<WeeklyMealPlanResult | null>(null);
@@ -35,6 +60,20 @@ const Index = () => {
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const { toast } = useToast();
 
+  // Load plan when client changes
+  useEffect(() => {
+    if (activeClient.id && !isMockData) {
+      loadPlan(activeClient.id);
+    }
+  }, [activeClient.id, isMockData, loadPlan]);
+
+  // Restore weekly plan from persisted data
+  useEffect(() => {
+    if (currentPlan?.weeklyPlan) {
+      setWeeklyMealPlan(currentPlan.weeklyPlan);
+    }
+  }, [currentPlan]);
+
   // Get liked foods from the current client's restrictions
   const getLikedFoods = (): string[] => {
     const restriction = clientRestrictions.find(r => r.clientId === activeClient.id);
@@ -42,10 +81,10 @@ const Index = () => {
   };
 
   const handleInputChange = (field: keyof Client, value: any) => {
-    setActiveClient(prev => ({
-      ...prev,
+    setActiveClient({
+      ...activeClient,
       [field]: value
-    }));
+    });
   };
 
   const handleGeneratePlan = async () => {
@@ -170,7 +209,17 @@ const Index = () => {
     }
   };
 
-  const handleGenerateWeeklyMealPlan = () => {
+  const handleGenerateWeeklyMealPlan = async () => {
+    // Check if plan is locked
+    if (lockStatus.isLocked) {
+      toast({
+        title: "Plan verrouillé",
+        description: `Le plan actuel est verrouillé pour ${lockStatus.daysRemaining} jour(s). Utilisez les suggestions pour demander des modifications.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGeneratingWeeklyPlan(true);
     setError(null);
 
@@ -199,10 +248,26 @@ const Index = () => {
       setWeeklyMealPlan(result);
       setDailyMealPlan(null);
 
-      toast({
-        title: "Plan hebdomadaire généré !",
-        description: `7 jours de repas: ${result.weeklyTotalMacros.calories} kcal total`,
-      });
+      // Auto-save to Supabase if client is persisted
+      if (activeClient.id && !isMockData) {
+        const saveResult = await savePlan(
+          activeClient.id,
+          result,
+          macroTargets,
+          likedFoods
+        );
+        if (saveResult.success) {
+          toast({
+            title: "Plan sauvegardé !",
+            description: `Plan hebdomadaire persisté dans Supabase`,
+          });
+        }
+      } else {
+        toast({
+          title: "Plan hebdomadaire généré !",
+          description: `7 jours de repas (non persisté - créez d'abord un client)`,
+        });
+      }
     } catch (err: any) {
       console.error('Error generating weekly meal plan:', err);
       setError(err.message || "Erreur lors de la génération du plan hebdomadaire");
