@@ -1,33 +1,64 @@
 /**
  * Hook for managing clients with Supabase persistence
+ * No mock data fallbacks - Supabase is the single source of truth
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Client } from '@/types';
-import { sampleClient } from '@/data/sampleData';
 import { 
   fetchClients, 
   createClient as createSupabaseClient,
   updateClient as updateSupabaseClient 
 } from '@/services/supabaseClientService';
 
+// Default empty client for new client creation form
+const createEmptyClient = (): Client => ({
+  id: '',
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  birthDate: '',
+  gender: 'male',
+  age: 30,
+  height: 175,
+  weight: 75,
+  activityLevel: 'moderately_active',
+  primaryGoal: 'maintenance',
+  trainingExperience: 'intermediate',
+  trainingDaysPerWeek: 4,
+  sessionDuration: 60,
+  preferredTrainingStyle: 'hypertrophy',
+  equipment: [],
+  dietType: 'omnivore',
+  mealsPerDay: 4,
+  intolerances: [],
+  allergies: [],
+  dislikedFoods: [],
+  medicalConditions: [],
+  medications: [],
+  injuries: [],
+  hasRedFlags: false,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+});
+
 interface UseSupabaseClientsResult {
   clients: Client[];
-  activeClient: Client;
+  activeClient: Client | null;
   isLoading: boolean;
-  isMockData: boolean;
   error: string | null;
-  setActiveClient: (client: Client) => void;
+  setActiveClient: (client: Client | null) => void;
   handleCreateClient: (client: Client) => Promise<{ success: boolean; client: Client | null; error: string | null }>;
   handleUpdateClient: (clientId: string, updates: Partial<Client>) => Promise<{ success: boolean; error: string | null }>;
   refreshClients: () => Promise<void>;
+  createNewClientDraft: () => Client;
 }
 
 export function useSupabaseClients(): UseSupabaseClientsResult {
   const [clients, setClients] = useState<Client[]>([]);
-  const [activeClient, setActiveClient] = useState<Client>(sampleClient);
+  const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isMockData, setIsMockData] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadClients = useCallback(async () => {
@@ -36,27 +67,19 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
     
     try {
       const result = await fetchClients();
+      setClients(result.clients);
       
+      // Set first client as active if available, otherwise null
       if (result.clients.length > 0) {
-        setClients(result.clients);
         setActiveClient(result.clients[0]);
-        setIsMockData(false);
       } else {
-        // No clients in DB - use sample client as template but mark as mock
-        setClients([]);
-        setActiveClient({
-          ...sampleClient,
-          id: '', // Clear ID to indicate this is a new client
-        });
-        setIsMockData(true);
+        setActiveClient(null);
       }
     } catch (err: any) {
       console.error('Error loading clients:', err);
-      setError(err.message || 'Failed to load clients');
-      // Fallback to sample client
+      setError(err.message || 'Failed to load clients from Supabase');
       setClients([]);
-      setActiveClient(sampleClient);
-      setIsMockData(true);
+      setActiveClient(null);
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +100,6 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       // Add to local state
       setClients(prev => [result.client!, ...prev]);
       setActiveClient(result.client);
-      setIsMockData(false);
       
       return { success: true, client: result.client, error: null };
     } catch (err: any) {
@@ -111,11 +133,11 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
     clients,
     activeClient,
     isLoading,
-    isMockData,
     error,
     setActiveClient,
     handleCreateClient,
     handleUpdateClient,
     refreshClients: loadClients,
+    createNewClientDraft: createEmptyClient,
   };
 }

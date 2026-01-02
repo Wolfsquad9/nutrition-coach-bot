@@ -6,13 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { calculateNutritionMetrics } from '@/utils/calculations';
-import { sampleClient } from '@/data/sampleData';
 import { Client, CompletePlan, Recipe } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { generatePersonalizedPlan } from '@/services/planService';
 import { generateFullDayMealPlan, generateWeeklyMealPlan, type FullDayMealPlanResult, type WeeklyMealPlanResult } from '@/services/recipeService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
-import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays, Calendar, Save } from 'lucide-react';
+import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays, Calendar, Save, Plus } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ProgressTracker } from '@/components/ProgressTracker';
 import { MealSwapper } from '@/components/MealSwapper';
@@ -32,12 +31,18 @@ const Index = () => {
     clients,
     activeClient,
     isLoading: isLoadingClients,
-    isMockData,
     error: clientError,
     setActiveClient,
     handleCreateClient,
     refreshClients,
+    createNewClientDraft,
   } = useSupabaseClients();
+
+  // Local draft for new client creation
+  const [draftClient, setDraftClient] = useState<Client | null>(null);
+  
+  // The client being edited (either activeClient from DB or draftClient for new)
+  const editingClient = draftClient || activeClient;
 
   // Supabase plan management
   const {
@@ -62,10 +67,10 @@ const Index = () => {
 
   // Load plan when client changes
   useEffect(() => {
-    if (activeClient.id && !isMockData) {
+    if (activeClient?.id) {
       loadPlan(activeClient.id);
     }
-  }, [activeClient.id, isMockData, loadPlan]);
+  }, [activeClient?.id, loadPlan]);
 
   // Restore weekly plan from persisted data
   useEffect(() => {
@@ -76,18 +81,53 @@ const Index = () => {
 
   // Get liked foods from the current client's restrictions
   const getLikedFoods = (): string[] => {
-    const restriction = clientRestrictions.find(r => r.clientId === activeClient.id);
+    const clientId = editingClient?.id;
+    if (!clientId) return [];
+    const restriction = clientRestrictions.find(r => r.clientId === clientId);
     return restriction?.preferredIngredients || [];
   };
 
   const handleInputChange = (field: keyof Client, value: any) => {
-    setActiveClient({
-      ...activeClient,
-      [field]: value
-    });
+    if (draftClient) {
+      setDraftClient({ ...draftClient, [field]: value });
+    } else if (activeClient) {
+      setActiveClient({ ...activeClient, [field]: value });
+    }
+  };
+
+  const handleStartNewClient = () => {
+    setDraftClient(createNewClientDraft());
+  };
+
+  const handleSaveClient = async () => {
+    if (!editingClient) return;
+    
+    const result = await handleCreateClient(editingClient);
+    if (result.success) {
+      setDraftClient(null); // Clear draft after successful save
+      toast({
+        title: "Client sauvegardé",
+        description: "Le client a été enregistré dans Supabase.",
+      });
+    } else {
+      toast({
+        title: "Erreur",
+        description: result.error || "Impossible de sauvegarder le client",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleGeneratePlan = async () => {
+    if (!editingClient) {
+      toast({
+        title: "Aucun client",
+        description: "Créez d'abord un client.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
     
@@ -102,7 +142,7 @@ const Index = () => {
         });
       }
       
-      const plan = await generatePersonalizedPlan(activeClient, likedFoods);
+      const plan = await generatePersonalizedPlan(editingClient, likedFoods);
       setGeneratedPlan(plan);
       
       toast({
@@ -126,9 +166,9 @@ const Index = () => {
   };
 
   const handleDownloadPDF = () => {
-    if (!generatedPlan) return;
+    if (!generatedPlan || !editingClient) return;
     const pdf = generateCompletePlanPDF(generatedPlan);
-    downloadPDF(pdf, `${activeClient.firstName}-${activeClient.lastName}-plan.pdf`);
+    downloadPDF(pdf, `${editingClient.firstName}-${editingClient.lastName}-plan.pdf`);
     toast({
       title: "PDF Downloaded",
       description: "The complete plan has been downloaded as PDF.",
@@ -136,9 +176,9 @@ const Index = () => {
   };
 
   const handleDownloadJSON = () => {
-    if (!generatedPlan) return;
+    if (!generatedPlan || !editingClient) return;
     const json = exportPlanAsJSON(generatedPlan);
-    downloadJSON(json, `${activeClient.firstName}-${activeClient.lastName}-plan.json`);
+    downloadJSON(json, `${editingClient.firstName}-${editingClient.lastName}-plan.json`);
     toast({
       title: "JSON Downloaded",
       description: "The complete plan has been downloaded as JSON.",
@@ -163,6 +203,15 @@ const Index = () => {
   };
 
   const handleGenerateDailyMealPlan = () => {
+    if (!editingClient) {
+      toast({
+        title: "Aucun client",
+        description: "Créez d'abord un client.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGeneratingDailyPlan(true);
     setError(null);
 
@@ -180,7 +229,7 @@ const Index = () => {
       }
 
       // Calculate macro targets based on client data
-      const metrics = calculateNutritionMetrics(activeClient);
+      const metrics = calculateNutritionMetrics(editingClient);
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,
@@ -210,6 +259,15 @@ const Index = () => {
   };
 
   const handleGenerateWeeklyMealPlan = async () => {
+    if (!editingClient) {
+      toast({
+        title: "Aucun client",
+        description: "Créez d'abord un client avant de générer un plan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check if plan is locked
     if (lockStatus.isLocked) {
       toast({
@@ -236,7 +294,7 @@ const Index = () => {
         return;
       }
 
-      const metrics = calculateNutritionMetrics(activeClient);
+      const metrics = calculateNutritionMetrics(editingClient);
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,
@@ -248,8 +306,8 @@ const Index = () => {
       setWeeklyMealPlan(result);
       setDailyMealPlan(null);
 
-      // Auto-save to Supabase if client is persisted
-      if (activeClient.id && !isMockData) {
+      // Auto-save to Supabase if client is persisted (has an ID from DB)
+      if (activeClient?.id) {
         const saveResult = await savePlan(
           activeClient.id,
           result,
@@ -265,7 +323,7 @@ const Index = () => {
       } else {
         toast({
           title: "Plan hebdomadaire généré !",
-          description: `7 jours de repas (non persisté - créez d'abord un client)`,
+          description: `7 jours de repas (non persisté - sauvegardez le client d'abord)`,
         });
       }
     } catch (err: any) {
@@ -312,165 +370,248 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="ingredients" className="space-y-4">
-            <EnhancedIngredientManager 
-              clients={[activeClient]}
-              onRestrictionsUpdate={setClientRestrictions}
-            />
+            {editingClient ? (
+              <EnhancedIngredientManager 
+                clients={[editingClient]}
+                onRestrictionsUpdate={setClientRestrictions}
+              />
+            ) : (
+              <Card className="p-6 shadow-card">
+                <EmptyState type="clients" />
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="client" className="space-y-4">
-            <Card className="p-6 shadow-card">
-              <h2 className="text-2xl font-bold mb-4 text-primary">Client Information</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName">Prénom</Label>
-                  <Input 
-                    id="firstName" 
-                    value={activeClient.firstName} 
-                    onChange={(e) => handleInputChange('firstName', e.target.value)}
-                    className="mt-1" 
-                  />
+            {/* Error display */}
+            {clientError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Erreur Supabase: {clientError}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Loading state */}
+            {isLoadingClients ? (
+              <Card className="p-6 shadow-card flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-2">Chargement des clients...</span>
+              </Card>
+            ) : !editingClient ? (
+              /* Empty state - no clients */
+              <Card className="p-6 shadow-card">
+                <div className="text-center py-8">
+                  <h2 className="text-2xl font-bold mb-4 text-primary">Aucun client</h2>
+                  <p className="text-muted-foreground mb-6">
+                    La base de données ne contient aucun client. Créez votre premier client pour commencer.
+                  </p>
+                  <Button onClick={handleStartNewClient} className="bg-gradient-primary text-white">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Créer un nouveau client
+                  </Button>
                 </div>
-                <div>
-                  <Label htmlFor="lastName">Nom</Label>
-                  <Input 
-                    id="lastName" 
-                    value={activeClient.lastName} 
-                    onChange={(e) => handleInputChange('lastName', e.target.value)}
-                    className="mt-1" 
-                  />
+              </Card>
+            ) : (
+              /* Client form */
+              <Card className="p-6 shadow-card">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-bold text-primary">
+                    {draftClient ? 'Nouveau Client' : 'Client Information'}
+                  </h2>
+                  <div className="flex gap-2">
+                    {!draftClient && clients.length > 0 && (
+                      <Button variant="outline" onClick={handleStartNewClient}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Nouveau
+                      </Button>
+                    )}
+                    {(draftClient || !activeClient?.id) && (
+                      <Button onClick={handleSaveClient} className="bg-gradient-primary text-white">
+                        <Save className="mr-2 h-4 w-4" />
+                        Sauvegarder
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="age">Âge</Label>
-                  <Input 
-                    id="age" 
-                    type="number" 
-                    value={activeClient.age} 
-                    onChange={(e) => handleInputChange('age', parseInt(e.target.value))}
-                    className="mt-1" 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="gender">Genre</Label>
-                  <Select 
-                    value={activeClient.gender} 
-                    onValueChange={(value) => handleInputChange('gender', value)}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Homme</SelectItem>
-                      <SelectItem value="female">Femme</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="weight">Poids (kg)</Label>
-                  <Input 
-                    id="weight" 
-                    type="number" 
-                    value={activeClient.weight} 
-                    onChange={(e) => handleInputChange('weight', parseFloat(e.target.value))}
-                    className="mt-1" 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="height">Taille (cm)</Label>
-                  <Input 
-                    id="height" 
-                    type="number" 
-                    value={activeClient.height} 
-                    onChange={(e) => handleInputChange('height', parseFloat(e.target.value))}
-                    className="mt-1" 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="goal">Objectif Principal</Label>
-                  <Select 
-                    value={activeClient.primaryGoal} 
-                    onValueChange={(value) => handleInputChange('primaryGoal', value)}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fat_loss">Perte de graisse</SelectItem>
-                      <SelectItem value="muscle_gain">Prise de muscle</SelectItem>
-                      <SelectItem value="recomposition">Recomposition corporelle</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="activity">Niveau d'activité</Label>
-                  <Select 
-                    value={activeClient.activityLevel} 
-                    onValueChange={(value) => handleInputChange('activityLevel', value)}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sedentary">Sédentaire</SelectItem>
-                      <SelectItem value="lightly_active">Légèrement actif</SelectItem>
-                      <SelectItem value="moderately_active">Modérément actif</SelectItem>
-                      <SelectItem value="very_active">Très actif</SelectItem>
-                      <SelectItem value="extra_active">Extrêmement actif</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="trainingDays">Jours d'entraînement/semaine</Label>
-                  <Input 
-                    id="trainingDays" 
-                    type="number" 
-                    min="1" 
-                    max="7"
-                    value={activeClient.trainingDaysPerWeek} 
-                    onChange={(e) => handleInputChange('trainingDaysPerWeek', parseInt(e.target.value))}
-                    className="mt-1" 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="experience">Expérience d'entraînement</Label>
-                  <Select 
-                    value={activeClient.trainingExperience} 
-                    onValueChange={(value) => handleInputChange('trainingExperience', value)}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="beginner">Débutant</SelectItem>
-                      <SelectItem value="intermediate">Intermédiaire</SelectItem>
-                      <SelectItem value="advanced">Avancé</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              {error && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <Button 
-                onClick={handleGeneratePlan}
-                disabled={isGenerating}
-                className="mt-6 bg-gradient-primary text-white shadow-glow hover:shadow-xl"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Plan en cours de génération...
-                  </>
-                ) : (
-                  'Générer le plan complet'
+
+                {/* Client selector for existing clients */}
+                {!draftClient && clients.length > 1 && (
+                  <div className="mb-4">
+                    <Label>Sélectionner un client</Label>
+                    <Select 
+                      value={activeClient?.id || ''} 
+                      onValueChange={(id) => {
+                        const client = clients.find(c => c.id === id);
+                        if (client) setActiveClient(client);
+                      }}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Choisir un client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients.map(client => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.firstName} {client.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
-              </Button>
-            </Card>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="firstName">Prénom</Label>
+                    <Input 
+                      id="firstName" 
+                      value={editingClient.firstName} 
+                      onChange={(e) => handleInputChange('firstName', e.target.value)}
+                      className="mt-1" 
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="lastName">Nom</Label>
+                    <Input 
+                      id="lastName" 
+                      value={editingClient.lastName} 
+                      onChange={(e) => handleInputChange('lastName', e.target.value)}
+                      className="mt-1" 
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="age">Âge</Label>
+                    <Input 
+                      id="age" 
+                      type="number" 
+                      value={editingClient.age || ''} 
+                      onChange={(e) => handleInputChange('age', parseInt(e.target.value) || 0)}
+                      className="mt-1" 
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gender">Genre</Label>
+                    <Select 
+                      value={editingClient.gender} 
+                      onValueChange={(value) => handleInputChange('gender', value)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Homme</SelectItem>
+                        <SelectItem value="female">Femme</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="weight">Poids (kg)</Label>
+                    <Input 
+                      id="weight" 
+                      type="number" 
+                      value={editingClient.weight} 
+                      onChange={(e) => handleInputChange('weight', parseFloat(e.target.value) || 0)}
+                      className="mt-1" 
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="height">Taille (cm)</Label>
+                    <Input 
+                      id="height" 
+                      type="number" 
+                      value={editingClient.height} 
+                      onChange={(e) => handleInputChange('height', parseFloat(e.target.value) || 0)}
+                      className="mt-1" 
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="goal">Objectif Principal</Label>
+                    <Select 
+                      value={editingClient.primaryGoal} 
+                      onValueChange={(value) => handleInputChange('primaryGoal', value)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fat_loss">Perte de graisse</SelectItem>
+                        <SelectItem value="muscle_gain">Prise de muscle</SelectItem>
+                        <SelectItem value="recomposition">Recomposition corporelle</SelectItem>
+                        <SelectItem value="maintenance">Maintenance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="activity">Niveau d'activité</Label>
+                    <Select 
+                      value={editingClient.activityLevel} 
+                      onValueChange={(value) => handleInputChange('activityLevel', value)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sedentary">Sédentaire</SelectItem>
+                        <SelectItem value="lightly_active">Légèrement actif</SelectItem>
+                        <SelectItem value="moderately_active">Modérément actif</SelectItem>
+                        <SelectItem value="very_active">Très actif</SelectItem>
+                        <SelectItem value="extra_active">Extrêmement actif</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="trainingDays">Jours d'entraînement/semaine</Label>
+                    <Input 
+                      id="trainingDays" 
+                      type="number" 
+                      min="1" 
+                      max="7"
+                      value={editingClient.trainingDaysPerWeek} 
+                      onChange={(e) => handleInputChange('trainingDaysPerWeek', parseInt(e.target.value) || 1)}
+                      className="mt-1" 
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="experience">Expérience d'entraînement</Label>
+                    <Select 
+                      value={editingClient.trainingExperience} 
+                      onValueChange={(value) => handleInputChange('trainingExperience', value)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="beginner">Débutant</SelectItem>
+                        <SelectItem value="intermediate">Intermédiaire</SelectItem>
+                        <SelectItem value="advanced">Avancé</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                {error && (
+                  <Alert variant="destructive" className="mt-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                <Button 
+                  onClick={handleGeneratePlan}
+                  disabled={isGenerating || !editingClient}
+                  className="mt-6 bg-gradient-primary text-white shadow-glow hover:shadow-xl"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Plan en cours de génération...
+                    </>
+                  ) : (
+                    'Générer le plan complet'
+                  )}
+                </Button>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="nutrition" className="space-y-4">
