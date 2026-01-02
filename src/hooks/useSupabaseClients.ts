@@ -118,7 +118,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
 
       // Update local state
       setClients(prev => prev.map(c => c.id === clientId ? result.client! : c));
-      if (activeClient.id === clientId) {
+      if (activeClient?.id === clientId) {
         setActiveClient(result.client);
       }
       
@@ -127,7 +127,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       console.error('Error updating client:', err);
       return { success: false, error: err.message || 'Failed to update client' };
     }
-  }, [activeClient.id]);
+  }, [activeClient]);
 
   return {
     clients,
