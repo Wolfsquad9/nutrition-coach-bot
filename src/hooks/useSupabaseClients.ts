@@ -1,6 +1,6 @@
 /**
  * Hook for managing clients with Supabase persistence
- * No mock data fallbacks - Supabase is the single source of truth
+ * Uses activeClientId as single source of truth for selection
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -45,10 +45,11 @@ const createEmptyClient = (): Client => ({
 
 interface UseSupabaseClientsResult {
   clients: Client[];
+  activeClientId: string | null;
   activeClient: Client | null;
   isLoading: boolean;
   error: string | null;
-  setActiveClient: (client: Client | null) => void;
+  setActiveClientId: (clientId: string | null) => void;
   handleCreateClient: (client: Client) => Promise<{ success: boolean; client: Client | null; error: string | null }>;
   handleUpdateClient: (clientId: string, updates: Partial<Client>) => Promise<{ success: boolean; error: string | null }>;
   refreshClients: () => Promise<void>;
@@ -57,9 +58,14 @@ interface UseSupabaseClientsResult {
 
 export function useSupabaseClients(): UseSupabaseClientsResult {
   const [clients, setClients] = useState<Client[]>([]);
-  const [activeClient, setActiveClient] = useState<Client | null>(null);
+  const [activeClientId, setActiveClientId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Derive activeClient from activeClientId and clients list
+  const activeClient = activeClientId 
+    ? clients.find(c => c.id === activeClientId) || null 
+    : null;
 
   const loadClients = useCallback(async () => {
     setIsLoading(true);
@@ -69,25 +75,30 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       const result = await fetchClients();
       setClients(result.clients);
       
-      // Set first client as active if available, otherwise null
-      if (result.clients.length > 0) {
-        setActiveClient(result.clients[0]);
-      } else {
-        setActiveClient(null);
+      // Auto-select most recently created client if none selected
+      if (result.clients.length > 0 && !activeClientId) {
+        // Clients are ordered by created_at desc, so first is most recent
+        setActiveClientId(result.clients[0].id);
+      } else if (result.clients.length === 0) {
+        setActiveClientId(null);
+      } else if (activeClientId && !result.clients.find(c => c.id === activeClientId)) {
+        // Current selection no longer exists, select first available
+        setActiveClientId(result.clients[0]?.id || null);
       }
     } catch (err: any) {
       console.error('Error loading clients:', err);
       setError(err.message || 'Failed to load clients from Supabase');
       setClients([]);
-      setActiveClient(null);
+      setActiveClientId(null);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeClientId]);
 
   useEffect(() => {
     loadClients();
-  }, [loadClients]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   const handleCreateClient = useCallback(async (client: Client): Promise<{ success: boolean; client: Client | null; error: string | null }> => {
     try {
@@ -97,9 +108,9 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
         return { success: false, client: null, error: result.error || 'Failed to create client' };
       }
 
-      // Add to local state
+      // Add to local state and set as active
       setClients(prev => [result.client!, ...prev]);
-      setActiveClient(result.client);
+      setActiveClientId(result.client.id);
       
       return { success: true, client: result.client, error: null };
     } catch (err: any) {
@@ -118,23 +129,21 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
 
       // Update local state
       setClients(prev => prev.map(c => c.id === clientId ? result.client! : c));
-      if (activeClient?.id === clientId) {
-        setActiveClient(result.client);
-      }
       
       return { success: true, error: null };
     } catch (err: any) {
       console.error('Error updating client:', err);
       return { success: false, error: err.message || 'Failed to update client' };
     }
-  }, [activeClient]);
+  }, []);
 
   return {
     clients,
+    activeClientId,
     activeClient,
     isLoading,
     error,
-    setActiveClient,
+    setActiveClientId,
     handleCreateClient,
     handleUpdateClient,
     refreshClients: loadClients,

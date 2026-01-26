@@ -23,16 +23,20 @@ import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DataSourceIndicator, PlanLockIndicator, EmptyState } from '@/components/DataSourceIndicator';
 import { useSupabaseClients } from '@/hooks/useSupabaseClients';
 import { useNutritionPlan } from '@/hooks/useNutritionPlan';
+import { ClientSelector } from '@/components/ClientSelector';
+import { NoClientGuard } from '@/components/NoClientGuard';
+import { getClientLabel } from '@/utils/clientHelpers';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 const Index = () => {
-  // Supabase client management
+  // Supabase client management - activeClientId is the single source of truth
   const {
     clients,
+    activeClientId,
     activeClient,
     isLoading: isLoadingClients,
     error: clientError,
-    setActiveClient,
+    setActiveClientId,
     handleCreateClient,
     refreshClients,
     createNewClientDraft,
@@ -53,6 +57,7 @@ const Index = () => {
     isSaving: isSavingPlan,
     savePlan,
     loadPlan,
+    clearPlan,
   } = useNutritionPlan();
 
   const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
@@ -65,12 +70,21 @@ const Index = () => {
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const { toast } = useToast();
 
-  // Load plan when client changes
+  // Load plan when activeClientId changes
   useEffect(() => {
-    if (activeClient?.id) {
-      loadPlan(activeClient.id);
+    if (activeClientId) {
+      loadPlan(activeClientId);
+      // Clear local plan state when switching clients
+      setWeeklyMealPlan(null);
+      setDailyMealPlan(null);
+      setGeneratedPlan(null);
+    } else {
+      clearPlan();
+      setWeeklyMealPlan(null);
+      setDailyMealPlan(null);
+      setGeneratedPlan(null);
     }
-  }, [activeClient?.id, loadPlan]);
+  }, [activeClientId, loadPlan, clearPlan]);
 
   // Restore weekly plan from persisted data
   useEffect(() => {
@@ -81,7 +95,7 @@ const Index = () => {
 
   // Get liked foods from the current client's restrictions
   const getLikedFoods = (): string[] => {
-    const clientId = editingClient?.id;
+    const clientId = activeClientId;
     if (!clientId) return [];
     const restriction = clientRestrictions.find(r => r.clientId === clientId);
     return restriction?.preferredIngredients || [];
@@ -90,21 +104,25 @@ const Index = () => {
   const handleInputChange = (field: keyof Client, value: any) => {
     if (draftClient) {
       setDraftClient({ ...draftClient, [field]: value });
-    } else if (activeClient) {
-      setActiveClient({ ...activeClient, [field]: value });
     }
+    // Note: We don't modify activeClient directly - that would require an update operation
   };
 
   const handleStartNewClient = () => {
     setDraftClient(createNewClientDraft());
   };
 
+  const handleCancelNewClient = () => {
+    setDraftClient(null);
+  };
+
   const handleSaveClient = async () => {
-    if (!editingClient) return;
+    if (!draftClient) return;
     
-    const result = await handleCreateClient(editingClient);
-    if (result.success) {
+    const result = await handleCreateClient(draftClient);
+    if (result.success && result.client) {
       setDraftClient(null); // Clear draft after successful save
+      // activeClientId is automatically set by handleCreateClient
       toast({
         title: "Client sauvegardé",
         description: "Le client a été enregistré dans Supabase.",
@@ -118,11 +136,16 @@ const Index = () => {
     }
   };
 
+  const handleClientChange = (clientId: string) => {
+    setDraftClient(null); // Clear any draft when switching clients
+    setActiveClientId(clientId);
+  };
+
   const handleGeneratePlan = async () => {
-    if (!editingClient) {
+    if (!activeClientId || !activeClient) {
       toast({
-        title: "Aucun client",
-        description: "Créez d'abord un client.",
+        title: "Aucun client sélectionné",
+        description: "Sélectionnez ou créez un client d'abord.",
         variant: "destructive",
       });
       return;
@@ -142,7 +165,7 @@ const Index = () => {
         });
       }
       
-      const plan = await generatePersonalizedPlan(editingClient, likedFoods);
+      const plan = await generatePersonalizedPlan(activeClient, likedFoods);
       setGeneratedPlan(plan);
       
       toast({
@@ -166,9 +189,10 @@ const Index = () => {
   };
 
   const handleDownloadPDF = () => {
-    if (!generatedPlan || !editingClient) return;
+    if (!generatedPlan || !activeClient) return;
+    const clientLabel = getClientLabel(activeClient);
     const pdf = generateCompletePlanPDF(generatedPlan);
-    downloadPDF(pdf, `${editingClient.firstName}-${editingClient.lastName}-plan.pdf`);
+    downloadPDF(pdf, `${clientLabel.replace(/\s+/g, '-')}-plan.pdf`);
     toast({
       title: "PDF Downloaded",
       description: "The complete plan has been downloaded as PDF.",
@@ -176,9 +200,10 @@ const Index = () => {
   };
 
   const handleDownloadJSON = () => {
-    if (!generatedPlan || !editingClient) return;
+    if (!generatedPlan || !activeClient) return;
+    const clientLabel = getClientLabel(activeClient);
     const json = exportPlanAsJSON(generatedPlan);
-    downloadJSON(json, `${editingClient.firstName}-${editingClient.lastName}-plan.json`);
+    downloadJSON(json, `${clientLabel.replace(/\s+/g, '-')}-plan.json`);
     toast({
       title: "JSON Downloaded",
       description: "The complete plan has been downloaded as JSON.",
@@ -203,10 +228,10 @@ const Index = () => {
   };
 
   const handleGenerateDailyMealPlan = () => {
-    if (!editingClient) {
+    if (!activeClientId || !activeClient) {
       toast({
-        title: "Aucun client",
-        description: "Créez d'abord un client.",
+        title: "Aucun client sélectionné",
+        description: "Sélectionnez ou créez un client d'abord.",
         variant: "destructive",
       });
       return;
@@ -229,7 +254,7 @@ const Index = () => {
       }
 
       // Calculate macro targets based on client data
-      const metrics = calculateNutritionMetrics(editingClient);
+      const metrics = calculateNutritionMetrics(activeClient);
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,
@@ -259,10 +284,10 @@ const Index = () => {
   };
 
   const handleGenerateWeeklyMealPlan = async () => {
-    if (!editingClient) {
+    if (!activeClientId || !activeClient) {
       toast({
-        title: "Aucun client",
-        description: "Créez d'abord un client avant de générer un plan.",
+        title: "Aucun client sélectionné",
+        description: "Sélectionnez ou créez un client d'abord.",
         variant: "destructive",
       });
       return;
@@ -294,7 +319,7 @@ const Index = () => {
         return;
       }
 
-      const metrics = calculateNutritionMetrics(editingClient);
+      const metrics = calculateNutritionMetrics(activeClient);
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,
@@ -306,24 +331,23 @@ const Index = () => {
       setWeeklyMealPlan(result);
       setDailyMealPlan(null);
 
-      // Auto-save to Supabase if client is persisted (has an ID from DB)
-      if (activeClient?.id) {
-        const saveResult = await savePlan(
-          activeClient.id,
-          result,
-          macroTargets,
-          likedFoods
-        );
-        if (saveResult.success) {
-          toast({
-            title: "Plan sauvegardé !",
-            description: `Plan hebdomadaire persisté dans Supabase`,
-          });
-        }
+      // Auto-save to Supabase
+      const saveResult = await savePlan(
+        activeClientId,
+        result,
+        macroTargets,
+        likedFoods
+      );
+      if (saveResult.success) {
+        toast({
+          title: "Plan sauvegardé !",
+          description: `Plan hebdomadaire persisté dans Supabase`,
+        });
       } else {
         toast({
-          title: "Plan hebdomadaire généré !",
-          description: `7 jours de repas (non persisté - sauvegardez le client d'abord)`,
+          title: "Plan généré",
+          description: `Plan créé mais erreur de sauvegarde: ${saveResult.error}`,
+          variant: "destructive",
         });
       }
     } catch (err: any) {
@@ -338,6 +362,10 @@ const Index = () => {
       setIsGeneratingWeeklyPlan(false);
     }
   };
+
+  // Check if we can perform operations that require a client
+  const hasActiveClient = !!activeClientId && !!activeClient;
+  const isCreatingNewClient = !!draftClient;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-card-hover">
@@ -369,19 +397,20 @@ const Index = () => {
             </TabsTrigger>
           </TabsList>
 
+          {/* ===== INGREDIENTS TAB ===== */}
           <TabsContent value="ingredients" className="space-y-4">
-            {editingClient ? (
+            {!hasActiveClient && !isCreatingNewClient ? (
+              <NoClientGuard message="Sélectionnez ou créez un client dans l'onglet Client pour gérer ses ingrédients." />
+            ) : (
               <EnhancedIngredientManager 
-                clients={[editingClient]}
+                activeClientId={activeClientId}
+                activeClient={activeClient}
                 onRestrictionsUpdate={setClientRestrictions}
               />
-            ) : (
-              <Card className="p-6 shadow-card">
-                <EmptyState type="clients" />
-              </Card>
             )}
           </TabsContent>
 
+          {/* ===== CLIENT TAB ===== */}
           <TabsContent value="client" className="space-y-4">
             {/* Error display */}
             {clientError && (
@@ -399,7 +428,7 @@ const Index = () => {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <span className="ml-2">Chargement des clients...</span>
               </Card>
-            ) : !editingClient ? (
+            ) : !hasActiveClient && !isCreatingNewClient ? (
               /* Empty state - no clients */
               <Card className="p-6 shadow-card">
                 <div className="text-center py-8">
@@ -418,66 +447,59 @@ const Index = () => {
               <Card className="p-6 shadow-card">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-2xl font-bold text-primary">
-                    {draftClient ? 'Nouveau Client' : 'Client Information'}
+                    {isCreatingNewClient ? 'Nouveau Client' : `Client: ${activeClient ? getClientLabel(activeClient) : ''}`}
                   </h2>
                   <div className="flex gap-2">
-                    {!draftClient && clients.length > 0 && (
+                    {!isCreatingNewClient && clients.length > 0 && (
                       <Button variant="outline" onClick={handleStartNewClient}>
                         <Plus className="mr-2 h-4 w-4" />
                         Nouveau
                       </Button>
                     )}
-                    {(draftClient || !activeClient?.id) && (
-                      <Button onClick={handleSaveClient} className="bg-gradient-primary text-white">
-                        <Save className="mr-2 h-4 w-4" />
-                        Sauvegarder
-                      </Button>
+                    {isCreatingNewClient && (
+                      <>
+                        <Button variant="outline" onClick={handleCancelNewClient}>
+                          Annuler
+                        </Button>
+                        <Button onClick={handleSaveClient} className="bg-gradient-primary text-white">
+                          <Save className="mr-2 h-4 w-4" />
+                          Sauvegarder
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
 
                 {/* Client selector for existing clients */}
-                {!draftClient && clients.length > 1 && (
-                  <div className="mb-4">
-                    <Label>Sélectionner un client</Label>
-                    <Select 
-                      value={activeClient?.id || ''} 
-                      onValueChange={(id) => {
-                        const client = clients.find(c => c.id === id);
-                        if (client) setActiveClient(client);
-                      }}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Choisir un client" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clients.map(client => (
-                          <SelectItem key={client.id} value={client.id}>
-                            {client.firstName} {client.lastName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {!isCreatingNewClient && clients.length > 1 && (
+                  <ClientSelector
+                    clients={clients}
+                    activeClientId={activeClientId}
+                    onClientChange={handleClientChange}
+                    className="mb-4"
+                  />
                 )}
 
+                {/* Form fields - only editable for new clients */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="firstName">Prénom</Label>
                     <Input 
                       id="firstName" 
-                      value={editingClient.firstName} 
+                      value={editingClient?.firstName || ''} 
                       onChange={(e) => handleInputChange('firstName', e.target.value)}
                       className="mt-1" 
+                      disabled={!isCreatingNewClient}
                     />
                   </div>
                   <div>
                     <Label htmlFor="lastName">Nom</Label>
                     <Input 
                       id="lastName" 
-                      value={editingClient.lastName} 
+                      value={editingClient?.lastName || ''} 
                       onChange={(e) => handleInputChange('lastName', e.target.value)}
                       className="mt-1" 
+                      disabled={!isCreatingNewClient}
                     />
                   </div>
                   <div>
@@ -485,21 +507,23 @@ const Index = () => {
                     <Input 
                       id="age" 
                       type="number" 
-                      value={editingClient.age || ''} 
+                      value={editingClient?.age || ''} 
                       onChange={(e) => handleInputChange('age', parseInt(e.target.value) || 0)}
                       className="mt-1" 
+                      disabled={!isCreatingNewClient}
                     />
                   </div>
                   <div>
                     <Label htmlFor="gender">Genre</Label>
                     <Select 
-                      value={editingClient.gender} 
+                      value={editingClient?.gender || 'male'} 
                       onValueChange={(value) => handleInputChange('gender', value)}
+                      disabled={!isCreatingNewClient}
                     >
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-background border border-border z-50">
                         <SelectItem value="male">Homme</SelectItem>
                         <SelectItem value="female">Femme</SelectItem>
                       </SelectContent>
@@ -510,9 +534,10 @@ const Index = () => {
                     <Input 
                       id="weight" 
                       type="number" 
-                      value={editingClient.weight} 
+                      value={editingClient?.weight || ''} 
                       onChange={(e) => handleInputChange('weight', parseFloat(e.target.value) || 0)}
                       className="mt-1" 
+                      disabled={!isCreatingNewClient}
                     />
                   </div>
                   <div>
@@ -520,21 +545,23 @@ const Index = () => {
                     <Input 
                       id="height" 
                       type="number" 
-                      value={editingClient.height} 
+                      value={editingClient?.height || ''} 
                       onChange={(e) => handleInputChange('height', parseFloat(e.target.value) || 0)}
                       className="mt-1" 
+                      disabled={!isCreatingNewClient}
                     />
                   </div>
                   <div>
                     <Label htmlFor="goal">Objectif Principal</Label>
                     <Select 
-                      value={editingClient.primaryGoal} 
+                      value={editingClient?.primaryGoal || 'maintenance'} 
                       onValueChange={(value) => handleInputChange('primaryGoal', value)}
+                      disabled={!isCreatingNewClient}
                     >
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-background border border-border z-50">
                         <SelectItem value="fat_loss">Perte de graisse</SelectItem>
                         <SelectItem value="muscle_gain">Prise de muscle</SelectItem>
                         <SelectItem value="recomposition">Recomposition corporelle</SelectItem>
@@ -545,13 +572,14 @@ const Index = () => {
                   <div>
                     <Label htmlFor="activity">Niveau d'activité</Label>
                     <Select 
-                      value={editingClient.activityLevel} 
+                      value={editingClient?.activityLevel || 'moderately_active'} 
                       onValueChange={(value) => handleInputChange('activityLevel', value)}
+                      disabled={!isCreatingNewClient}
                     >
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-background border border-border z-50">
                         <SelectItem value="sedentary">Sédentaire</SelectItem>
                         <SelectItem value="lightly_active">Légèrement actif</SelectItem>
                         <SelectItem value="moderately_active">Modérément actif</SelectItem>
@@ -567,21 +595,23 @@ const Index = () => {
                       type="number" 
                       min="1" 
                       max="7"
-                      value={editingClient.trainingDaysPerWeek} 
+                      value={editingClient?.trainingDaysPerWeek || ''} 
                       onChange={(e) => handleInputChange('trainingDaysPerWeek', parseInt(e.target.value) || 1)}
                       className="mt-1" 
+                      disabled={!isCreatingNewClient}
                     />
                   </div>
                   <div>
                     <Label htmlFor="experience">Expérience d'entraînement</Label>
                     <Select 
-                      value={editingClient.trainingExperience} 
+                      value={editingClient?.trainingExperience || 'intermediate'} 
                       onValueChange={(value) => handleInputChange('trainingExperience', value)}
+                      disabled={!isCreatingNewClient}
                     >
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-background border border-border z-50">
                         <SelectItem value="beginner">Débutant</SelectItem>
                         <SelectItem value="intermediate">Intermédiaire</SelectItem>
                         <SelectItem value="advanced">Avancé</SelectItem>
@@ -596,252 +626,221 @@ const Index = () => {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
-                <Button 
-                  onClick={handleGeneratePlan}
-                  disabled={isGenerating || !editingClient}
-                  className="mt-6 bg-gradient-primary text-white shadow-glow hover:shadow-xl"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Plan en cours de génération...
-                    </>
-                  ) : (
-                    'Générer le plan complet'
-                  )}
-                </Button>
+
+                {/* Generate plan button - only for existing clients */}
+                {hasActiveClient && !isCreatingNewClient && (
+                  <Button 
+                    onClick={handleGeneratePlan}
+                    disabled={isGenerating}
+                    className="mt-6 bg-gradient-primary text-white shadow-glow hover:shadow-xl"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Plan en cours de génération...
+                      </>
+                    ) : (
+                      'Générer le plan complet'
+                    )}
+                  </Button>
+                )}
               </Card>
             )}
           </TabsContent>
 
+          {/* ===== NUTRITION TAB ===== */}
           <TabsContent value="nutrition" className="space-y-4">
-            {/* Meal Plan Generators */}
-            <Card className="p-6 shadow-card">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
-                    <CalendarDays className="h-6 w-6" />
-                    Génération de Plans Repas
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Générez un plan journalier ou hebdomadaire basé sur vos ingrédients préférés
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={handleGenerateDailyMealPlan}
-                    disabled={isGeneratingDailyPlan || isGeneratingWeeklyPlan}
-                    variant="outline"
-                  >
-                    {isGeneratingDailyPlan ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Génération...
-                      </>
-                    ) : (
-                      <>
-                        <CalendarDays className="mr-2 h-4 w-4" />
-                        Plan Journalier
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={handleGenerateWeeklyMealPlan}
-                    disabled={isGeneratingDailyPlan || isGeneratingWeeklyPlan}
-                    className="bg-gradient-primary text-white shadow-glow hover:shadow-xl"
-                  >
-                    {isGeneratingWeeklyPlan ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Génération...
-                      </>
-                    ) : (
-                      <>
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Plan Hebdomadaire
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-
-            {/* Display Weekly Meal Plan if generated */}
-            {weeklyMealPlan && (
-              <WeeklyMealPlanDisplay weeklyPlan={weeklyMealPlan} />
-            )}
-
-            {/* Display Daily Meal Plan if generated */}
-            {dailyMealPlan && (
-              <DailyMealPlanDisplay
-                dailyPlan={dailyMealPlan.dailyPlan}
-                totalMacros={dailyMealPlan.totalMacros}
-                targetMacros={dailyMealPlan.targetMacros}
-                variance={dailyMealPlan.variance}
-                convergenceInfo={dailyMealPlan.convergenceInfo}
-              />
-            )}
-
-            {generatedPlan ? (
+            {!hasActiveClient ? (
+              <NoClientGuard message="Sélectionnez ou créez un client dans l'onglet Client pour générer un plan nutritionnel." />
+            ) : (
               <>
+                {/* Client info header */}
+                <Card className="p-4 shadow-card bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm text-muted-foreground">Client actif:</span>
+                      <span className="ml-2 font-semibold text-foreground">
+                        {getClientLabel(activeClient)}
+                      </span>
+                    </div>
+                    {isPlanPersisted && (
+                      <PlanLockIndicator 
+                        isLocked={lockStatus.isLocked} 
+                        daysRemaining={lockStatus.daysRemaining}
+                      />
+                    )}
+                  </div>
+                </Card>
+
+                {/* Meal Plan Generators */}
                 <Card className="p-6 shadow-card">
-                  <h2 className="text-2xl font-bold mb-4 text-primary">Nutrition Metrics</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-gradient-card p-4 rounded-lg">
-                      <p className="text-muted-foreground text-sm">TDEE</p>
-                      <p className="text-2xl font-bold text-primary">{generatedPlan.nutritionPlan.metrics.tdee}</p>
-                      <p className="text-xs text-muted-foreground">kcal/day</p>
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
+                        <CalendarDays className="h-6 w-6" />
+                        Génération de Plans Repas
+                      </h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Générez un plan journalier ou hebdomadaire basé sur vos ingrédients préférés
+                      </p>
                     </div>
-                    <div className="bg-gradient-card p-4 rounded-lg">
-                      <p className="text-muted-foreground text-sm">Target</p>
-                      <p className="text-2xl font-bold text-accent">{generatedPlan.nutritionPlan.metrics.targetCalories}</p>
-                      <p className="text-xs text-muted-foreground">kcal/day</p>
-                    </div>
-                    <div className="bg-gradient-card p-4 rounded-lg">
-                      <p className="text-muted-foreground text-sm">Protein</p>
-                      <p className="text-2xl font-bold text-success">{generatedPlan.nutritionPlan.metrics.proteinGrams}g</p>
-                    </div>
-                    <div className="bg-gradient-card p-4 rounded-lg">
-                      <p className="text-muted-foreground text-sm">Carbs</p>
-                      <p className="text-2xl font-bold text-info">{generatedPlan.nutritionPlan.metrics.carbsGrams}g</p>
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={handleGenerateDailyMealPlan}
+                        disabled={isGeneratingDailyPlan || isGeneratingWeeklyPlan}
+                        variant="outline"
+                      >
+                        {isGeneratingDailyPlan ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Génération...
+                          </>
+                        ) : (
+                          <>
+                            <CalendarDays className="mr-2 h-4 w-4" />
+                            Plan Journalier
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleGenerateWeeklyMealPlan}
+                        disabled={isGeneratingDailyPlan || isGeneratingWeeklyPlan}
+                        className="bg-gradient-primary text-white shadow-glow hover:shadow-xl"
+                      >
+                        {isGeneratingWeeklyPlan ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Génération...
+                          </>
+                        ) : (
+                          <>
+                            <Calendar className="mr-2 h-4 w-4" />
+                            Plan Hebdomadaire
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
                 </Card>
 
-                <Card className="p-6 shadow-card">
-                  <h3 className="text-xl font-bold mb-4">Weekly Meal Plan</h3>
-                  <div className="space-y-4">
-                    {generatedPlan.nutritionPlan.weeklyMealPlan.slice(0, 2).map((day) => (
-                      <div key={day.day} className="border border-border rounded-lg p-4">
-                        <h4 className="font-semibold text-primary mb-2">Day {day.day}</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {day.meals.map((meal, idx) => (
-                            <div key={idx} className="text-sm">
-                              <span className="font-medium">{meal.time}</span> - {meal.mealType}
-                              <div className="text-xs text-muted-foreground">
-                                {meal.recipes[0]?.recipe.name}
-                              </div>
-                            </div>
-                          ))}
+                {/* Display Weekly Meal Plan if generated or loaded */}
+                {weeklyMealPlan && (
+                  <WeeklyMealPlanDisplay weeklyPlan={weeklyMealPlan} />
+                )}
+
+                {/* Display Daily Meal Plan if generated */}
+                {dailyMealPlan && (
+                  <DailyMealPlanDisplay
+                    dailyPlan={dailyMealPlan.dailyPlan}
+                    totalMacros={dailyMealPlan.totalMacros}
+                    targetMacros={dailyMealPlan.targetMacros}
+                    variance={dailyMealPlan.variance}
+                    convergenceInfo={dailyMealPlan.convergenceInfo}
+                  />
+                )}
+
+                {generatedPlan && (
+                  <>
+                    <Card className="p-6 shadow-card">
+                      <h2 className="text-2xl font-bold mb-4 text-primary">Nutrition Metrics</h2>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-gradient-card p-4 rounded-lg">
+                          <p className="text-muted-foreground text-sm">TDEE</p>
+                          <p className="text-2xl font-bold text-primary">{generatedPlan.nutritionPlan.metrics.tdee}</p>
+                          <p className="text-xs text-muted-foreground">kcal/day</p>
                         </div>
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Total: {day.totalMacros.calories} kcal | P: {day.totalMacros.protein}g | C: {day.totalMacros.carbs}g | F: {day.totalMacros.fat}g
+                        <div className="bg-gradient-card p-4 rounded-lg">
+                          <p className="text-muted-foreground text-sm">Target</p>
+                          <p className="text-2xl font-bold text-accent">{generatedPlan.nutritionPlan.metrics.targetCalories}</p>
+                          <p className="text-xs text-muted-foreground">kcal/day</p>
+                        </div>
+                        <div className="bg-gradient-card p-4 rounded-lg">
+                          <p className="text-muted-foreground text-sm">Protein</p>
+                          <p className="text-2xl font-bold text-success">{generatedPlan.nutritionPlan.metrics.proteinGrams}g</p>
+                        </div>
+                        <div className="bg-gradient-card p-4 rounded-lg">
+                          <p className="text-muted-foreground text-sm">Carbs</p>
+                          <p className="text-2xl font-bold text-info">{generatedPlan.nutritionPlan.metrics.carbsGrams}g</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </Card>
-              </>
-            ) : (
-              <Card className="p-6 shadow-card">
-                <h2 className="text-2xl font-bold mb-4 text-primary">Plan Complet</h2>
-                <p className="text-muted-foreground">Générez un plan dans l'onglet Client pour voir les métriques nutritionnelles et le plan hebdomadaire.</p>
-              </Card>
-            )}
+                    </Card>
 
-          </TabsContent>
-
-          <TabsContent value="training">
-            {generatedPlan ? (
-              <Card className="p-6 shadow-card">
-                <h2 className="text-2xl font-bold mb-4 text-primary">Training Plan - {generatedPlan.trainingPlan.name}</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div className="bg-gradient-card p-4 rounded-lg">
-                    <p className="text-muted-foreground text-sm">Frequency</p>
-                    <p className="text-xl font-bold">{generatedPlan.trainingPlan.frequency} days/week</p>
-                  </div>
-                  <div className="bg-gradient-card p-4 rounded-lg">
-                    <p className="text-muted-foreground text-sm">Split</p>
-                    <p className="text-xl font-bold">{generatedPlan.trainingPlan.split.replace('_', ' ')}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  {generatedPlan.trainingPlan.workouts.map((workout) => (
-                    <div key={workout.dayNumber} className="border border-border rounded-lg p-4">
-                      <h4 className="font-semibold text-primary mb-2">Day {workout.dayNumber}: {workout.name}</h4>
-                      <p className="text-sm text-muted-foreground mb-2">Duration: {workout.duration} minutes</p>
-                      <div className="space-y-2">
-                        {workout.exercises.slice(0, 3).map((exercise, idx) => (
-                          <div key={idx} className="text-sm">
-                            <span className="font-medium">{exercise.exercise.name}</span>
-                            <span className="text-muted-foreground ml-2">
-                              {exercise.sets} × {exercise.reps} @ {exercise.intensity}
-                            </span>
+                    <Card className="p-6 shadow-card">
+                      <h3 className="text-xl font-bold mb-4">Weekly Meal Plan</h3>
+                      <div className="space-y-4">
+                        {generatedPlan.nutritionPlan.weeklyMealPlan.slice(0, 2).map((day) => (
+                          <div key={day.day} className="border border-border rounded-lg p-4">
+                            <h4 className="font-semibold text-primary mb-2">Day {day.day}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {day.meals.map((meal, idx) => (
+                                <div key={idx} className="text-sm">
+                                  <span className="font-medium">{meal.time}</span> - {meal.mealType}
+                                  <div className="text-xs text-muted-foreground">
+                                    {meal.recipes[0]?.recipe.name}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              Total: {day.totalMacros.calories} kcal | P: {day.totalMacros.protein}g | C: {day.totalMacros.carbs}g | F: {day.totalMacros.fat}g
+                            </div>
                           </div>
                         ))}
-                        {workout.exercises.length > 3 && (
-                          <p className="text-xs text-muted-foreground">+ {workout.exercises.length - 3} more exercises</p>
-                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            ) : (
-              <Card className="p-6 shadow-card">
-                <h2 className="text-2xl font-bold text-primary">Training Plan</h2>
-                <p className="text-muted-foreground">Generate a plan to see your personalized workout program.</p>
-              </Card>
+                    </Card>
+                  </>
+                )}
+
+                {!weeklyMealPlan && !dailyMealPlan && !generatedPlan && (
+                  <Card className="p-6 shadow-card">
+                    <h2 className="text-2xl font-bold mb-4 text-primary">Plan Nutritionnel</h2>
+                    <p className="text-muted-foreground">
+                      Sélectionnez des ingrédients aimés dans l'onglet Ingrédients, puis générez un plan hebdomadaire.
+                    </p>
+                  </Card>
+                )}
+              </>
             )}
           </TabsContent>
 
-          <TabsContent value="export">
-            {generatedPlan ? (
-              <Card className="p-6 shadow-card">
-                <h2 className="text-2xl font-bold mb-4 text-primary">Export Plans</h2>
-                <p className="text-muted-foreground mb-6">Download your complete nutrition and training plan in various formats.</p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card className="p-4 border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                      <FileText className="h-8 w-8 text-primary" />
-                      <div>
-                        <h3 className="font-semibold">PDF Export</h3>
-                        <p className="text-sm text-muted-foreground">Complete formatted plan for clients</p>
-                      </div>
-                    </div>
-                    <Button 
-                      onClick={handleDownloadPDF}
-                      className="w-full bg-gradient-primary text-white"
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download PDF
-                    </Button>
-                  </Card>
-                  
-                  <Card className="p-4 border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                      <FileJson className="h-8 w-8 text-accent" />
-                      <div>
-                        <h3 className="font-semibold">JSON Export</h3>
-                        <p className="text-sm text-muted-foreground">Raw data for integrations</p>
-                      </div>
-                    </div>
-                    <Button 
-                      onClick={handleDownloadJSON}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download JSON
-                    </Button>
-                  </Card>
-                </div>
-                
-                <div className="mt-6 p-4 bg-gradient-card rounded-lg">
-                  <h3 className="font-semibold mb-2">Grocery List Included</h3>
-                  <p className="text-sm text-muted-foreground">
-                    The PDF includes a complete weekly grocery list with quantities organized by category.
-                  </p>
-                </div>
-              </Card>
-            ) : (
-              <Card className="p-6 shadow-card">
-                <h2 className="text-2xl font-bold text-primary">Export Plans</h2>
-                <p className="text-muted-foreground">Generate a plan first to enable export options.</p>
-              </Card>
-            )}
+          {/* ===== TRAINING TAB ===== */}
+          <TabsContent value="training">
+            <Card className="p-6 shadow-card">
+              <h2 className="text-2xl font-bold text-primary">Training Plan</h2>
+              <p className="text-muted-foreground mt-2">
+                Cette fonctionnalité n'est pas encore implémentée.
+              </p>
+            </Card>
+          </TabsContent>
+
+          {/* ===== PROGRESS TAB ===== */}
+          <TabsContent value="progress">
+            <Card className="p-6 shadow-card">
+              <h2 className="text-2xl font-bold text-primary">Suivi de Progression</h2>
+              <p className="text-muted-foreground mt-2">
+                Cette fonctionnalité n'est pas encore implémentée.
+              </p>
+            </Card>
+          </TabsContent>
+
+          {/* ===== VIDEOS TAB ===== */}
+          <TabsContent value="videos">
+            <Card className="p-6 shadow-card">
+              <h2 className="text-2xl font-bold text-primary">Vidéos</h2>
+              <p className="text-muted-foreground mt-2">
+                Cette fonctionnalité n'est pas encore implémentée.
+              </p>
+            </Card>
+          </TabsContent>
+
+          {/* ===== NOTIFICATIONS TAB ===== */}
+          <TabsContent value="notifications">
+            <Card className="p-6 shadow-card">
+              <h2 className="text-2xl font-bold text-primary">Notifications</h2>
+              <p className="text-muted-foreground mt-2">
+                Cette fonctionnalité n'est pas encore implémentée.
+              </p>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>

@@ -59,7 +59,7 @@ export function DataSourceIndicator({ isPersisted, isLoading, label }: DataSourc
 interface PlanLockIndicatorProps {
   isLocked: boolean;
   daysRemaining: number;
-  lockedUntil: Date | null;
+  lockedUntil?: Date | string | null;
 }
 
 export function PlanLockIndicator({ isLocked, daysRemaining, lockedUntil }: PlanLockIndicatorProps) {
@@ -82,7 +82,7 @@ export function PlanLockIndicator({ isLocked, daysRemaining, lockedUntil }: Plan
   }
 
   const formattedDate = lockedUntil 
-    ? lockedUntil.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+    ? new Date(lockedUntil).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
     : '';
 
   return (
