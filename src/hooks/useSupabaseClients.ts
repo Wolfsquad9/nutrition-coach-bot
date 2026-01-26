@@ -18,7 +18,7 @@ const createEmptyClient = (): Client => ({
   lastName: '',
   email: '',
   phone: '',
-  birthDate: '',
+  birthDate: new Date(Date.now() - 30 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default: 30 years ago
   gender: 'male',
   age: 30,
   height: 175,
