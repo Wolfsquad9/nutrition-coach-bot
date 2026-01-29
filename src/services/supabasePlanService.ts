@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getCurrentUserId } from '@/hooks/useAuth';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 
 // Plan version payload structure
@@ -185,6 +186,17 @@ export async function saveNutritionPlan(
   constraintsHitDetails?: string[]
 ): Promise<{ success: boolean; planId: string | null; versionId: string | null; error: string | null }> {
   try {
+    // Get current user ID for FK ownership
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return {
+        success: false,
+        planId: null,
+        versionId: null,
+        error: 'Non authentifié. Veuillez rafraîchir la page.',
+      };
+    }
+
     // First check if plan is locked
     const lockStatus = await checkPlanLockStatus(clientId);
     if (lockStatus.isLocked) {
@@ -223,13 +235,12 @@ export async function saveNutritionPlan(
       // Use existing plan
       planId = existingPlan.id;
     } else {
-      // Create new nutrition_plans record
-      // Note: created_by requires auth - for now we use a placeholder approach
+      // Create new nutrition_plans record with auth.uid() as created_by
       const { data: newPlan, error: planError } = await supabase
         .from('nutrition_plans')
         .insert({
           client_id: clientId,
-          created_by: clientId, // Using client_id as placeholder until auth is implemented
+          created_by: userId, // CRITICAL: Use auth.uid() not clientId
           plan_data: { type: 'nutrition', version: 1 },
           status: 'active',
         })
@@ -255,7 +266,7 @@ export async function saveNutritionPlan(
 
     const nextVersionNumber = (versionCount?.version_number || 0) + 1;
 
-    // Create the plan version - cast payload to Json type for Supabase
+    // Create the plan version with auth.uid() as created_by
     const planPayloadJson = JSON.parse(JSON.stringify(payload));
     
     const { data: newVersion, error: versionError } = await supabase
@@ -263,6 +274,7 @@ export async function saveNutritionPlan(
       .insert({
         plan_id: planId,
         version_number: nextVersionNumber,
+        created_by: userId, // CRITICAL: Use auth.uid()
         plan_payload: planPayloadJson,
         payload_hash: payloadHash,
         note: `Weekly meal plan v${nextVersionNumber}`,

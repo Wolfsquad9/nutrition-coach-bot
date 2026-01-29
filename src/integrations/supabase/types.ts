@@ -50,13 +50,18 @@ export type Database = {
           allergies: string[] | null
           birth_date: string
           created_at: string
+          created_by: string | null
           diet_type: string | null
           dietary_restrictions: string[] | null
           disliked_foods: string[] | null
+          email: string | null
+          first_name: string
           gender: string
           height: number
           id: string
+          last_name: string
           medical_conditions: string[] | null
+          phone: string | null
           primary_goal: string
           training_experience: string | null
           training_frequency: number | null
@@ -69,13 +74,18 @@ export type Database = {
           allergies?: string[] | null
           birth_date: string
           created_at?: string
+          created_by?: string | null
           diet_type?: string | null
           dietary_restrictions?: string[] | null
           disliked_foods?: string[] | null
+          email?: string | null
+          first_name?: string
           gender: string
           height: number
           id?: string
+          last_name?: string
           medical_conditions?: string[] | null
+          phone?: string | null
           primary_goal: string
           training_experience?: string | null
           training_frequency?: number | null
@@ -88,13 +98,18 @@ export type Database = {
           allergies?: string[] | null
           birth_date?: string
           created_at?: string
+          created_by?: string | null
           diet_type?: string | null
           dietary_restrictions?: string[] | null
           disliked_foods?: string[] | null
+          email?: string | null
+          first_name?: string
           gender?: string
           height?: number
           id?: string
+          last_name?: string
           medical_conditions?: string[] | null
+          phone?: string | null
           primary_goal?: string
           training_experience?: string | null
           training_frequency?: number | null
@@ -262,6 +277,7 @@ export type Database = {
           archived: boolean
           client_id: string
           created_at: string
+          created_by: string | null
           id: string
           macro_delta: Json
           meal_type: string
@@ -277,6 +293,7 @@ export type Database = {
           archived?: boolean
           client_id: string
           created_at?: string
+          created_by?: string | null
           id?: string
           macro_delta: Json
           meal_type: string
@@ -292,6 +309,7 @@ export type Database = {
           archived?: boolean
           client_id?: string
           created_at?: string
+          created_by?: string | null
           id?: string
           macro_delta?: Json
           meal_type?: string

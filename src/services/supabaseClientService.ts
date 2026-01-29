@@ -5,11 +5,17 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { Client } from '@/types';
+import { getCurrentUserId } from '@/hooks/useAuth';
 
-// Type for Supabase client row
+// Type for Supabase client row (matches actual DB schema)
 export interface SupabaseClientRow {
   id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
   user_profile_id: string | null;
+  created_by: string | null;
   birth_date: string;
   gender: string;
   weight: number;
@@ -45,10 +51,10 @@ export function supabaseRowToClient(row: SupabaseClientRow): Client {
   
   return {
     id: row.id,
-    firstName: '', // Not stored in DB - will need to be added or handled separately
-    lastName: '',
-    email: '',
-    phone: '',
+    firstName: row.first_name || '',
+    lastName: row.last_name || '',
+    email: row.email || '',
+    phone: row.phone || '',
     birthDate: row.birth_date,
     gender: row.gender as 'male' | 'female',
     age,
@@ -76,9 +82,16 @@ export function supabaseRowToClient(row: SupabaseClientRow): Client {
 }
 
 // Convert Client to Supabase insert format
-export function clientToSupabaseRow(client: Client): Omit<SupabaseClientRow, 'id' | 'created_at' | 'updated_at'> {
+export async function clientToSupabaseRow(client: Client): Promise<Omit<SupabaseClientRow, 'id' | 'created_at' | 'updated_at'>> {
+  const userId = await getCurrentUserId();
+  
   return {
-    user_profile_id: null, // Will be set when user auth is implemented
+    first_name: client.firstName,
+    last_name: client.lastName,
+    email: client.email || null,
+    phone: client.phone || null,
+    user_profile_id: null,
+    created_by: userId, // CRITICAL: Use auth.uid() for FK ownership
     birth_date: client.birthDate,
     gender: client.gender,
     weight: client.weight,
@@ -114,7 +127,7 @@ export async function fetchClients(): Promise<{ clients: Client[]; isMockData: b
       return { clients: [], isMockData: false };
     }
 
-    const clients = data.map((row) => supabaseRowToClient(row as SupabaseClientRow));
+    const clients = data.map((row) => supabaseRowToClient(row as unknown as SupabaseClientRow));
     return { clients, isMockData: false };
   } catch (error) {
     console.error('Failed to fetch clients from Supabase:', error);
@@ -127,7 +140,21 @@ export async function fetchClients(): Promise<{ clients: Client[]; isMockData: b
  */
 export async function createClient(client: Client): Promise<{ client: Client | null; error: string | null }> {
   try {
-    const insertData = clientToSupabaseRow(client);
+    // Validate required fields
+    if (!client.firstName?.trim() || !client.lastName?.trim()) {
+      return { client: null, error: 'Le prénom et le nom sont requis' };
+    }
+
+    if (!client.birthDate) {
+      return { client: null, error: 'La date de naissance est requise' };
+    }
+
+    const insertData = await clientToSupabaseRow(client);
+    
+    // Verify we have a created_by value
+    if (!insertData.created_by) {
+      return { client: null, error: 'Non authentifié. Veuillez rafraîchir la page.' };
+    }
     
     const { data, error } = await supabase
       .from('clients')
@@ -144,7 +171,7 @@ export async function createClient(client: Client): Promise<{ client: Client | n
       return { client: null, error: 'No data returned from insert' };
     }
 
-    const newClient = supabaseRowToClient(data as SupabaseClientRow);
+    const newClient = supabaseRowToClient(data as unknown as SupabaseClientRow);
     return { client: newClient, error: null };
   } catch (error: any) {
     console.error('Failed to create client:', error);
@@ -159,6 +186,10 @@ export async function updateClient(clientId: string, updates: Partial<Client>): 
   try {
     const updateData: Record<string, unknown> = {};
     
+    if (updates.firstName !== undefined) updateData.first_name = updates.firstName;
+    if (updates.lastName !== undefined) updateData.last_name = updates.lastName;
+    if (updates.email !== undefined) updateData.email = updates.email;
+    if (updates.phone !== undefined) updateData.phone = updates.phone;
     if (updates.birthDate) updateData.birth_date = updates.birthDate;
     if (updates.gender) updateData.gender = updates.gender;
     if (updates.weight !== undefined) updateData.weight = updates.weight;
@@ -189,7 +220,7 @@ export async function updateClient(clientId: string, updates: Partial<Client>): 
       return { client: null, error: 'No data returned from update' };
     }
 
-    const updatedClient = supabaseRowToClient(data as SupabaseClientRow);
+    const updatedClient = supabaseRowToClient(data as unknown as SupabaseClientRow);
     return { client: updatedClient, error: null };
   } catch (error: any) {
     console.error('Failed to update client:', error);
@@ -217,7 +248,7 @@ export async function fetchClientById(clientId: string): Promise<{ client: Clien
       return { client: null, error: 'Client not found' };
     }
 
-    const client = supabaseRowToClient(data as SupabaseClientRow);
+    const client = supabaseRowToClient(data as unknown as SupabaseClientRow);
     return { client, error: null };
   } catch (error: any) {
     console.error('Failed to fetch client:', error);
