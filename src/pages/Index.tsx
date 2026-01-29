@@ -8,10 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { calculateNutritionMetrics } from '@/utils/calculations';
 import { Client, CompletePlan, Recipe } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { generatePersonalizedPlan } from '@/services/planService';
 import { generateFullDayMealPlan, generateWeeklyMealPlan, type FullDayMealPlanResult, type WeeklyMealPlanResult } from '@/services/recipeService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
-import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays, Calendar, Save, Plus } from 'lucide-react';
+import { Download, FileJson, FileText, Loader2, AlertCircle, TrendingUp, Video, Bell, CalendarDays, Calendar, Save, Plus, CheckCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ProgressTracker } from '@/components/ProgressTracker';
 import { MealSwapper } from '@/components/MealSwapper';
@@ -25,10 +26,13 @@ import { useSupabaseClients } from '@/hooks/useSupabaseClients';
 import { useNutritionPlan } from '@/hooks/useNutritionPlan';
 import { ClientSelector } from '@/components/ClientSelector';
 import { NoClientGuard } from '@/components/NoClientGuard';
-import { getClientLabel } from '@/utils/clientHelpers';
+import { getClientLabel, calculateAgeFromBirthDate } from '@/utils/clientHelpers';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 const Index = () => {
+  // Auth context - userId is required for all DB writes
+  const { userId, isLoading: isAuthLoading, isAuthenticated } = useAuth();
+
   // Supabase client management - activeClientId is the single source of truth
   const {
     clients,
@@ -367,6 +371,20 @@ const Index = () => {
   const hasActiveClient = !!activeClientId && !!activeClient;
   const isCreatingNewClient = !!draftClient;
 
+  // Show loading while auth is initializing
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-card-hover flex items-center justify-center">
+        <Card className="p-8 shadow-card">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Initialisation de l'authentification...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-card-hover">
       <header className="bg-gradient-hero text-white py-6 px-4 shadow-xl">
@@ -446,9 +464,18 @@ const Index = () => {
               /* Client form */
               <Card className="p-6 shadow-card">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-primary">
-                    {isCreatingNewClient ? 'Nouveau Client' : `Client: ${activeClient ? getClientLabel(activeClient) : ''}`}
-                  </h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-2xl font-bold text-primary">
+                      {isCreatingNewClient ? 'Nouveau Client' : `Client: ${activeClient ? getClientLabel(activeClient) : ''}`}
+                    </h2>
+                    {/* Client Loaded Indicator */}
+                    {!isCreatingNewClient && hasActiveClient && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
+                        <CheckCircle className="h-3 w-3" />
+                        Chargé
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     {!isCreatingNewClient && clients.length > 0 && (
                       <Button variant="outline" onClick={handleStartNewClient}>
@@ -483,35 +510,42 @@ const Index = () => {
                 {/* Form fields - only editable for new clients */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="firstName">Prénom</Label>
+                    <Label htmlFor="firstName">Prénom <span className="text-destructive">*</span></Label>
                     <Input 
                       id="firstName" 
                       value={editingClient?.firstName || ''} 
                       onChange={(e) => handleInputChange('firstName', e.target.value)}
                       className="mt-1" 
                       disabled={!isCreatingNewClient}
+                      placeholder="Prénom requis"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="lastName">Nom</Label>
+                    <Label htmlFor="lastName">Nom <span className="text-destructive">*</span></Label>
                     <Input 
                       id="lastName" 
                       value={editingClient?.lastName || ''} 
                       onChange={(e) => handleInputChange('lastName', e.target.value)}
                       className="mt-1" 
                       disabled={!isCreatingNewClient}
+                      placeholder="Nom requis"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="age">Âge</Label>
+                    <Label htmlFor="birthDate">Date de naissance <span className="text-destructive">*</span></Label>
                     <Input 
-                      id="age" 
-                      type="number" 
-                      value={editingClient?.age || ''} 
-                      onChange={(e) => handleInputChange('age', parseInt(e.target.value) || 0)}
+                      id="birthDate" 
+                      type="date" 
+                      value={editingClient?.birthDate || ''} 
+                      onChange={(e) => handleInputChange('birthDate', e.target.value)}
                       className="mt-1" 
                       disabled={!isCreatingNewClient}
                     />
+                    {editingClient?.birthDate && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Âge: {calculateAgeFromBirthDate(editingClient.birthDate)} ans
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="gender">Genre</Label>

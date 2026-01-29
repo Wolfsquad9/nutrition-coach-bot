@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getCurrentUserId } from '@/hooks/useAuth';
 
 export interface PlanOverride {
   id: string;
@@ -51,6 +52,12 @@ export async function createOverride(params: CreateOverrideParams): Promise<{
   error: string | null;
 }> {
   try {
+    // Get current user ID for FK ownership
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { override: null, error: 'Non authentifié. Veuillez rafraîchir la page.' };
+    }
+
     const { data, error } = await supabase
       .from('plan_overrides')
       .insert({
@@ -63,6 +70,7 @@ export async function createOverride(params: CreateOverrideParams): Promise<{
         within_tolerance: params.withinTolerance,
         suggested_by: params.suggestedBy,
         requires_recipe_regeneration: params.requiresRecipeRegeneration ?? true,
+        created_by: userId, // CRITICAL: Use auth.uid()
       })
       .select()
       .single();
