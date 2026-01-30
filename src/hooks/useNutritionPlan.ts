@@ -1,5 +1,8 @@
 /**
+ * @deprecated Use useNutritionPlanState instead for proper lifecycle management
+ * 
  * Hook for managing nutrition plans with Supabase persistence
+ * This hook is kept for backward compatibility but should be migrated to useNutritionPlanState
  */
 
 import { useState, useEffect, useCallback } from 'react';

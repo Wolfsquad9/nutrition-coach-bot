@@ -1,0 +1,420 @@
+/**
+ * NutritionTabContent - Dedicated component for nutrition tab with enforced persistence lifecycle
+ * 
+ * Implements deterministic behavior:
+ * - Loads persisted plan on mount and client change
+ * - Validates ingredient minimum before generation
+ * - Shows clear state indicators (Empty, Draft, Persisted)
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, CalendarDays, Calendar, AlertCircle, Database, CloudOff, Lock, Unlock, RefreshCw } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanState';
+import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
+import { calculateNutritionMetrics } from '@/utils/calculations';
+import { generateWeeklyMealPlan, generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
+import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
+import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
+import { DataSourceIndicator, PlanLockIndicator } from '@/components/DataSourceIndicator';
+import { getClientLabel } from '@/utils/clientHelpers';
+import type { Client } from '@/types';
+import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
+
+interface NutritionTabContentProps {
+  activeClientId: string;
+  activeClient: Client;
+  clientRestrictions: ClientIngredientRestrictions[];
+}
+
+// State indicator badge component
+function PlanStateIndicator({ state }: { state: PlanState }) {
+  const config: Record<PlanState, { label: string; variant: 'default' | 'secondary' | 'outline'; className: string; icon: React.ReactNode }> = {
+    EMPTY: { 
+      label: 'Aucun plan', 
+      variant: 'outline', 
+      className: 'text-muted-foreground border-muted',
+      icon: <CloudOff className="w-3 h-3 mr-1" />
+    },
+    DRAFT: { 
+      label: 'Brouillon', 
+      variant: 'secondary', 
+      className: 'bg-warning/20 text-warning border-warning/30',
+      icon: <CloudOff className="w-3 h-3 mr-1" />
+    },
+    PERSISTED: { 
+      label: 'Enregistré', 
+      variant: 'default', 
+      className: 'bg-success/20 text-success border-success/30',
+      icon: <Database className="w-3 h-3 mr-1" />
+    },
+    LOADING: { 
+      label: 'Chargement...', 
+      variant: 'outline', 
+      className: 'text-muted-foreground animate-pulse',
+      icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+    },
+    SAVING: { 
+      label: 'Sauvegarde...', 
+      variant: 'outline', 
+      className: 'text-primary animate-pulse',
+      icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+    },
+    ERROR: { 
+      label: 'Erreur', 
+      variant: 'secondary', 
+      className: 'bg-destructive/20 text-destructive border-destructive/30',
+      icon: <AlertCircle className="w-3 h-3 mr-1" />
+    },
+  };
+
+  const { label, variant, className, icon } = config[state];
+
+  return (
+    <Badge variant={variant} className={className}>
+      {icon}
+      {label}
+    </Badge>
+  );
+}
+
+export function NutritionTabContent({ 
+  activeClientId, 
+  activeClient,
+  clientRestrictions 
+}: NutritionTabContentProps) {
+  const { toast } = useToast();
+  
+  // Plan state machine
+  const planState = useNutritionPlanState();
+  
+  // Ingredient validation
+  const ingredientValidation = useIngredientValidation(activeClientId, clientRestrictions);
+  
+  // Local state for daily plan (not persisted)
+  const [dailyMealPlan, setDailyMealPlan] = useState<FullDayMealPlanResult | null>(null);
+  const [isGeneratingDaily, setIsGeneratingDaily] = useState(false);
+  const [isGeneratingWeekly, setIsGeneratingWeekly] = useState(false);
+
+  // Load plan when client changes
+  useEffect(() => {
+    if (activeClientId) {
+      planState.loadPlanForClient(activeClientId);
+      setDailyMealPlan(null); // Clear daily plan on client switch
+    }
+  }, [activeClientId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Get liked foods from restrictions
+  const getLikedFoods = useCallback((): string[] => {
+    const restriction = clientRestrictions.find(r => r.clientId === activeClientId);
+    return restriction?.preferredIngredients || [];
+  }, [activeClientId, clientRestrictions]);
+
+  // Handle daily plan generation
+  const handleGenerateDailyPlan = async () => {
+    const validation = ingredientValidation.validateForPlanType('daily');
+    if (!validation.valid) {
+      toast({
+        title: 'Ingrédients insuffisants',
+        description: validation.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsGeneratingDaily(true);
+    try {
+      const likedFoods = getLikedFoods();
+      const metrics = calculateNutritionMetrics(activeClient);
+      const macroTargets = {
+        calories: metrics.targetCalories,
+        protein: metrics.proteinGrams,
+        carbs: metrics.carbsGrams,
+        fat: metrics.fatGrams,
+      };
+
+      const result = generateFullDayMealPlan(likedFoods, macroTargets);
+      setDailyMealPlan(result);
+
+      toast({
+        title: 'Plan journalier généré !',
+        description: `${result.totalMacros.calories} kcal`,
+      });
+    } catch (err: any) {
+      console.error('Error generating daily plan:', err);
+      toast({
+        title: 'Erreur',
+        description: err.message || 'Impossible de générer le plan journalier',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingDaily(false);
+    }
+  };
+
+  // Handle weekly plan generation with auto-persist
+  const handleGenerateWeeklyPlan = async () => {
+    // Check lock status
+    if (planState.lockStatus.isLocked) {
+      toast({
+        title: 'Plan verrouillé',
+        description: `Le plan actuel est verrouillé pour ${planState.lockStatus.daysRemaining} jour(s). Utilisez les suggestions pour demander des modifications.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate ingredients
+    const validation = ingredientValidation.validateForPlanType('weekly');
+    if (!validation.valid) {
+      toast({
+        title: 'Ingrédients insuffisants',
+        description: validation.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsGeneratingWeekly(true);
+    setDailyMealPlan(null); // Clear daily plan
+
+    try {
+      const likedFoods = getLikedFoods();
+      const metrics = calculateNutritionMetrics(activeClient);
+      const macroTargets = {
+        calories: metrics.targetCalories,
+        protein: metrics.proteinGrams,
+        carbs: metrics.carbsGrams,
+        fat: metrics.fatGrams,
+      };
+
+      // Generate plan
+      const weeklyPlan = generateWeeklyMealPlan(likedFoods, macroTargets);
+
+      // Auto-persist to DB
+      const saveResult = await planState.generateAndPersist(
+        activeClientId,
+        weeklyPlan,
+        macroTargets,
+        likedFoods
+      );
+
+      if (saveResult.success) {
+        toast({
+          title: 'Plan hebdomadaire sauvegardé !',
+          description: 'Le plan a été persisté dans la base de données.',
+        });
+      } else {
+        toast({
+          title: 'Plan généré (non sauvegardé)',
+          description: saveResult.error || 'Erreur lors de la sauvegarde',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      console.error('Error generating weekly plan:', err);
+      toast({
+        title: 'Erreur',
+        description: err.message || 'Impossible de générer le plan hebdomadaire',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingWeekly(false);
+    }
+  };
+
+  // Handle reload from DB
+  const handleReloadPlan = () => {
+    planState.loadPlanForClient(activeClientId);
+    toast({
+      title: 'Rechargement',
+      description: 'Le plan est rechargé depuis la base de données.',
+    });
+  };
+
+  const isGenerating = isGeneratingDaily || isGeneratingWeekly;
+  const hasWeeklyPlan = !!planState.weeklyPlan;
+  const hasDailyPlan = !!dailyMealPlan;
+  const hasAnyPlan = hasWeeklyPlan || hasDailyPlan;
+
+  return (
+    <div className="space-y-4">
+      {/* Client & Status Header */}
+      <Card className="p-4 shadow-card bg-muted/30">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Client:</span>
+            <span className="font-semibold text-foreground">
+              {getClientLabel(activeClient)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <PlanStateIndicator state={planState.state} />
+            {planState.isPersisted && (
+              <PlanLockIndicator 
+                isLocked={planState.lockStatus.isLocked} 
+                daysRemaining={planState.lockStatus.daysRemaining}
+                lockedUntil={planState.lockStatus.lockedUntil}
+              />
+            )}
+            {(planState.isPersisted || planState.state === 'ERROR') && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleReloadPlan}
+                disabled={planState.isLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${planState.isLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* Ingredient Validation Warning */}
+      {!ingredientValidation.canGenerateWeekly && (
+        <Alert variant="default" className="border-warning/50 bg-warning/10">
+          <AlertCircle className="h-4 w-4 text-warning" />
+          <AlertDescription className="text-warning">
+            {ingredientValidation.validationMessage}
+            <span className="ml-2 font-medium">
+              ({ingredientValidation.likedCount}/{INGREDIENT_MINIMUMS.weeklyPlan} sélectionnés)
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Error Display */}
+      {planState.error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {planState.error}
+            <Button 
+              variant="link" 
+              size="sm" 
+              onClick={planState.clearError}
+              className="ml-2 p-0 h-auto text-destructive underline"
+            >
+              Fermer
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Generation Controls */}
+      <Card className="p-6 shadow-card">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
+              <CalendarDays className="h-6 w-6" />
+              Génération de Plans Repas
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {hasWeeklyPlan 
+                ? 'Plan existant chargé. Générez un nouveau plan pour le remplacer.'
+                : 'Générez un plan journalier ou hebdomadaire basé sur vos ingrédients préférés'}
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              onClick={handleGenerateDailyPlan}
+              disabled={isGenerating || !ingredientValidation.canGenerateDaily}
+              variant="outline"
+            >
+              {isGeneratingDaily ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Génération...
+                </>
+              ) : (
+                <>
+                  <CalendarDays className="mr-2 h-4 w-4" />
+                  Plan Journalier
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={handleGenerateWeeklyPlan}
+              disabled={isGenerating || !ingredientValidation.canGenerateWeekly || planState.lockStatus.isLocked}
+              className="bg-gradient-primary text-white shadow-glow hover:shadow-xl"
+            >
+              {isGeneratingWeekly ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Génération...
+                </>
+              ) : (
+                <>
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Plan Hebdomadaire
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Loading State */}
+      {planState.isLoading && (
+        <Card className="p-12 shadow-card">
+          <div className="flex flex-col items-center justify-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Chargement du plan depuis la base de données...</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Weekly Plan Display */}
+      {hasWeeklyPlan && !planState.isLoading && (
+        <WeeklyMealPlanDisplay weeklyPlan={planState.weeklyPlan!} />
+      )}
+
+      {/* Daily Plan Display */}
+      {hasDailyPlan && !planState.isLoading && (
+        <DailyMealPlanDisplay
+          dailyPlan={dailyMealPlan.dailyPlan}
+          totalMacros={dailyMealPlan.totalMacros}
+          targetMacros={dailyMealPlan.targetMacros}
+          variance={dailyMealPlan.variance}
+          convergenceInfo={dailyMealPlan.convergenceInfo}
+        />
+      )}
+
+      {/* Empty State */}
+      {!hasAnyPlan && !planState.isLoading && planState.state !== 'ERROR' && (
+        <Card className="p-6 shadow-card">
+          <div className="text-center py-8">
+            <CalendarDays className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Aucun plan nutritionnel</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              {ingredientValidation.canGenerateWeekly 
+                ? 'Générez un plan hebdomadaire pour créer un programme nutritionnel personnalisé.'
+                : `Sélectionnez au moins ${INGREDIENT_MINIMUMS.weeklyPlan} ingrédients aimés dans l'onglet Ingrédients pour générer un plan.`}
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Plan Metadata (when persisted) */}
+      {planState.isPersisted && planState.planCreatedAt && (
+        <div className="text-xs text-muted-foreground text-center">
+          Plan créé le {new Date(planState.planCreatedAt).toLocaleDateString('fr-FR', { 
+            day: 'numeric', 
+            month: 'long', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}
+          {planState.versionId && (
+            <span className="ml-2">• Version: {planState.versionId.slice(0, 8)}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

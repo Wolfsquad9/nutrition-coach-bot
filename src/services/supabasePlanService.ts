@@ -5,6 +5,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
+import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 
 // Plan version payload structure
@@ -186,9 +187,9 @@ export async function saveNutritionPlan(
   constraintsHitDetails?: string[]
 ): Promise<{ success: boolean; planId: string | null; versionId: string | null; error: string | null }> {
   try {
-    // Get current user ID for FK ownership
-    const userId = await getCurrentUserId();
-    if (!userId) {
+    // Ensure profile exists for FK constraint (critical for anonymous auth)
+    const profileId = await ensureProfileExists();
+    if (!profileId) {
       return {
         success: false,
         planId: null,
@@ -196,6 +197,8 @@ export async function saveNutritionPlan(
         error: 'Non authentifié. Veuillez rafraîchir la page.',
       };
     }
+
+    const userId = profileId; // Use profile ID for created_by FK
 
     // First check if plan is locked
     const lockStatus = await checkPlanLockStatus(clientId);
