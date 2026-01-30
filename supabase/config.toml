@@ -2,3 +2,6 @@ project_id = "ennbxdpthjtzsobnqvqw"
 
 [functions.generate-fitness-plan]
 verify_jwt = false
+
+[functions.send-whatsapp]
+verify_jwt = false
