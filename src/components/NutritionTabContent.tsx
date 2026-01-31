@@ -116,6 +116,16 @@ export function NutritionTabContent({
 
   // Handle daily plan generation
   const handleGenerateDailyPlan = async () => {
+    // CRITICAL: Block if previous persistence failed (zombie state prevention)
+    if (planState.isBlocked) {
+      toast({
+        title: 'Opération bloquée',
+        description: 'Une erreur de sauvegarde précédente doit être résolue. Cliquez sur "Réessayer" ou rechargez la page.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const validation = ingredientValidation.validateForPlanType('daily');
     if (!validation.valid) {
       toast({
@@ -158,6 +168,16 @@ export function NutritionTabContent({
 
   // Handle weekly plan generation with auto-persist
   const handleGenerateWeeklyPlan = async () => {
+    // CRITICAL: Block if previous persistence failed (zombie state prevention)
+    if (planState.isBlocked) {
+      toast({
+        title: 'Opération bloquée',
+        description: 'Une erreur de sauvegarde précédente doit être résolue. Cliquez sur "Réessayer" ou rechargez la page.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Check lock status
     if (planState.lockStatus.isLocked) {
       toast({
@@ -168,7 +188,7 @@ export function NutritionTabContent({
       return;
     }
 
-    // Validate ingredients
+    // Validate ingredients - ALWAYS enforce, even after errors
     const validation = ingredientValidation.validateForPlanType('weekly');
     if (!validation.valid) {
       toast({
@@ -209,9 +229,10 @@ export function NutritionTabContent({
           description: 'Le plan a été persisté dans la base de données.',
         });
       } else {
+        // Persistence failed - show error with retry option
         toast({
-          title: 'Plan généré (non sauvegardé)',
-          description: saveResult.error || 'Erreur lors de la sauvegarde',
+          title: 'Échec de la sauvegarde',
+          description: saveResult.error || 'Le plan n\'a pas pu être enregistré. Veuillez réessayer.',
           variant: 'destructive',
         });
       }
@@ -288,19 +309,57 @@ export function NutritionTabContent({
         </Alert>
       )}
 
-      {/* Error Display */}
+      {/* Error Display with Retry */}
       {planState.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            {planState.error}
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span>{planState.error}</span>
+            <div className="flex gap-2 ml-4">
+              {planState.isBlocked && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    planState.clearError();
+                    planState.loadPlanForClient(activeClientId);
+                  }}
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Réessayer
+                </Button>
+              )}
+              <Button 
+                variant="link" 
+                size="sm" 
+                onClick={planState.clearError}
+                className="p-0 h-auto text-destructive underline"
+              >
+                Fermer
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Blocked State Warning */}
+      {planState.isBlocked && !planState.error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span>Une erreur de sauvegarde précédente bloque les opérations.</span>
             <Button 
-              variant="link" 
+              variant="outline" 
               size="sm" 
-              onClick={planState.clearError}
-              className="ml-2 p-0 h-auto text-destructive underline"
+              onClick={() => {
+                planState.clearError();
+                planState.loadPlanForClient(activeClientId);
+              }}
+              className="text-destructive border-destructive/30 hover:bg-destructive/10"
             >
-              Fermer
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Débloquer
             </Button>
           </AlertDescription>
         </Alert>
@@ -323,7 +382,7 @@ export function NutritionTabContent({
           <div className="flex gap-3">
             <Button
               onClick={handleGenerateDailyPlan}
-              disabled={isGenerating || !ingredientValidation.canGenerateDaily}
+              disabled={isGenerating || !ingredientValidation.canGenerateDaily || planState.isBlocked}
               variant="outline"
             >
               {isGeneratingDaily ? (
@@ -340,7 +399,7 @@ export function NutritionTabContent({
             </Button>
             <Button
               onClick={handleGenerateWeeklyPlan}
-              disabled={isGenerating || !ingredientValidation.canGenerateWeekly || planState.lockStatus.isLocked}
+              disabled={isGenerating || !ingredientValidation.canGenerateWeekly || planState.lockStatus.isLocked || planState.isBlocked}
               className="bg-gradient-primary text-white shadow-glow hover:shadow-xl"
             >
               {isGeneratingWeekly ? (

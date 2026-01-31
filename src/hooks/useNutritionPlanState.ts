@@ -48,14 +48,19 @@ export interface NutritionPlanStateContext {
   // Error
   error: string | null;
   
+  // Persistence failure tracking - blocks zombie state
+  lastPersistenceFailed: boolean;
+  
   // Derived booleans for easy UI rendering
   isEmpty: boolean;
   isDraft: boolean;
   isPersisted: boolean;
   isLoading: boolean;
   isSaving: boolean;
+  isError: boolean;
   canGenerate: boolean;
   canSave: boolean;
+  isBlocked: boolean; // True if persistence failed - blocks client switch/regeneration
 }
 
 export interface NutritionPlanStateActions {
@@ -107,8 +112,9 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
   });
   const [pendingOverrides, setPendingOverrides] = useState<PlanOverride[]>([]);
   
-  // Error
+  // Error and persistence failure tracking
   const [error, setError] = useState<string | null>(null);
+  const [lastPersistenceFailed, setLastPersistenceFailed] = useState(false);
 
   // Derived state
   const isEmpty = state === 'EMPTY';
@@ -116,8 +122,14 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
   const isPersisted = state === 'PERSISTED';
   const isLoading = state === 'LOADING';
   const isSaving = state === 'SAVING';
-  const canGenerate = (state === 'EMPTY' || state === 'PERSISTED') && !lockStatus.isLocked;
-  const canSave = state === 'DRAFT';
+  const isError = state === 'ERROR';
+  
+  // CRITICAL: Block operations if last persistence failed (zombie state prevention)
+  const isBlocked = lastPersistenceFailed || state === 'ERROR';
+  
+  // Can only generate if not blocked, not loading/saving, and not locked
+  const canGenerate = !isBlocked && (state === 'EMPTY' || state === 'PERSISTED') && !lockStatus.isLocked;
+  const canSave = state === 'DRAFT' && !isBlocked;
 
   /**
    * Load plan from database for a given client
@@ -223,19 +235,25 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
       );
 
       if (!result.success) {
+        // CRITICAL: Track persistence failure to block zombie state
+        setLastPersistenceFailed(true);
         setError(result.error);
-        setState('DRAFT'); // Revert to draft on failure
+        setState('ERROR'); // Transition to ERROR, not DRAFT
         return { success: false, error: result.error };
       }
 
+      // Success - clear failure flag
+      setLastPersistenceFailed(false);
+      
       // Reload from DB to get fresh state
       await loadPlanForClient(clientId);
       return { success: true, error: null };
     } catch (err: any) {
       console.error('Error persisting plan:', err);
       const errorMsg = err.message || 'Failed to save plan';
+      setLastPersistenceFailed(true);
       setError(errorMsg);
-      setState('DRAFT');
+      setState('ERROR');
       return { success: false, error: errorMsg };
     }
   }, [state, weeklyPlan, macroTargets, likedIngredients, loadPlanForClient]);
@@ -266,19 +284,25 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
       );
 
       if (!result.success) {
+        // CRITICAL: Track persistence failure to block zombie state
+        setLastPersistenceFailed(true);
         setError(result.error);
-        setState('DRAFT'); // Fall back to draft on failure
+        setState('ERROR'); // Transition to ERROR, not DRAFT
         return { success: false, error: result.error };
       }
 
+      // Success - clear failure flag
+      setLastPersistenceFailed(false);
+      
       // Reload from DB to get fresh state with IDs
       await loadPlanForClient(clientId);
       return { success: true, error: null };
     } catch (err: any) {
       console.error('Error in generateAndPersist:', err);
       const errorMsg = err.message || 'Failed to save plan';
+      setLastPersistenceFailed(true);
       setError(errorMsg);
-      setState('DRAFT');
+      setState('ERROR');
       return { success: false, error: errorMsg };
     }
   }, [loadPlanForClient]);
@@ -296,18 +320,21 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setLockStatus({ isLocked: false, lockedUntil: null, daysRemaining: 0 });
     setPendingOverrides([]);
     setError(null);
+    setLastPersistenceFailed(false); // Clear persistence failure on state clear
     setState('EMPTY');
   }, []);
 
   /**
-   * Clear error state
+   * Clear error state and unblock operations
    */
   const clearError = useCallback(() => {
     setError(null);
+    setLastPersistenceFailed(false); // Clear failure flag to unblock
     if (state === 'ERROR') {
-      setState(weeklyPlan ? 'PERSISTED' : 'EMPTY');
+      // If we had a persisted plan before, try to reload it; otherwise go EMPTY
+      setState('EMPTY');
     }
-  }, [state, weeklyPlan]);
+  }, [state]);
 
   return {
     // State
@@ -321,6 +348,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     lockStatus,
     pendingOverrides,
     error,
+    lastPersistenceFailed,
     
     // Derived
     isEmpty,
@@ -328,8 +356,10 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     isPersisted,
     isLoading,
     isSaving,
+    isError,
     canGenerate,
     canSave,
+    isBlocked,
     
     // Actions
     loadPlanForClient,
