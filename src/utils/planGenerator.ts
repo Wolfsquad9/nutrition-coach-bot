@@ -6,6 +6,7 @@
 import { Client, NutritionPlan, TrainingPlan, CompletePlan, MealPlan, Meal, Recipe, WorkoutSession, Exercise, GroceryItem, RecipeServing } from '@/types';
 import { calculateNutritionMetrics, distributeMacrosAcrossMeals } from './calculations';
 import { sampleRecipes, sampleExercises } from '@/data/sampleData';
+import { supabase } from '@/integrations/supabase/client';
 
 /**
  * Filtre les recettes selon les préférences et intolérances du client
@@ -439,24 +440,17 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
   }
   
   try {
-    // Appeler la fonction Supabase Edge pour générer le plan avec OpenAI
-    const response = await fetch('https://ennbxdpthjtzsobnqvqw.supabase.co/functions/v1/generate-fitness-plan', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVubmJ4ZHB0aGp0enNvYm5xdnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjA2OTUsImV4cCI6MjA3MzUzNjY5NX0.QK19cuza0iptrdkoDctEI9iOOvx0tYzy_UPSPrm00dU',
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVubmJ4ZHB0aGp0enNvYm5xdnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjA2OTUsImV4cCI6MjA3MzUzNjY5NX0.QK19cuza0iptrdkoDctEI9iOOvx0tYzy_UPSPrm00dU'
-      },
-      body: JSON.stringify({ client })
+    // Use supabase.functions.invoke() - automatically includes user's session token
+    const { data, error } = await supabase.functions.invoke('generate-fitness-plan', {
+      body: { client }
     });
 
-    if (!response.ok) {
+    if (error) {
+      console.error('Edge function error:', error);
       throw new Error('Service IA temporairement indisponible');
     }
-
-    const data = await response.json();
     
-    if (data.success && data.plan) {
+    if (data?.success && data?.plan) {
       // Transformer la réponse AI en format attendu par l'application
       const nutritionPlan = transformAINutritionPlan(data.plan.nutrition_plan, client);
       const trainingPlan = transformAITrainingPlan(data.plan.training_plan, client);
