@@ -1,6 +1,11 @@
 /**
  * Supabase Plan Service
- * Handles nutrition plan persistence with immutability and 7-day locking
+ * Handles nutrition plan persistence with explicit locking workflow
+ * 
+ * Key behavior:
+ * - Plans are only persisted when explicitly locked
+ * - Lock starts a 7-day read-only period
+ * - Draft plans are NOT saved to DB
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +17,7 @@ import type { WeeklyMealPlanResult } from '@/services/recipeService';
 export interface PlanPayload {
   type: 'nutrition';
   generatedAt: string;
+  lockedAt?: string;
   macroTargets: {
     calories: number;
     protein: number;
@@ -66,7 +72,7 @@ function hashPayload(payload: PlanPayload): string {
 }
 
 /**
- * Check if a plan is locked (within 7 days of creation)
+ * Check if a plan is locked (within 7 days of lock creation)
  */
 export async function checkPlanLockStatus(clientId: string): Promise<PlanLockStatus> {
   try {
@@ -89,7 +95,7 @@ export async function checkPlanLockStatus(clientId: string): Promise<PlanLockSta
       return { isLocked: false, lockedUntil: null, daysRemaining: 0 };
     }
 
-    // Get the current version to check its creation date
+    // Get the current version to check its creation date (lock starts on version creation)
     const { data: versionData, error: versionError } = await supabase
       .from('plan_versions')
       .select('created_at')
@@ -176,9 +182,10 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
 }
 
 /**
- * Save a new nutrition plan (creates both nutrition_plans and plan_versions entries)
+ * Lock a nutrition plan - saves to DB and starts 7-day lock period
+ * This is the ONLY way to persist a plan (drafts are NOT saved)
  */
-export async function saveNutritionPlan(
+export async function lockNutritionPlan(
   clientId: string,
   weeklyPlan: WeeklyMealPlanResult,
   macroTargets: { calories: number; protein: number; carbs: number; fat: number },
@@ -198,23 +205,14 @@ export async function saveNutritionPlan(
       };
     }
 
-    const userId = profileId; // Use profile ID for created_by FK
+    const userId = profileId;
+    const now = new Date().toISOString();
 
-    // First check if plan is locked
-    const lockStatus = await checkPlanLockStatus(clientId);
-    if (lockStatus.isLocked) {
-      return {
-        success: false,
-        planId: null,
-        versionId: null,
-        error: `Plan is locked for ${lockStatus.daysRemaining} more day(s). Changes can only be made via suggestions.`,
-      };
-    }
-
-    // Create the payload
+    // Create the payload with lock timestamp
     const payload: PlanPayload = {
       type: 'nutrition',
-      generatedAt: new Date().toISOString(),
+      generatedAt: now,
+      lockedAt: now, // Mark when plan was locked
       macroTargets,
       weeklyPlan,
       realismConstraintHit,
@@ -238,12 +236,12 @@ export async function saveNutritionPlan(
       // Use existing plan
       planId = existingPlan.id;
     } else {
-      // Create new nutrition_plans record with auth.uid() as created_by
+      // Create new nutrition_plans record
       const { data: newPlan, error: planError } = await supabase
         .from('nutrition_plans')
         .insert({
           client_id: clientId,
-          created_by: userId, // CRITICAL: Use auth.uid() not clientId
+          created_by: userId,
           plan_data: { type: 'nutrition', version: 1 },
           status: 'active',
         })
@@ -269,7 +267,7 @@ export async function saveNutritionPlan(
 
     const nextVersionNumber = (versionCount?.version_number || 0) + 1;
 
-    // Create the plan version with auth.uid() as created_by
+    // Create the plan version
     const planPayloadJson = JSON.parse(JSON.stringify(payload));
     
     const { data: newVersion, error: versionError } = await supabase
@@ -277,10 +275,10 @@ export async function saveNutritionPlan(
       .insert({
         plan_id: planId,
         version_number: nextVersionNumber,
-        created_by: userId, // CRITICAL: Use auth.uid()
+        created_by: userId,
         plan_payload: planPayloadJson,
         payload_hash: payloadHash,
-        note: `Weekly meal plan v${nextVersionNumber}`,
+        note: `Plan verrouillé - v${nextVersionNumber}`,
       })
       .select('id')
       .single();
@@ -303,7 +301,7 @@ export async function saveNutritionPlan(
 
     return { success: true, planId, versionId: newVersion.id, error: null };
   } catch (error: any) {
-    console.error('Failed to save nutrition plan:', error);
+    console.error('Failed to lock nutrition plan:', error);
     return { success: false, planId: null, versionId: null, error: error.message };
   }
 }
@@ -352,3 +350,6 @@ export async function fetchPlanHistory(clientId: string): Promise<{
     return { versions: [], error: error.message };
   }
 }
+
+// Legacy function alias for backward compatibility
+export const saveNutritionPlan = lockNutritionPlan;
