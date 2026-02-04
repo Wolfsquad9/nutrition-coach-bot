@@ -1,10 +1,11 @@
 /**
- * NutritionTabContent - Dedicated component for nutrition tab with enforced persistence lifecycle
+ * NutritionTabContent - Dedicated component for nutrition tab with Draft → Lock lifecycle
  * 
  * Implements deterministic behavior:
- * - Loads persisted plan on mount and client change
- * - Validates ingredient minimum before generation
- * - Shows clear state indicators (Empty, Draft, Persisted)
+ * - Loads locked plan on mount and client change
+ * - Generation creates a DRAFT (not persisted)
+ * - Coach can regenerate freely while in DRAFT
+ * - Explicit "Lock Plan" button to persist and lock for 7 days
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,7 +13,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CalendarDays, Calendar, AlertCircle, Database, CloudOff, Lock, Unlock, RefreshCw } from 'lucide-react';
+import { Loader2, CalendarDays, Calendar, AlertCircle, Database, CloudOff, Lock, Unlock, RefreshCw, FileEdit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanState';
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
@@ -20,7 +21,8 @@ import { calculateNutritionMetrics } from '@/utils/calculations';
 import { generateWeeklyMealPlan, generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
-import { DataSourceIndicator, PlanLockIndicator } from '@/components/DataSourceIndicator';
+import { PlanLockIndicator } from '@/components/DataSourceIndicator';
+import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
 import { getClientLabel } from '@/utils/clientHelpers';
 import type { Client } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
@@ -31,8 +33,11 @@ interface NutritionTabContentProps {
   clientRestrictions: ClientIngredientRestrictions[];
 }
 
-// State indicator badge component
-function PlanStateIndicator({ state }: { state: PlanState }) {
+// State indicator badge component - updated for Draft → Lock lifecycle
+function PlanStateIndicator({ state, lockStatus }: { 
+  state: PlanState; 
+  lockStatus: { isLocked: boolean; daysRemaining: number };
+}) {
   const config: Record<PlanState, { label: string; variant: 'default' | 'secondary' | 'outline'; className: string; icon: React.ReactNode }> = {
     EMPTY: { 
       label: 'Aucun plan', 
@@ -44,13 +49,19 @@ function PlanStateIndicator({ state }: { state: PlanState }) {
       label: 'Brouillon', 
       variant: 'secondary', 
       className: 'bg-warning/20 text-warning border-warning/30',
-      icon: <CloudOff className="w-3 h-3 mr-1" />
+      icon: <FileEdit className="w-3 h-3 mr-1" />
     },
-    PERSISTED: { 
-      label: 'Enregistré', 
+    LOCKED: { 
+      label: lockStatus.isLocked 
+        ? `Verrouillé (${lockStatus.daysRemaining}j)` 
+        : 'Enregistré',
       variant: 'default', 
-      className: 'bg-success/20 text-success border-success/30',
-      icon: <Database className="w-3 h-3 mr-1" />
+      className: lockStatus.isLocked
+        ? 'bg-info/20 text-info border-info/30'
+        : 'bg-success/20 text-success border-success/30',
+      icon: lockStatus.isLocked 
+        ? <Lock className="w-3 h-3 mr-1" /> 
+        : <Database className="w-3 h-3 mr-1" />
     },
     LOADING: { 
       label: 'Chargement...', 
@@ -59,7 +70,7 @@ function PlanStateIndicator({ state }: { state: PlanState }) {
       icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" />
     },
     SAVING: { 
-      label: 'Sauvegarde...', 
+      label: 'Verrouillage...', 
       variant: 'outline', 
       className: 'text-primary animate-pulse',
       icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -89,7 +100,7 @@ export function NutritionTabContent({
 }: NutritionTabContentProps) {
   const { toast } = useToast();
   
-  // Plan state machine
+  // Plan state machine (Draft → Lock lifecycle)
   const planState = useNutritionPlanState();
   
   // Ingredient validation
@@ -104,7 +115,7 @@ export function NutritionTabContent({
   useEffect(() => {
     if (activeClientId) {
       planState.loadPlanForClient(activeClientId);
-      setDailyMealPlan(null); // Clear daily plan on client switch
+      setDailyMealPlan(null);
     }
   }, [activeClientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,11 +127,10 @@ export function NutritionTabContent({
 
   // Handle daily plan generation
   const handleGenerateDailyPlan = async () => {
-    // CRITICAL: Block if previous persistence failed (zombie state prevention)
     if (planState.isBlocked) {
       toast({
         title: 'Opération bloquée',
-        description: 'Une erreur de sauvegarde précédente doit être résolue. Cliquez sur "Réessayer" ou rechargez la page.',
+        description: 'Une erreur précédente doit être résolue. Cliquez sur "Réessayer" ou rechargez la page.',
         variant: 'destructive',
       });
       return;
@@ -166,20 +176,19 @@ export function NutritionTabContent({
     }
   };
 
-  // Handle weekly plan generation with auto-persist
+  // Handle weekly plan generation - creates DRAFT (not persisted)
   const handleGenerateWeeklyPlan = async () => {
-    // CRITICAL: Block if previous persistence failed (zombie state prevention)
     if (planState.isBlocked) {
       toast({
         title: 'Opération bloquée',
-        description: 'Une erreur de sauvegarde précédente doit être résolue. Cliquez sur "Réessayer" ou rechargez la page.',
+        description: 'Une erreur précédente doit être résolue. Cliquez sur "Réessayer" ou rechargez la page.',
         variant: 'destructive',
       });
       return;
     }
 
-    // Check lock status
-    if (planState.lockStatus.isLocked) {
+    // Check if plan is locked and lock hasn't expired
+    if (planState.isLocked && planState.lockStatus.isLocked) {
       toast({
         title: 'Plan verrouillé',
         description: `Le plan actuel est verrouillé pour ${planState.lockStatus.daysRemaining} jour(s). Utilisez les suggestions pour demander des modifications.`,
@@ -188,7 +197,7 @@ export function NutritionTabContent({
       return;
     }
 
-    // Validate ingredients - ALWAYS enforce, even after errors
+    // Validate ingredients
     const validation = ingredientValidation.validateForPlanType('weekly');
     if (!validation.valid) {
       toast({
@@ -200,7 +209,7 @@ export function NutritionTabContent({
     }
 
     setIsGeneratingWeekly(true);
-    setDailyMealPlan(null); // Clear daily plan
+    setDailyMealPlan(null);
 
     try {
       const likedFoods = getLikedFoods();
@@ -212,30 +221,16 @@ export function NutritionTabContent({
         fat: metrics.fatGrams,
       };
 
-      // Generate plan
+      // Generate plan locally
       const weeklyPlan = generateWeeklyMealPlan(likedFoods, macroTargets);
 
-      // Auto-persist to DB
-      const saveResult = await planState.generateAndPersist(
-        activeClientId,
-        weeklyPlan,
-        macroTargets,
-        likedFoods
-      );
+      // Set as DRAFT (NOT persisted to DB)
+      planState.setDraftPlan(weeklyPlan, macroTargets, likedFoods);
 
-      if (saveResult.success) {
-        toast({
-          title: 'Plan hebdomadaire sauvegardé !',
-          description: 'Le plan a été persisté dans la base de données.',
-        });
-      } else {
-        // Persistence failed - show error with retry option
-        toast({
-          title: 'Échec de la sauvegarde',
-          description: saveResult.error || 'Le plan n\'a pas pu être enregistré. Veuillez réessayer.',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Brouillon généré !',
+        description: 'Le plan est en mode brouillon. Cliquez sur "Verrouiller le Plan" pour l\'enregistrer.',
+      });
     } catch (err: any) {
       console.error('Error generating weekly plan:', err);
       toast({
@@ -246,6 +241,33 @@ export function NutritionTabContent({
     } finally {
       setIsGeneratingWeekly(false);
     }
+  };
+
+  // Handle locking the plan (persists to DB)
+  const handleLockPlan = async () => {
+    const result = await planState.lockPlan(activeClientId);
+    
+    if (result.success) {
+      toast({
+        title: 'Plan verrouillé !',
+        description: 'Le plan a été enregistré et verrouillé pour 7 jours.',
+      });
+    } else {
+      toast({
+        title: 'Échec du verrouillage',
+        description: result.error || 'Le plan n\'a pas pu être verrouillé.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handle discarding draft
+  const handleDiscardDraft = async () => {
+    await planState.discardDraft(activeClientId);
+    toast({
+      title: 'Brouillon annulé',
+      description: 'Le brouillon a été supprimé.',
+    });
   };
 
   // Handle reload from DB
@@ -261,6 +283,9 @@ export function NutritionTabContent({
   const hasWeeklyPlan = !!planState.weeklyPlan;
   const hasDailyPlan = !!dailyMealPlan;
   const hasAnyPlan = hasWeeklyPlan || hasDailyPlan;
+  
+  // Determine if regeneration is blocked
+  const regenerationBlocked = planState.isLocked && planState.lockStatus.isLocked;
 
   return (
     <div className="space-y-4">
@@ -274,15 +299,11 @@ export function NutritionTabContent({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <PlanStateIndicator state={planState.state} />
-            {planState.isPersisted && (
-              <PlanLockIndicator 
-                isLocked={planState.lockStatus.isLocked} 
-                daysRemaining={planState.lockStatus.daysRemaining}
-                lockedUntil={planState.lockStatus.lockedUntil}
-              />
-            )}
-            {(planState.isPersisted || planState.state === 'ERROR') && (
+            <PlanStateIndicator 
+              state={planState.state} 
+              lockStatus={planState.lockStatus}
+            />
+            {(planState.isLocked || planState.state === 'ERROR') && (
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -295,6 +316,27 @@ export function NutritionTabContent({
           </div>
         </div>
       </Card>
+
+      {/* Draft Mode Banner */}
+      {planState.isDraft && (
+        <Alert className="border-warning/50 bg-warning/10">
+          <FileEdit className="h-4 w-4 text-warning" />
+          <AlertDescription className="text-warning">
+            <strong>Mode Brouillon</strong> — Ce plan n'est pas encore enregistré. 
+            Vous pouvez le régénérer librement. Cliquez sur "Verrouiller le Plan" pour le sauvegarder.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Lock Expired Banner */}
+      {planState.isLocked && !planState.lockStatus.isLocked && (
+        <Alert className="border-success/50 bg-success/10">
+          <Unlock className="h-4 w-4 text-success" />
+          <AlertDescription className="text-success">
+            <strong>Verrou expiré</strong> — Vous pouvez maintenant générer un nouveau plan.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Ingredient Validation Warning */}
       {!ingredientValidation.canGenerateWeekly && (
@@ -348,7 +390,7 @@ export function NutritionTabContent({
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between w-full">
-            <span>Une erreur de sauvegarde précédente bloque les opérations.</span>
+            <span>Une erreur précédente bloque les opérations.</span>
             <Button 
               variant="outline" 
               size="sm" 
@@ -374,12 +416,17 @@ export function NutritionTabContent({
               Génération de Plans Repas
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {hasWeeklyPlan 
-                ? 'Plan existant chargé. Générez un nouveau plan pour le remplacer.'
-                : 'Générez un plan journalier ou hebdomadaire basé sur vos ingrédients préférés'}
+              {planState.isDraft 
+                ? 'Plan en brouillon. Régénérez ou verrouillez pour enregistrer.'
+                : regenerationBlocked
+                  ? `Plan verrouillé pour ${planState.lockStatus.daysRemaining} jour(s).`
+                  : hasWeeklyPlan 
+                    ? 'Plan existant. Générez un nouveau plan pour créer un brouillon.'
+                    : 'Générez un plan basé sur les ingrédients préférés du client.'}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
+            {/* Daily Plan Button */}
             <Button
               onClick={handleGenerateDailyPlan}
               disabled={isGenerating || !ingredientValidation.canGenerateDaily || planState.isBlocked}
@@ -397,10 +444,18 @@ export function NutritionTabContent({
                 </>
               )}
             </Button>
+
+            {/* Weekly Plan Button */}
             <Button
               onClick={handleGenerateWeeklyPlan}
-              disabled={isGenerating || !ingredientValidation.canGenerateWeekly || planState.lockStatus.isLocked || planState.isBlocked}
-              className="bg-gradient-primary text-white shadow-glow hover:shadow-xl"
+              disabled={
+                isGenerating || 
+                !ingredientValidation.canGenerateWeekly || 
+                regenerationBlocked || 
+                planState.isBlocked
+              }
+              variant={planState.isDraft ? "outline" : "default"}
+              className={planState.isDraft ? "" : "bg-gradient-primary text-white shadow-glow hover:shadow-xl"}
             >
               {isGeneratingWeekly ? (
                 <>
@@ -410,10 +465,26 @@ export function NutritionTabContent({
               ) : (
                 <>
                   <Calendar className="mr-2 h-4 w-4" />
-                  Plan Hebdomadaire
+                  {planState.isDraft ? 'Régénérer' : 'Plan Hebdomadaire'}
                 </>
               )}
             </Button>
+
+            {/* Discard Draft Button */}
+            {planState.isDraft && (
+              <DiscardDraftButton 
+                onDiscard={handleDiscardDraft}
+                disabled={planState.isSaving}
+              />
+            )}
+
+            {/* Lock Plan Button */}
+            <LockPlanButton
+              canLock={planState.canLock}
+              isLocking={planState.isSaving}
+              onLock={handleLockPlan}
+              disabled={!ingredientValidation.canGenerateWeekly || planState.isBlocked}
+            />
           </div>
         </div>
       </Card>
@@ -459,10 +530,10 @@ export function NutritionTabContent({
         </Card>
       )}
 
-      {/* Plan Metadata (when persisted) */}
-      {planState.isPersisted && planState.planCreatedAt && (
+      {/* Plan Metadata (when locked/persisted) */}
+      {planState.isLocked && planState.planCreatedAt && (
         <div className="text-xs text-muted-foreground text-center">
-          Plan créé le {new Date(planState.planCreatedAt).toLocaleDateString('fr-FR', { 
+          Plan verrouillé le {new Date(planState.planCreatedAt).toLocaleDateString('fr-FR', { 
             day: 'numeric', 
             month: 'long', 
             year: 'numeric',
@@ -472,6 +543,13 @@ export function NutritionTabContent({
           {planState.versionId && (
             <span className="ml-2">• Version: {planState.versionId.slice(0, 8)}</span>
           )}
+        </div>
+      )}
+
+      {/* Draft Mode Indicator */}
+      {planState.isDraft && (
+        <div className="text-xs text-warning text-center font-medium">
+          ⚠️ Brouillon non enregistré — Les modifications seront perdues si vous changez de client
         </div>
       )}
     </div>
