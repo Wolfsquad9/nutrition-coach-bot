@@ -236,6 +236,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "nutrition_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "nutrition_plans_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -495,6 +502,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "training_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "training_plans_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -503,9 +517,103 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      clients_trainer_view: {
+        Row: {
+          activity_level: string | null
+          birth_date: string | null
+          created_at: string | null
+          created_by: string | null
+          diet_type: string | null
+          dietary_restrictions: string[] | null
+          disliked_foods: string[] | null
+          first_name: string | null
+          gender: string | null
+          height: number | null
+          id: string | null
+          last_name: string | null
+          primary_goal: string | null
+          training_experience: string | null
+          training_frequency: number | null
+          updated_at: string | null
+          user_profile_id: string | null
+          weight: number | null
+        }
+        Insert: {
+          activity_level?: string | null
+          birth_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          diet_type?: string | null
+          dietary_restrictions?: string[] | null
+          disliked_foods?: string[] | null
+          first_name?: string | null
+          gender?: string | null
+          height?: number | null
+          id?: string | null
+          last_name?: string | null
+          primary_goal?: string | null
+          training_experience?: string | null
+          training_frequency?: number | null
+          updated_at?: string | null
+          user_profile_id?: string | null
+          weight?: number | null
+        }
+        Update: {
+          activity_level?: string | null
+          birth_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          diet_type?: string | null
+          dietary_restrictions?: string[] | null
+          disliked_foods?: string[] | null
+          first_name?: string | null
+          gender?: string | null
+          height?: number | null
+          id?: string | null
+          last_name?: string | null
+          primary_goal?: string | null
+          training_experience?: string | null
+          training_frequency?: number | null
+          updated_at?: string | null
+          user_profile_id?: string | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_user_profile_id_fkey"
+            columns: ["user_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       get_next_plan_version_number: {
@@ -519,6 +627,13 @@ export type Database = {
         }[]
       }
       has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role_v2: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
