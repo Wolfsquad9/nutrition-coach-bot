@@ -1,10 +1,12 @@
 import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, Utensils, Coffee, Sun, Moon, Cookie } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ChevronDown, Utensils, Coffee, Sun, Moon, Cookie, Printer } from 'lucide-react';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { MealTimeType, MealData } from '@/data/ingredientDatabase';
 import { useState } from 'react';
+import { PrintableMealPlan } from './PrintableMealPlan';
 
 interface WeeklyMealPlanDisplayProps {
   weeklyPlan: WeeklyMealPlanResult;
@@ -159,56 +161,80 @@ function DayCard({ dayNumber, dayName, plan }: {
 }
 
 export function WeeklyMealPlanDisplay({ weeklyPlan }: WeeklyMealPlanDisplayProps) {
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <Card className="p-6 shadow-card">
-      <div className="flex items-center gap-2 mb-4">
-        <Utensils className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-primary">Plan Repas Hebdomadaire</h2>
-      </div>
+    <>
+      {/* Screen-only interactive display */}
+      <Card className="p-6 shadow-card no-print">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Utensils className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold text-primary">Plan Repas Hebdomadaire</h2>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handlePrint}
+            className="print-button-container"
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimer le plan
+          </Button>
+        </div>
 
-      {/* Weekly Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="bg-gradient-card p-3 rounded-lg text-center">
-          <p className="text-xs text-muted-foreground">Calories/semaine</p>
-          <p className="text-lg font-bold text-primary">{weeklyPlan.weeklyTotalMacros.calories}</p>
-          <p className="text-xs text-muted-foreground">
-            Cible: {weeklyPlan.weeklyTargetMacros.calories}
-          </p>
+        {/* Weekly Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="bg-gradient-card p-3 rounded-lg text-center">
+            <p className="text-xs text-muted-foreground">Calories/semaine</p>
+            <p className="text-lg font-bold text-primary">{weeklyPlan.weeklyTotalMacros.calories}</p>
+            <p className="text-xs text-muted-foreground">
+              Cible: {weeklyPlan.weeklyTargetMacros.calories}
+            </p>
+          </div>
+          <div className="bg-gradient-card p-3 rounded-lg text-center">
+            <p className="text-xs text-muted-foreground">Protéines</p>
+            <p className="text-lg font-bold text-success">{weeklyPlan.weeklyTotalMacros.protein}g</p>
+            <p className="text-xs text-muted-foreground">
+              Cible: {weeklyPlan.weeklyTargetMacros.protein}g
+            </p>
+          </div>
+          <div className="bg-gradient-card p-3 rounded-lg text-center">
+            <p className="text-xs text-muted-foreground">Glucides</p>
+            <p className="text-lg font-bold text-info">{weeklyPlan.weeklyTotalMacros.carbs}g</p>
+            <p className="text-xs text-muted-foreground">
+              Cible: {weeklyPlan.weeklyTargetMacros.carbs}g
+            </p>
+          </div>
+          <div className="bg-gradient-card p-3 rounded-lg text-center">
+            <p className="text-xs text-muted-foreground">Lipides</p>
+            <p className="text-lg font-bold text-warning">{weeklyPlan.weeklyTotalMacros.fat}g</p>
+            <p className="text-xs text-muted-foreground">
+              Cible: {weeklyPlan.weeklyTargetMacros.fat}g
+            </p>
+          </div>
         </div>
-        <div className="bg-gradient-card p-3 rounded-lg text-center">
-          <p className="text-xs text-muted-foreground">Protéines</p>
-          <p className="text-lg font-bold text-success">{weeklyPlan.weeklyTotalMacros.protein}g</p>
-          <p className="text-xs text-muted-foreground">
-            Cible: {weeklyPlan.weeklyTargetMacros.protein}g
-          </p>
-        </div>
-        <div className="bg-gradient-card p-3 rounded-lg text-center">
-          <p className="text-xs text-muted-foreground">Glucides</p>
-          <p className="text-lg font-bold text-info">{weeklyPlan.weeklyTotalMacros.carbs}g</p>
-          <p className="text-xs text-muted-foreground">
-            Cible: {weeklyPlan.weeklyTargetMacros.carbs}g
-          </p>
-        </div>
-        <div className="bg-gradient-card p-3 rounded-lg text-center">
-          <p className="text-xs text-muted-foreground">Lipides</p>
-          <p className="text-lg font-bold text-warning">{weeklyPlan.weeklyTotalMacros.fat}g</p>
-          <p className="text-xs text-muted-foreground">
-            Cible: {weeklyPlan.weeklyTargetMacros.fat}g
-          </p>
-        </div>
-      </div>
 
-      {/* Daily Plans */}
-      <div className="space-y-3">
-        {weeklyPlan.days.map(day => (
-          <DayCard 
-            key={day.dayNumber}
-            dayNumber={day.dayNumber}
-            dayName={day.dayName}
-            plan={day.plan}
-          />
-        ))}
-      </div>
-    </Card>
+        {/* Daily Plans */}
+        <div className="space-y-3">
+          {weeklyPlan.days.map(day => (
+            <DayCard 
+              key={day.dayNumber}
+              dayNumber={day.dayNumber}
+              dayName={day.dayName}
+              plan={day.plan}
+            />
+          ))}
+        </div>
+      </Card>
+
+      {/* Print-only fully expanded view */}
+      <PrintableMealPlan 
+        weeklyPlan={weeklyPlan}
+        generatedDate={new Date().toLocaleDateString('fr-FR')}
+      />
+    </>
   );
 }
