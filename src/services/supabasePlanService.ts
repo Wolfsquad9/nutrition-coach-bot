@@ -4,7 +4,7 @@
  * 
  * Key behavior:
  * - Plans are only persisted when explicitly locked
- * - Lock starts a 7-day read-only period
+ * - Lock starts a configurable read-only period (see LOCK_DURATION_DAYS)
  * - Draft plans are NOT saved to DB
  */
 
@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
 import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
+import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
 
 // Plan version payload structure
 export interface PlanPayload {
@@ -108,7 +109,7 @@ export async function checkPlanLockStatus(clientId: string): Promise<PlanLockSta
 
     const versionCreatedAt = new Date(versionData.created_at);
     const lockEndDate = new Date(versionCreatedAt);
-    lockEndDate.setDate(lockEndDate.getDate() + 7);
+    lockEndDate.setDate(lockEndDate.getDate() + LOCK_DURATION_DAYS);
 
     const now = new Date();
     const isLocked = now < lockEndDate;
