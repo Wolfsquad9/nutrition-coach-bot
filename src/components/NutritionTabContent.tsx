@@ -63,6 +63,12 @@ function PlanStateIndicator({ state, lockStatus }: {
         ? <Lock className="w-3 h-3 mr-1" /> 
         : <Database className="w-3 h-3 mr-1" />
     },
+    EXPIRED: { 
+      label: 'Verrou expiré', 
+      variant: 'default', 
+      className: 'bg-success/20 text-success border-success/30',
+      icon: <Unlock className="w-3 h-3 mr-1" />
+    },
     LOADING: { 
       label: 'Chargement...', 
       variant: 'outline', 
