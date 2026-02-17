@@ -29,6 +29,12 @@ import {
   type PlanOverride,
 } from '@/services/supabaseOverrideService';
 import {
+  fetchPersistedSnapshot,
+  persistSnapshot,
+  buildAndPersistSnapshot,
+} from '@/services/snapshotPersistence';
+import { buildPlanSnapshot, type PlanSnapshot, type SnapshotBuildInput } from '@/domain/nutrition/snapshot';
+import {
   derivePlanState,
   calculateDaysRemaining,
   calculateLockExpiry,
@@ -63,6 +69,9 @@ export interface NutritionPlanStateContext {
   weeklyPlan: WeeklyMealPlanResult | null;
   macroTargets: { calories: number; protein: number; carbs: number; fat: number } | null;
   likedIngredients: string[];
+  
+  // Immutable snapshot (canonical source for print/export/share when LOCKED/EXPIRED)
+  snapshot: PlanSnapshot | null;
   
   // DB metadata (only present when LOCKED/EXPIRED)
   planId: string | null;
@@ -146,6 +155,9 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyMealPlanResult | null>(null);
   const [macroTargets, setMacroTargets] = useState<{ calories: number; protein: number; carbs: number; fat: number } | null>(null);
   const [likedIngredients, setLikedIngredients] = useState<string[]>([]);
+  
+  // Immutable snapshot (canonical source for LOCKED/EXPIRED plans)
+  const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
   
   // DB metadata
   const [planId, setPlanId] = useState<string | null>(null);
@@ -281,6 +293,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
       setWeeklyPlan(null);
       setMacroTargets(null);
       setLikedIngredients([]);
+      setSnapshot(null);
       setPlanId(null);
       setVersionId(null);
       setVersionNumber(null);
@@ -316,6 +329,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
         setWeeklyPlan(null);
         setMacroTargets(null);
         setLikedIngredients([]);
+        setSnapshot(null);
         setPlanId(null);
         setVersionId(null);
         setVersionNumber(null);
@@ -346,12 +360,23 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
         setLockedUntil(lockResult.lockedUntil);
       }
 
-      // Fetch pending overrides if we have a version
+      // Fetch pending overrides and snapshot if we have a version
       if (planResult.versionId) {
-        const overridesResult = await fetchPendingOverrides(planResult.versionId);
+        const [overridesResult, snapshotResult] = await Promise.all([
+          fetchPendingOverrides(planResult.versionId),
+          fetchPersistedSnapshot(planResult.versionId),
+        ]);
         if (!overridesResult.error) {
           setPendingOverrides(overridesResult.overrides);
         }
+        if (snapshotResult.snapshot) {
+          setSnapshot(snapshotResult.snapshot);
+        } else {
+          // Snapshot missing for a persisted plan — clear it (will be backfilled if client info available)
+          setSnapshot(null);
+        }
+      } else {
+        setSnapshot(null);
       }
 
       setUiState('IDLE');
@@ -388,6 +413,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setPayloadHash(null);
     setLockedAt(null);
     setLockedUntil(null);
+    setSnapshot(null);
     setError(null);
     setUiState('IDLE');
   }, [lifecycleState]);
@@ -478,6 +504,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setWeeklyPlan(null);
     setMacroTargets(null);
     setLikedIngredients([]);
+    setSnapshot(null);
     setPlanId(null);
     setVersionId(null);
     setVersionNumber(null);
@@ -516,6 +543,9 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     weeklyPlan,
     macroTargets,
     likedIngredients,
+    
+    // Immutable snapshot (canonical for print/export/share)
+    snapshot,
     
     // DB metadata
     planId,
