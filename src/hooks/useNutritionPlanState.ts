@@ -119,6 +119,14 @@ export interface NutritionPlanStateContext {
   isPersisted: boolean;
 }
 
+/** Client info needed for snapshot building at lock time */
+export interface LockClientInfo {
+  firstName: string;
+  lastName: string;
+  goal: string;
+  activityLevel: string;
+}
+
 export interface NutritionPlanStateActions {
   // Load plan from DB for a client
   loadPlanForClient: (clientId: string) => Promise<void>;
@@ -130,8 +138,8 @@ export interface NutritionPlanStateActions {
     likedIngredients: string[]
   ) => void;
   
-  // Lock the current draft (persists to DB and starts lock period)
-  lockPlan: (clientId: string) => Promise<{ success: boolean; error: string | null }>;
+  // Lock the current draft (persists to DB and starts lock period, builds snapshot)
+  lockPlan: (clientId: string, clientInfo: LockClientInfo) => Promise<{ success: boolean; error: string | null }>;
   
   // Clear all state (on client switch)
   clearState: () => void;
@@ -421,7 +429,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
   /**
    * Lock the current draft plan - persists to DB and starts lock period
    */
-  const lockPlan = useCallback(async (clientId: string): Promise<{ success: boolean; error: string | null }> => {
+  const lockPlan = useCallback(async (clientId: string, clientInfo: LockClientInfo): Promise<{ success: boolean; error: string | null }> => {
     // Use domain function to validate
     if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
       return { success: false, error: 'Aucun brouillon à verrouiller' };
@@ -444,11 +452,58 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
         likedIngredients
       );
 
-      if (!result.success) {
+      if (!result.success || !result.versionId) {
         setLastPersistenceFailed(true);
         setError(result.error);
         setUiState('ERROR');
         return { success: false, error: result.error };
+      }
+
+      // Build and persist snapshot immediately after lock
+      try {
+        const now = new Date();
+        const lockedUntilDate = calculateLockExpiry(now);
+        const snapshotInput: SnapshotBuildInput = {
+          identifier: {
+            versionId: result.versionId,
+            lockedAt: now,
+            lockedUntil: lockedUntilDate,
+            payloadHash: '', // will be set from DB on reload
+          },
+          client: {
+            firstName: clientInfo.firstName,
+            lastName: clientInfo.lastName,
+            goal: clientInfo.goal,
+            activityLevel: clientInfo.activityLevel,
+          },
+          metrics: {
+            tdee: 0,
+            bmr: 0,
+            targetCalories: macroTargets.calories,
+            proteinGrams: macroTargets.protein,
+            carbsGrams: macroTargets.carbs,
+            fatGrams: macroTargets.fat,
+            fiberGrams: 0,
+            waterLiters: 0,
+          },
+          weeklyPlan: weeklyPlan.days.map(d => ({
+            day: d.dayNumber,
+            meals: [],
+            totalMacros: { calories: d.plan.totalMacros.calories, protein: d.plan.totalMacros.protein, carbs: d.plan.totalMacros.carbs, fat: d.plan.totalMacros.fat },
+            hydration: 0,
+          })),
+          groceryList: [],
+          planName: `Plan Nutritionnel`,
+          versionNumber: 0, // will be correct after reload
+          createdAt: now.toISOString(),
+          generatedBy: 'coach',
+        };
+
+        const snap = buildPlanSnapshot(snapshotInput);
+        await persistSnapshot(result.versionId, snap);
+      } catch (snapErr) {
+        // Non-fatal: snapshot persistence failure doesn't block the lock
+        console.warn('Snapshot persistence failed (non-fatal):', snapErr);
       }
 
       // Success - clear failure flag

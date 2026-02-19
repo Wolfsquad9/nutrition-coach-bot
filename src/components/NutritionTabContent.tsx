@@ -249,9 +249,14 @@ export function NutritionTabContent({
     }
   };
 
-  // Handle locking the plan (persists to DB)
+  // Handle locking the plan (persists to DB + builds snapshot)
   const handleLockPlan = async () => {
-    const result = await planState.lockPlan(activeClientId);
+    const result = await planState.lockPlan(activeClientId, {
+      firstName: activeClient.firstName,
+      lastName: activeClient.lastName,
+      goal: activeClient.primaryGoal,
+      activityLevel: activeClient.activityLevel,
+    });
     
     if (result.success) {
       toast({
