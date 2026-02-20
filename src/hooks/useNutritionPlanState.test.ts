@@ -39,16 +39,32 @@ vi.mock('@/services/supabaseOverrideService', () => ({
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fakeMacros = { calories: 2000, protein: 150, carbs: 200, fat: 70 };
+
+const fakeMealData = {
+  ingredients: [
+    { id: 'chicken', name: 'Chicken', category: 'protein' as const, macros: { protein: 30, carbs: 0, fat: 4, calories: 160, fiber: 0 }, allowedMeals: ['lunch' as const], typical_serving_size_g: 150, tags: [] },
+  ],
+  recipeText: 'Grilled Chicken',
+  macros: { protein: 30, carbs: 0, fat: 4, calories: 160, fiber: 0 },
+};
+const emptyMealData = { ingredients: [], recipeText: '', macros: { protein: 0, carbs: 0, fat: 0, calories: 0, fiber: 0 } };
+
 const fakeWeeklyPlan = {
   days: [
     {
       dayNumber: 1,
+      dayName: 'Day 1',
       plan: {
-        totalMacros: { calories: 2000, protein: 150, carbs: 200, fat: 70 },
-        meals: [],
+        dailyPlan: { breakfast: emptyMealData, lunch: fakeMealData, dinner: emptyMealData, snack: emptyMealData },
+        totalMacros: { calories: 160, protein: 30, carbs: 0, fat: 4, fiber: 0 },
+        targetMacros: { calories: 2000, protein: 150, carbs: 200, fat: 70 },
+        variance: { calories: 0, protein: 0, carbs: 0, fat: 0 },
       },
     },
   ],
+  weeklyTotalMacros: { calories: 160, protein: 30, carbs: 0, fat: 4, fiber: 0 },
+  weeklyTargetMacros: { calories: 2000, protein: 150, carbs: 200, fat: 70 },
+  weeklyVariance: { calories: 0, protein: 0, carbs: 0, fat: 0 },
 };
 const fakeClientInfo = { firstName: 'Jean', lastName: 'Dupont', goal: 'Perte de poids', activityLevel: 'Modéré' };
 
