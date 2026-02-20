@@ -34,6 +34,7 @@ import {
   buildAndPersistSnapshot,
 } from '@/services/snapshotPersistence';
 import { buildPlanSnapshot, type PlanSnapshot, type SnapshotBuildInput } from '@/domain/nutrition/snapshot';
+import { mapWeeklyMealPlanToSnapshot, buildGroceryListFromPlan } from '@/domain/nutrition/snapshotAdapter';
 import {
   derivePlanState,
   calculateDaysRemaining,
@@ -485,13 +486,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
           fiberGrams: 0,
           waterLiters: 0,
         },
-        weeklyPlan: weeklyPlan.days.map(d => ({
-          day: d.dayNumber,
-          meals: [],
-          totalMacros: { calories: d.plan.totalMacros.calories, protein: d.plan.totalMacros.protein, carbs: d.plan.totalMacros.carbs, fat: d.plan.totalMacros.fat },
-          hydration: 0,
-        })),
-        groceryList: [],
+        weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
+        groceryList: buildGroceryListFromPlan(weeklyPlan),
         planName: `Plan Nutritionnel`,
         versionNumber: 0, // will be correct after reload
         createdAt: now.toISOString(),
