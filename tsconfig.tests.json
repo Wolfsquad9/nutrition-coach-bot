@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "moduleResolution": "node",
+    "outDir": "./.tmp-tests"
+  },
+  "include": [
+    "src/data/ingredientDatabase.ts",
+    "src/services/recipeService.ts",
+    "src/services/supabaseOverrideService.ts",
+    "src/services/supabasePlanService.ts",
+    "src/types/index.ts",
+    "src/types/planSnapshot.ts",
+    "src/utils/planSnapshot.ts",
+    "tests/planSnapshot.test.ts"
+  ]
+}
