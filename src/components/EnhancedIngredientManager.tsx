@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,7 +71,7 @@ export default function EnhancedIngredientManager({
   );
 
   // Get client restriction for current active client
-  const getClientRestriction = (clientId: string | null): ClientIngredientRestrictions => {
+  const getClientRestriction = useCallback((clientId: string | null): ClientIngredientRestrictions => {
     if (!clientId) {
       return {
         clientId: '',
@@ -88,7 +88,7 @@ export default function EnhancedIngredientManager({
       preferredIngredients: [],
       substitutionRules: {}
     };
-  };
+  }, [activeClient, clientRestrictions]);
 
   const toggleIngredientStatus = (ingredientId: string, status: 'blocked' | 'preferred' | 'neutral') => {
     if (!activeClientId) return;
@@ -147,7 +147,7 @@ export default function EnhancedIngredientManager({
     }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
     return total;
-  }, [activeClientId, clientRestrictions]);
+  }, [activeClientId, getClientRestriction]);
 
   const exportRestrictions = () => {
     const dataStr = JSON.stringify(clientRestrictions, null, 2);

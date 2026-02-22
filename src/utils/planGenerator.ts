@@ -264,7 +264,7 @@ function generateWorkoutSession(
         ['legs', 'glutes'].includes(ex.category)
       );
       break;
-    case 'full_body':
+    case 'full_body': {
       // Prendre un peu de chaque catégorie
       const categories = ['chest', 'back', 'legs', 'shoulders'];
       selectedExercises = [];
@@ -275,6 +275,7 @@ function generateWorkoutSession(
         }
       });
       break;
+    }
   }
   
   // Limiter le nombre d'exercices selon la durée de session
