@@ -43,24 +43,22 @@ export function calculateTargetCalories(tdee: number, goal: Client['primaryGoal'
   // Daily deficit/surplus = (weekly change in kg × 7700) / 7
   
   switch (goal) {
-    case 'fat_loss':
+    case 'fat_loss': {
       // Default: -0.5 kg/week = -550 cal/day deficit
       const deficit = weeklyChange ? (weeklyChange * 7700) / 7 : 550;
       return Math.round(tdee - Math.abs(deficit));
-      
-    case 'muscle_gain':
+    }
+    case 'muscle_gain': {
       // Default: +0.25 kg/week = +275 cal/day surplus
       const surplus = weeklyChange ? (weeklyChange * 7700) / 7 : 275;
       return Math.round(tdee + surplus);
-      
+    }
     case 'recomposition':
       // Eat at maintenance or slight deficit on rest days, slight surplus on training days
       // For simplicity, we'll use maintenance
       return tdee;
-      
     case 'maintenance':
       return tdee;
-      
     default:
       return tdee;
   }

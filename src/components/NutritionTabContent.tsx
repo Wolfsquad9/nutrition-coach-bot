@@ -8,7 +8,7 @@
  * - Explicit "Lock Plan" button to persist and lock for 7 days
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -24,6 +24,7 @@ import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { PlanLockIndicator } from '@/components/DataSourceIndicator';
 import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
 import { getClientLabel } from '@/utils/clientHelpers';
+import { buildPlanSnapshot } from '@/utils/planSnapshot';
 import type { Client } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
@@ -99,6 +100,10 @@ export function NutritionTabContent({
   clientRestrictions 
 }: NutritionTabContentProps) {
   const { toast } = useToast();
+
+  const getErrorMessage = (error: unknown, fallback: string): string => {
+    return error instanceof Error ? error.message : fallback;
+  };
   
   // Plan state machine (Draft → Lock lifecycle)
   const planState = useNutritionPlanState();
@@ -164,11 +169,11 @@ export function NutritionTabContent({
         title: 'Plan journalier généré !',
         description: `${result.totalMacros.calories} kcal`,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error generating daily plan:', err);
       toast({
         title: 'Erreur',
-        description: err.message || 'Impossible de générer le plan journalier',
+        description: getErrorMessage(err, 'Impossible de générer le plan journalier'),
         variant: 'destructive',
       });
     } finally {
@@ -231,11 +236,11 @@ export function NutritionTabContent({
         title: 'Brouillon généré !',
         description: 'Le plan est en mode brouillon. Cliquez sur "Verrouiller le Plan" pour l\'enregistrer.',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error generating weekly plan:', err);
       toast({
         title: 'Erreur',
-        description: err.message || 'Impossible de générer le plan hebdomadaire',
+        description: getErrorMessage(err, 'Impossible de générer le plan hebdomadaire'),
         variant: 'destructive',
       });
     } finally {
@@ -286,6 +291,52 @@ export function NutritionTabContent({
   
   // Determine if regeneration is blocked
   const regenerationBlocked = planState.isLocked && planState.lockStatus.isLocked;
+
+
+  const snapshotWeeklyPlan = useMemo(() => {
+    if (!planState.weeklyPlan || !planState.macroTargets || !planState.isLocked) {
+      return null;
+    }
+
+    const persistedTimestamp = planState.planCreatedAt || new Date().toISOString();
+
+    try {
+      const snapshot = buildPlanSnapshot({
+        status: planState.lockStatus.isLocked ? 'LOCKED' : 'EXPIRED',
+        planPayload: {
+          type: 'nutrition',
+          generatedAt: persistedTimestamp,
+          lockedAt: persistedTimestamp,
+          macroTargets: planState.macroTargets,
+          weeklyPlan: planState.weeklyPlan,
+          likedIngredients: planState.likedIngredients,
+        },
+        pendingOverrides: planState.pendingOverrides,
+        planId: planState.planId,
+        planVersionId: planState.versionId,
+        clientId: activeClientId,
+        snapshotCreatedAt: persistedTimestamp,
+      });
+
+      return snapshot.weeklyPlan;
+    } catch (error) {
+      console.error('Failed to build plan snapshot, falling back to source weekly plan.', error);
+      return planState.weeklyPlan;
+    }
+  }, [
+    activeClientId,
+    planState.isLocked,
+    planState.likedIngredients,
+    planState.lockStatus.isLocked,
+    planState.macroTargets,
+    planState.pendingOverrides,
+    planState.planCreatedAt,
+    planState.planId,
+    planState.versionId,
+    planState.weeklyPlan,
+  ]);
+
+  const displayWeeklyPlan = snapshotWeeklyPlan ?? planState.weeklyPlan;
 
   return (
     <div className="space-y-4">
@@ -500,8 +551,8 @@ export function NutritionTabContent({
       )}
 
       {/* Weekly Plan Display */}
-      {hasWeeklyPlan && !planState.isLoading && (
-        <WeeklyMealPlanDisplay weeklyPlan={planState.weeklyPlan!} />
+      {hasWeeklyPlan && !planState.isLoading && displayWeeklyPlan && (
+        <WeeklyMealPlanDisplay weeklyPlan={displayWeeklyPlan} />
       )}
 
       {/* Daily Plan Display */}
