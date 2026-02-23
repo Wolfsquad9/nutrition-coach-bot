@@ -96,6 +96,10 @@ export interface NutritionPlanStateActions {
   discardDraft: (clientId: string) => Promise<void>;
 }
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  return error instanceof Error ? error.message : fallback;
+};
+
 export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPlanStateActions {
   // Core state
   const [state, setState] = useState<PlanState>('EMPTY');
@@ -207,9 +211,9 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
           setPendingOverrides(overridesResult.overrides);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error in loadPlanForClient:', err);
-      setError(err.message || 'Failed to load plan');
+      setError(getErrorMessage(err, 'Failed to load plan'));
       setState('ERROR');
     }
   }, []);
@@ -269,9 +273,9 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
       // Reload from DB to get fresh state with IDs and lock status
       await loadPlanForClient(clientId);
       return { success: true, error: null };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error locking plan:', err);
-      const errorMsg = err.message || 'Échec du verrouillage';
+      const errorMsg = getErrorMessage(err, 'Échec du verrouillage');
       setLastPersistenceFailed(true);
       setError(errorMsg);
       setState('ERROR');
