@@ -46,6 +46,8 @@ export interface NutritionPlanStateContext {
   planId: string | null;
   versionId: string | null;
   planCreatedAt: string | null;
+  planGeneratedAt: string | null;
+  planLockedAt: string | null;
   
   // Lock status
   lockStatus: PlanLockStatus;
@@ -111,6 +113,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
   const [planId, setPlanId] = useState<string | null>(null);
   const [versionId, setVersionId] = useState<string | null>(null);
   const [planCreatedAt, setPlanCreatedAt] = useState<string | null>(null);
+  const [planGeneratedAt, setPlanGeneratedAt] = useState<string | null>(null);
+  const [planLockedAt, setPlanLockedAt] = useState<string | null>(null);
   
   // Lock status
   const [lockStatus, setLockStatus] = useState<PlanLockStatus>({
@@ -187,6 +191,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
         setPlanId(null);
         setVersionId(null);
         setPlanCreatedAt(null);
+        setPlanGeneratedAt(null);
+        setPlanLockedAt(null);
         setPendingOverrides([]);
         setState('EMPTY');
         return;
@@ -200,6 +206,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
       setPlanId(planResult.planId);
       setVersionId(planResult.versionId);
       setPlanCreatedAt(planResult.createdAt);
+      setPlanGeneratedAt(payload.generatedAt || null);
+      setPlanLockedAt(payload.lockedAt || null);
       
       // Persisted plans are LOCKED (lock may have expired but data came from DB)
       setState('LOCKED');
@@ -234,6 +242,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setPlanId(null);
     setVersionId(null);
     setPlanCreatedAt(null);
+    setPlanGeneratedAt(null);
+    setPlanLockedAt(null);
     setState('DRAFT');
     setError(null);
     // Reset lock status for draft
@@ -296,6 +306,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setPlanId(null);
     setVersionId(null);
     setPlanCreatedAt(null);
+    setPlanGeneratedAt(null);
+    setPlanLockedAt(null);
     setError(null);
     
     // Reload from DB (will be EMPTY if no persisted plan, or LOCKED if one exists)
@@ -312,6 +324,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setPlanId(null);
     setVersionId(null);
     setPlanCreatedAt(null);
+    setPlanGeneratedAt(null);
+    setPlanLockedAt(null);
     setLockStatus({ isLocked: false, lockedUntil: null, daysRemaining: 0 });
     setPendingOverrides([]);
     setError(null);
@@ -339,6 +353,8 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     planId,
     versionId,
     planCreatedAt,
+    planGeneratedAt,
+    planLockedAt,
     lockStatus,
     pendingOverrides,
     error,

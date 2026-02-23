@@ -298,15 +298,17 @@ export function NutritionTabContent({
       return null;
     }
 
-    const persistedTimestamp = planState.planCreatedAt || new Date().toISOString();
+    const generatedAt = planState.planGeneratedAt || planState.planCreatedAt || new Date().toISOString();
+    const lockedAt = planState.planLockedAt || planState.planCreatedAt || generatedAt;
+    const snapshotCreatedAt = planState.planCreatedAt || lockedAt || generatedAt;
 
     try {
       const snapshot = buildPlanSnapshot({
         status: planState.lockStatus.isLocked ? 'LOCKED' : 'EXPIRED',
         planPayload: {
           type: 'nutrition',
-          generatedAt: persistedTimestamp,
-          lockedAt: persistedTimestamp,
+          generatedAt,
+          lockedAt,
           macroTargets: planState.macroTargets,
           weeklyPlan: planState.weeklyPlan,
           likedIngredients: planState.likedIngredients,
@@ -315,7 +317,7 @@ export function NutritionTabContent({
         planId: planState.planId,
         planVersionId: planState.versionId,
         clientId: activeClientId,
-        snapshotCreatedAt: persistedTimestamp,
+        snapshotCreatedAt,
       });
 
       return snapshot.weeklyPlan;
@@ -328,6 +330,8 @@ export function NutritionTabContent({
     planState.isLocked,
     planState.likedIngredients,
     planState.lockStatus.isLocked,
+    planState.planGeneratedAt,
+    planState.planLockedAt,
     planState.macroTargets,
     planState.pendingOverrides,
     planState.planCreatedAt,
