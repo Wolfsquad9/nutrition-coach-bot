@@ -14,6 +14,7 @@
     "src/types/index.ts",
     "src/types/planSnapshot.ts",
     "src/utils/planSnapshot.ts",
+    "src/utils/snapshotResolver.ts",
     "tests/planSnapshot.test.ts"
   ]
 }

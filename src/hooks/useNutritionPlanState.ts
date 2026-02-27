@@ -18,6 +18,7 @@
 
 import { useState, useCallback } from 'react';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
+import type { PlanSnapshot } from '@/types/planSnapshot';
 import {
   checkPlanLockStatus,
   fetchCurrentPlan,
@@ -48,6 +49,7 @@ export interface NutritionPlanStateContext {
   planCreatedAt: string | null;
   planGeneratedAt: string | null;
   planLockedAt: string | null;
+  snapshot: PlanSnapshot | null;
   
   // Lock status
   lockStatus: PlanLockStatus;
@@ -115,6 +117,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
   const [planCreatedAt, setPlanCreatedAt] = useState<string | null>(null);
   const [planGeneratedAt, setPlanGeneratedAt] = useState<string | null>(null);
   const [planLockedAt, setPlanLockedAt] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
   
   // Lock status
   const [lockStatus, setLockStatus] = useState<PlanLockStatus>({
@@ -193,6 +196,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
         setPlanCreatedAt(null);
         setPlanGeneratedAt(null);
         setPlanLockedAt(null);
+        setSnapshot(null);
         setPendingOverrides([]);
         setState('EMPTY');
         return;
@@ -208,6 +212,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
       setPlanCreatedAt(planResult.createdAt);
       setPlanGeneratedAt(payload.generatedAt || null);
       setPlanLockedAt(payload.lockedAt || null);
+      setSnapshot(planResult.snapshot);
       
       // Persisted plans are LOCKED (lock may have expired but data came from DB)
       setState('LOCKED');
@@ -244,6 +249,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setPlanCreatedAt(null);
     setPlanGeneratedAt(null);
     setPlanLockedAt(null);
+    setSnapshot(null);
     setState('DRAFT');
     setError(null);
     // Reset lock status for draft
@@ -308,6 +314,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setPlanCreatedAt(null);
     setPlanGeneratedAt(null);
     setPlanLockedAt(null);
+    setSnapshot(null);
     setError(null);
     
     // Reload from DB (will be EMPTY if no persisted plan, or LOCKED if one exists)
@@ -326,6 +333,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     setPlanCreatedAt(null);
     setPlanGeneratedAt(null);
     setPlanLockedAt(null);
+    setSnapshot(null);
     setLockStatus({ isLocked: false, lockedUntil: null, daysRemaining: 0 });
     setPendingOverrides([]);
     setError(null);
@@ -355,6 +363,7 @@ export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPl
     planCreatedAt,
     planGeneratedAt,
     planLockedAt,
+    snapshot,
     lockStatus,
     pendingOverrides,
     error,

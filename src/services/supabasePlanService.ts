@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
 import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
+import type { PlanSnapshot } from '@/types/planSnapshot';
 
 // Plan version payload structure
 export interface PlanPayload {
@@ -28,6 +29,7 @@ export interface PlanPayload {
   realismConstraintHit?: boolean;
   constraintsHitDetails?: string[];
   likedIngredients: string[];
+  locked_snapshot_json?: PlanSnapshot | null;
 }
 
 export interface NutritionPlanRow {
@@ -58,6 +60,10 @@ export interface PlanLockStatus {
   lockedUntil: Date | null;
   daysRemaining: number;
 }
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  return error instanceof Error ? error.message : fallback;
+};
 
 // Simple hash function for payload deduplication
 function hashPayload(payload: PlanPayload): string {
@@ -175,9 +181,9 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       createdAt: versionData.created_at,
       error: null,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch current plan:', error);
-    return { plan: null, planId: null, versionId: null, createdAt: null, error: error.message };
+    return { plan: null, planId: null, versionId: null, createdAt: null, error: getErrorMessage(error, 'Failed to fetch current plan') };
   }
 }
 
@@ -300,9 +306,9 @@ export async function lockNutritionPlan(
     }
 
     return { success: true, planId, versionId: newVersion.id, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to lock nutrition plan:', error);
-    return { success: false, planId: null, versionId: null, error: error.message };
+    return { success: false, planId: null, versionId: null, error: getErrorMessage(error, 'Failed to lock nutrition plan') };
   }
 }
 
@@ -345,9 +351,9 @@ export async function fetchPlanHistory(clientId: string): Promise<{
       })),
       error: null,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch plan history:', error);
-    return { versions: [], error: error.message };
+    return { versions: [], error: getErrorMessage(error, 'Failed to fetch plan history') };
   }
 }
 

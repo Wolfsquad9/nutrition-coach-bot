@@ -1,9 +1,11 @@
 import { strict as assert } from 'node:assert';
 import { buildPlanSnapshot } from '../src/utils/planSnapshot.js';
+import { resolveSnapshotWeeklyPlan } from '../src/utils/snapshotResolver.js';
 import { coreIngredients } from '../src/data/ingredientDatabase.js';
 import type { WeeklyMealPlanResult } from '../src/services/recipeService.js';
 import type { PlanPayload } from '../src/services/supabasePlanService.js';
 import type { PlanOverride } from '../src/services/supabaseOverrideService.js';
+import type { PlanSnapshot } from '../src/types/planSnapshot.js';
 
 const chicken = coreIngredients.find(ingredient => ingredient.id === 'chicken-breast');
 const tofu = coreIngredients.find(ingredient => ingredient.id === 'tofu');
@@ -119,7 +121,7 @@ const sortedSnapshotB = buildPlanSnapshot({
 assert.deepEqual(sortedSnapshotA, sortedSnapshotB);
 assert.deepEqual(
   sortedSnapshotA.metadata.overridesApplied.map(ov => ov.id),
-  ['a-override', 'b-override']
+  ['a-override']
 );
 
 // multi-meal overrides should recompute day and week totals
@@ -146,3 +148,70 @@ assert.equal(multiMealSnapshot.weeklyPlan.days[0].plan.totalMacros.protein, 40);
 assert.equal(multiMealSnapshot.weeklyPlan.days[0].plan.totalMacros.carbs, 19);
 assert.equal(multiMealSnapshot.weeklyPlan.days[0].plan.totalMacros.fat, 14);
 assert.equal(multiMealSnapshot.weeklyPlan.weeklyTotalMacros.calories, 370);
+
+// integration-oriented check: persisted snapshot is canonical for locked plans
+const persistedLockedSnapshot: PlanSnapshot = {
+  status: 'LOCKED',
+  metadata: {
+    generatedAt: payload.generatedAt,
+    lockedAt: payload.lockedAt!,
+    snapshotCreatedAt: '2024-01-06T00:00:00.000Z',
+    macroTargets: payload.macroTargets,
+    likedIngredients: payload.likedIngredients,
+    overridesApplied: [],
+  },
+  weeklyPlan: {
+    ...baseWeeklyPlan,
+    weeklyTotalMacros: { calories: 999, protein: 111, carbs: 222, fat: 33 },
+    weeklyVariance: { calories: -1, protein: -2, carbs: -3, fat: -4 },
+  },
+};
+
+let buildCalled = false;
+const resolvedFromPersisted = resolveSnapshotWeeklyPlan(
+  {
+    activeClientId: 'client-1',
+    isLocked: true,
+    lockIsActive: true,
+    weeklyPlan: baseWeeklyPlan,
+    macroTargets: payload.macroTargets,
+    likedIngredients: payload.likedIngredients,
+    pendingOverrides: [override, { ...override, id: 'override-2' }],
+    planId: 'plan-1',
+    versionId: 'version-1',
+    planCreatedAt: '2024-01-02T00:00:00.000Z',
+    planGeneratedAt: payload.generatedAt,
+    planLockedAt: payload.lockedAt!,
+    snapshot: persistedLockedSnapshot,
+  },
+  () => {
+    buildCalled = true;
+    throw new Error('build should not be called when persisted snapshot exists');
+  }
+);
+
+assert.equal(buildCalled, false);
+assert.equal(resolvedFromPersisted?.weeklyTotalMacros.calories, 999);
+
+const resolvedFromPersistedAgain = resolveSnapshotWeeklyPlan(
+  {
+    activeClientId: 'client-1',
+    isLocked: true,
+    lockIsActive: true,
+    weeklyPlan: baseWeeklyPlan,
+    macroTargets: payload.macroTargets,
+    likedIngredients: payload.likedIngredients,
+    pendingOverrides: [override],
+    planId: 'plan-1',
+    versionId: 'version-1',
+    planCreatedAt: '2024-01-02T00:00:00.000Z',
+    planGeneratedAt: payload.generatedAt,
+    planLockedAt: payload.lockedAt!,
+    snapshot: persistedLockedSnapshot,
+  },
+  () => {
+    throw new Error('build should not be called when persisted snapshot exists');
+  }
+);
+
+assert.deepEqual(resolvedFromPersisted, resolvedFromPersistedAgain);

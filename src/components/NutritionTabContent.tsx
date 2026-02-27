@@ -24,7 +24,7 @@ import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { PlanLockIndicator } from '@/components/DataSourceIndicator';
 import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
 import { getClientLabel } from '@/utils/clientHelpers';
-import { buildPlanSnapshot } from '@/utils/planSnapshot';
+import { resolveSnapshotWeeklyPlan } from '@/utils/snapshotResolver';
 import type { Client } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
@@ -294,33 +294,22 @@ export function NutritionTabContent({
 
 
   const snapshotWeeklyPlan = useMemo(() => {
-    if (!planState.weeklyPlan || !planState.macroTargets || !planState.isLocked) {
-      return null;
-    }
-
-    const generatedAt = planState.planGeneratedAt || planState.planCreatedAt || new Date().toISOString();
-    const lockedAt = planState.planLockedAt || planState.planCreatedAt || generatedAt;
-    const snapshotCreatedAt = planState.planCreatedAt || lockedAt || generatedAt;
-
     try {
-      const snapshot = buildPlanSnapshot({
-        status: planState.lockStatus.isLocked ? 'LOCKED' : 'EXPIRED',
-        planPayload: {
-          type: 'nutrition',
-          generatedAt,
-          lockedAt,
-          macroTargets: planState.macroTargets,
-          weeklyPlan: planState.weeklyPlan,
-          likedIngredients: planState.likedIngredients,
-        },
+      return resolveSnapshotWeeklyPlan({
+        activeClientId,
+        isLocked: planState.isLocked,
+        lockIsActive: planState.lockStatus.isLocked,
+        weeklyPlan: planState.weeklyPlan,
+        macroTargets: planState.macroTargets,
+        likedIngredients: planState.likedIngredients,
         pendingOverrides: planState.pendingOverrides,
         planId: planState.planId,
-        planVersionId: planState.versionId,
-        clientId: activeClientId,
-        snapshotCreatedAt,
+        versionId: planState.versionId,
+        planCreatedAt: planState.planCreatedAt,
+        planGeneratedAt: planState.planGeneratedAt,
+        planLockedAt: planState.planLockedAt,
+        snapshot: planState.snapshot,
       });
-
-      return snapshot.weeklyPlan;
     } catch (error) {
       console.error('Failed to build plan snapshot, falling back to source weekly plan.', error);
       return planState.weeklyPlan;
@@ -332,6 +321,7 @@ export function NutritionTabContent({
     planState.lockStatus.isLocked,
     planState.planGeneratedAt,
     planState.planLockedAt,
+    planState.snapshot,
     planState.macroTargets,
     planState.pendingOverrides,
     planState.planCreatedAt,
