@@ -8,7 +8,7 @@
  * - Explicit "Lock Plan" button to persist and lock for 7 days
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,7 +19,6 @@ import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanS
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
 import { calculateNutritionMetrics } from '@/utils/calculations';
 import { generateWeeklyMealPlan, generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
-import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { PlanLockIndicator } from '@/components/DataSourceIndicator';
 import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
@@ -27,6 +26,10 @@ import { getClientLabel } from '@/utils/clientHelpers';
 import { resolveSnapshotWeeklyPlan } from '@/utils/snapshotResolver';
 import type { Client } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
+
+const WeeklyMealPlanDisplay = lazy(() =>
+  import('@/components/WeeklyMealPlanDisplay').then(module => ({ default: module.WeeklyMealPlanDisplay }))
+);
 
 interface NutritionTabContentProps {
   activeClientId: string;
@@ -546,7 +549,18 @@ export function NutritionTabContent({
 
       {/* Weekly Plan Display */}
       {hasWeeklyPlan && !planState.isLoading && displayWeeklyPlan && (
-        <WeeklyMealPlanDisplay weeklyPlan={displayWeeklyPlan} />
+        <Suspense
+          fallback={
+            <Card className="p-6 shadow-card">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Chargement du plan...</span>
+              </div>
+            </Card>
+          }
+        >
+          <WeeklyMealPlanDisplay weeklyPlan={displayWeeklyPlan} />
+        </Suspense>
       )}
 
       {/* Daily Plan Display */}
