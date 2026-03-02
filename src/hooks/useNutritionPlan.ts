@@ -42,6 +42,10 @@ interface UseNutritionPlanResult {
   clearPlan: () => void;
 }
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  return error instanceof Error ? error.message : fallback;
+};
+
 export function useNutritionPlan(): UseNutritionPlanResult {
   const [currentPlan, setCurrentPlan] = useState<PlanPayload | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
@@ -89,9 +93,9 @@ export function useNutritionPlan(): UseNutritionPlanResult {
           setPendingOverrides(overridesResult.overrides);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading plan:', err);
-      setError(err.message || 'Failed to load plan');
+      setError(getErrorMessage(err, 'Failed to load plan'));
     } finally {
       setIsLoading(false);
     }
@@ -128,9 +132,9 @@ export function useNutritionPlan(): UseNutritionPlanResult {
       setIsPersisted(true);
 
       return { success: true, error: null };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving plan:', err);
-      const errorMsg = err.message || 'Failed to save plan';
+      const errorMsg = getErrorMessage(err, 'Failed to save plan');
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {

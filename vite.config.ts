@@ -15,4 +15,32 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/react-router/') ||
+              id.includes('/@radix-ui/') ||
+              id.includes('/lucide-react/')
+            ) {
+              return 'vendor-ui';
+            }
+          }
+
+          if (
+            id.includes('/src/components/WeeklyMealPlanDisplay') ||
+            id.includes('/src/components/PrintableMealPlan')
+          ) {
+            return 'nutrition-display';
+          }
+
+          return undefined;
+        },
+      },
+    },
+  },
 }));
