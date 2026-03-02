@@ -1,3 +1,5 @@
+[![CI](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml/badge.svg)](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml)
+
 # Welcome to your Lovable project
 
 ## Project info
@@ -71,3 +73,13 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Environment Variables
+
+| Variable | Description | Format |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon/public key | JWT string (safe to expose client-side) |
+| `VITE_SUPABASE_PROJECT_ID` | Supabase project reference ID | Alphanumeric string |
+
+Create a `.env` file at the project root with these values. **Never commit real keys to version control.** The `.env` file is already in `.gitignore`.
