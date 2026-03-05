@@ -60,7 +60,7 @@ const Index = () => {
     return restriction?.preferredIngredients || [];
   };
 
-  const handleInputChange = (field: keyof Client, value: any) => {
+  const handleInputChange = (field: keyof Client, value: Client[keyof Client]) => {
     if (draftClient) {
       setDraftClient({ ...draftClient, [field]: value });
     }
@@ -131,10 +131,12 @@ const Index = () => {
         title: "Plan généré avec succès !",
         description: `Plan personnalisé basé sur vos données: ${plan.nutritionPlan.metrics.targetCalories} kcal/jour`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error generating plan:', error);
-      
-      const errorMessage = error.message || "Impossible de générer le plan, réessayez plus tard";
+
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Impossible de générer le plan, réessayez plus tard";
       setError(errorMessage);
       
       toast({

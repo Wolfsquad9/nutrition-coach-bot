@@ -8,7 +8,7 @@
  * - Explicit "Lock Plan" button to persist and lock for 7 days
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,13 +19,17 @@ import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanS
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
 import { calculateNutritionMetrics } from '@/utils/calculations';
 import { generateWeeklyMealPlan, generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
-import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { PlanLockIndicator } from '@/components/DataSourceIndicator';
 import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
 import { getClientLabel } from '@/utils/clientHelpers';
+import { resolveSnapshotWeeklyPlan } from '@/utils/snapshotResolver';
 import type { Client } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
+
+const WeeklyMealPlanDisplay = lazy(() =>
+  import('@/components/WeeklyMealPlanDisplay').then(module => ({ default: module.WeeklyMealPlanDisplay }))
+);
 
 interface NutritionTabContentProps {
   activeClientId: string;
@@ -99,6 +103,10 @@ export function NutritionTabContent({
   clientRestrictions 
 }: NutritionTabContentProps) {
   const { toast } = useToast();
+
+  const getErrorMessage = (error: unknown, fallback: string): string => {
+    return error instanceof Error ? error.message : fallback;
+  };
   
   // Plan state machine (Draft → Lock lifecycle)
   const planState = useNutritionPlanState();
@@ -164,11 +172,11 @@ export function NutritionTabContent({
         title: 'Plan journalier généré !',
         description: `${result.totalMacros.calories} kcal`,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error generating daily plan:', err);
       toast({
         title: 'Erreur',
-        description: err.message || 'Impossible de générer le plan journalier',
+        description: getErrorMessage(err, 'Impossible de générer le plan journalier'),
         variant: 'destructive',
       });
     } finally {
@@ -231,11 +239,11 @@ export function NutritionTabContent({
         title: 'Brouillon généré !',
         description: 'Le plan est en mode brouillon. Cliquez sur "Verrouiller le Plan" pour l\'enregistrer.',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error generating weekly plan:', err);
       toast({
         title: 'Erreur',
-        description: err.message || 'Impossible de générer le plan hebdomadaire',
+        description: getErrorMessage(err, 'Impossible de générer le plan hebdomadaire'),
         variant: 'destructive',
       });
     } finally {
@@ -286,6 +294,46 @@ export function NutritionTabContent({
   
   // Determine if regeneration is blocked
   const regenerationBlocked = planState.isLocked && planState.lockStatus.isLocked;
+
+
+  const snapshotWeeklyPlan = useMemo(() => {
+    try {
+      return resolveSnapshotWeeklyPlan({
+        activeClientId,
+        isLocked: planState.isLocked,
+        lockIsActive: planState.lockStatus.isLocked,
+        weeklyPlan: planState.weeklyPlan,
+        macroTargets: planState.macroTargets,
+        likedIngredients: planState.likedIngredients,
+        pendingOverrides: planState.pendingOverrides,
+        planId: planState.planId,
+        versionId: planState.versionId,
+        planCreatedAt: planState.planCreatedAt,
+        planGeneratedAt: planState.planGeneratedAt,
+        planLockedAt: planState.planLockedAt,
+        snapshot: planState.snapshot,
+      });
+    } catch (error) {
+      console.error('Failed to build plan snapshot, falling back to source weekly plan.', error);
+      return planState.weeklyPlan;
+    }
+  }, [
+    activeClientId,
+    planState.isLocked,
+    planState.likedIngredients,
+    planState.lockStatus.isLocked,
+    planState.planGeneratedAt,
+    planState.planLockedAt,
+    planState.snapshot,
+    planState.macroTargets,
+    planState.pendingOverrides,
+    planState.planCreatedAt,
+    planState.planId,
+    planState.versionId,
+    planState.weeklyPlan,
+  ]);
+
+  const displayWeeklyPlan = snapshotWeeklyPlan ?? planState.weeklyPlan;
 
   return (
     <div className="space-y-4">
@@ -500,8 +548,19 @@ export function NutritionTabContent({
       )}
 
       {/* Weekly Plan Display */}
-      {hasWeeklyPlan && !planState.isLoading && (
-        <WeeklyMealPlanDisplay weeklyPlan={planState.weeklyPlan!} />
+      {hasWeeklyPlan && !planState.isLoading && displayWeeklyPlan && (
+        <Suspense
+          fallback={
+            <Card className="p-6 shadow-card">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Chargement du plan...</span>
+              </div>
+            </Card>
+          }
+        >
+          <WeeklyMealPlanDisplay weeklyPlan={displayWeeklyPlan} />
+        </Suspense>
       )}
 
       {/* Daily Plan Display */}
