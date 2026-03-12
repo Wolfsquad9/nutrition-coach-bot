@@ -21,19 +21,17 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install
+      - name: Install dependencies
         run: npm ci
 
-      - name: Type Check
+      - name: Typecheck
         run: npm run typecheck
 
       - name: Lint
         run: npm run lint
 
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
-
-      - name: Snapshot Tests
-        run: |
-          npx tsc -p tsconfig.tests.json
-          node .tmp-tests/tests/planSnapshot.test.js

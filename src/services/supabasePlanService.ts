@@ -141,6 +141,7 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
   planId: string | null;
   versionId: string | null;
   createdAt: string | null;
+  snapshot: PlanSnapshot | null;
   error: string | null;
 }> {
   try {
@@ -156,11 +157,11 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
 
     if (planError) {
       console.error('Error fetching plan:', planError);
-      return { plan: null, planId: null, versionId: null, createdAt: null, error: planError.message };
+      return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: planError.message };
     }
 
     if (!planData || !planData.current_version_id) {
-      return { plan: null, planId: null, versionId: null, createdAt: null, error: null };
+      return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null };
     }
 
     // Get the current version payload
@@ -171,7 +172,7 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       .maybeSingle();
 
     if (versionError || !versionData) {
-      return { plan: null, planId: planData.id, versionId: null, createdAt: null, error: versionError?.message || 'Version not found' };
+      return { plan: null, planId: planData.id, versionId: null, createdAt: null, snapshot: null, error: versionError?.message || 'Version not found' };
     }
 
     return {
@@ -179,11 +180,12 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       planId: planData.id,
       versionId: planData.current_version_id,
       createdAt: versionData.created_at,
+      snapshot: ((versionData.plan_payload as unknown as PlanPayload).locked_snapshot_json ?? null) as PlanSnapshot | null,
       error: null,
     };
   } catch (error: unknown) {
     console.error('Failed to fetch current plan:', error);
-    return { plan: null, planId: null, versionId: null, createdAt: null, error: getErrorMessage(error, 'Failed to fetch current plan') };
+    return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: getErrorMessage(error, 'Failed to fetch current plan') };
   }
 }
 
