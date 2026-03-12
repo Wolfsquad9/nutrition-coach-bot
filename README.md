@@ -1,5 +1,7 @@
 # Welcome to your Lovable project
 
+[![CI](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml/badge.svg)](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml)
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/014d9fee-c69a-4f4e-9e5d-5bad87cd70e9
@@ -71,3 +73,13 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Environment Variables
+
+| Variable | Description | Format |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | Supabase project URL | `https://<project-id>.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase public anon key | `JWT string` |
+
+No real keys should be committed.
+

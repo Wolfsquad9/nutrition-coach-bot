@@ -1,20 +1,21 @@
 {
-  "extends": "./tsconfig.app.json",
   "compilerOptions": {
-    "noEmit": false,
-    "allowImportingTsExtensions": false,
-    "moduleResolution": "node",
-    "outDir": "./.tmp-tests"
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": [
-    "src/data/ingredientDatabase.ts",
-    "src/services/recipeService.ts",
-    "src/services/supabaseOverrideService.ts",
-    "src/services/supabasePlanService.ts",
-    "src/types/index.ts",
-    "src/types/planSnapshot.ts",
-    "src/utils/planSnapshot.ts",
-    "src/utils/snapshotResolver.ts",
-    "tests/planSnapshot.test.ts"
+    "tests/**/*.ts",
+    "src/domain/**/*.ts",
+    "src/types/**/*.ts"
   ]
 }
