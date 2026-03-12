@@ -1,21 +1,21 @@
 {
-  "extends": "./tsconfig.app.json",
-  "compilerOptions": {
-    "noEmit": false,
-    "allowImportingTsExtensions": false,
-    "moduleResolution": "node",
-    "outDir": "./.tmp-tests",
-    "strict": false
-  },
-  "include": [
-    "src/data/ingredientDatabase.ts",
-    "src/services/recipeService.ts",
-    "src/services/supabaseOverrideService.ts",
-    "src/services/supabasePlanService.ts",
-    "src/types/index.ts",
-    "src/types/planSnapshot.ts",
-    "src/utils/planSnapshot.ts",
-    "src/utils/snapshotResolver.ts",
-    "tests/planSnapshot.test.ts"
-  ]
+"extends": "./tsconfig.app.json",
+"compilerOptions": {
+"noEmit": false,
+"allowImportingTsExtensions": false,
+"moduleResolution": "node",
+"outDir": "./.tmp-tests",
+"strict": false
+},
+"include": [
+"src/data/ingredientDatabase.ts",
+"src/services/recipeService.ts",
+"src/services/supabaseOverrideService.ts",
+"src/services/supabasePlanService.ts",
+"src/types/index.ts",
+"src/types/planSnapshot.ts",
+"src/utils/planSnapshot.ts",
+"src/utils/snapshotResolver.ts",
+"tests/planSnapshot.test.ts"
+]
 }

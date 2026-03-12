@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { z } from 'https://esm.sh/zod@3.23.8';
+
+const WhatsAppSchema = z.object({
+  clientPhone: z.string().min(1).max(30).regex(/^[\d\s+\-()]+$/),
+  planData: z.record(z.unknown()),
+  planType: z.string().max(50).optional(),
+});
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -44,15 +51,15 @@ serve(async (req) => {
     const userId = claimsData.claims.sub;
     console.log('Authenticated user:', userId);
 
-    const { clientPhone, planData, planType } = await req.json();
-
-    // Validate input
-    if (!clientPhone || !planData) {
+    const body = await req.json();
+    const parseResult = WhatsAppSchema.safeParse(body);
+    if (!parseResult.success) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: clientPhone, planData" }),
+        JSON.stringify({ error: "Invalid request data" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const { clientPhone, planData, planType } = parseResult.data;
 
     // TODO: Integrate with Twilio or Make.com webhook
     // For now, this is a skeleton endpoint
@@ -86,7 +93,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in send-whatsapp:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "An unexpected error occurred. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

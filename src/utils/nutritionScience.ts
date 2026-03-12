@@ -6,6 +6,7 @@
  */
 
 import type { IngredientData } from '@/data/ingredientDatabase';
+import { PORTION_CONSTRAINTS } from '@/domain/shared/constants';
 
 // ============= INGREDIENT ROLE TYPES =============
 
@@ -83,10 +84,10 @@ interface PortionLimits {
 
 const PORTION_LIMITS_BY_ROLE: Record<IngredientRole, PortionLimits> = {
   protein: {
-    // Max ~0.4g protein/kg bodyweight per meal
+    // Max protein/kg bodyweight per meal from domain constants
     fallbackMaxGrams: 225, // midpoint of 200-250g cooked equivalent
     preferredRangeGrams: [80, 180],
-    macroPerKgLimit: 0.4,
+    macroPerKgLimit: PORTION_CONSTRAINTS.MAX_PROTEIN_PER_MEAL_G_PER_KG,
     limitMacro: 'protein',
   },
   carb: {

@@ -11,11 +11,12 @@
 
 import { useMemo, useCallback } from 'react';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
+import { MIN_LIKED_INGREDIENTS } from '@/domain/shared/constants';
 
-// Configuration constants
+// Configuration constants - derived from domain
 export const INGREDIENT_MINIMUMS = {
   dailyPlan: 3,    // Minimum for daily plan generation
-  weeklyPlan: 5,   // Minimum for weekly plan generation (requires more variety)
+  weeklyPlan: MIN_LIKED_INGREDIENTS,   // Minimum for weekly plan generation (requires more variety)
 } as const;
 
 export interface IngredientValidationResult {

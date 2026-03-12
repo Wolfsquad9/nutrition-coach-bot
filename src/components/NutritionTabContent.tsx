@@ -67,6 +67,12 @@ function PlanStateIndicator({ state, lockStatus }: {
         ? <Lock className="w-3 h-3 mr-1" /> 
         : <Database className="w-3 h-3 mr-1" />
     },
+    EXPIRED: { 
+      label: 'Verrou expiré', 
+      variant: 'default', 
+      className: 'bg-success/20 text-success border-success/30',
+      icon: <Unlock className="w-3 h-3 mr-1" />
+    },
     LOADING: { 
       label: 'Chargement...', 
       variant: 'outline', 
@@ -251,9 +257,14 @@ export function NutritionTabContent({
     }
   };
 
-  // Handle locking the plan (persists to DB)
+  // Handle locking the plan (persists to DB + builds snapshot)
   const handleLockPlan = async () => {
-    const result = await planState.lockPlan(activeClientId);
+    const result = await planState.lockPlan(activeClientId, {
+      firstName: activeClient.firstName,
+      lastName: activeClient.lastName,
+      goal: activeClient.primaryGoal,
+      activityLevel: activeClient.activityLevel,
+    });
     
     if (result.success) {
       toast({

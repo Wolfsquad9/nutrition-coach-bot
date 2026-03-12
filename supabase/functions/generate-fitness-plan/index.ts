@@ -1,6 +1,37 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { z } from 'https://esm.sh/zod@3.23.8';
+
+function sanitize(val: string): string {
+  return val.replace(/[\n\r]/g, ' ').substring(0, 200);
+}
+
+function sanitizeArray(arr: string[]): string {
+  return arr.map(s => sanitize(s)).join(', ');
+}
+
+const ClientSchema = z.object({
+  firstName: z.string().max(100).default(''),
+  lastName: z.string().max(100).default(''),
+  age: z.coerce.number().int().min(1).max(120).optional(),
+  gender: z.string().max(20).default('unknown'),
+  height: z.coerce.number().min(50).max(300).optional(),
+  weight: z.coerce.number().min(20).max(500).optional(),
+  primaryGoal: z.string().max(100).default('general fitness'),
+  trainingExperience: z.string().max(50).default('beginner'),
+  activityLevel: z.string().max(50).default('moderately_active'),
+  trainingDaysPerWeek: z.coerce.number().int().min(1).max(7).default(3),
+  sessionDuration: z.coerce.number().int().min(10).max(300).default(60),
+  dietType: z.string().max(50).default('omnivore'),
+  mealsPerDay: z.coerce.number().int().min(1).max(10).default(3),
+  allergies: z.array(z.string().max(100)).max(50).default([]),
+  intolerances: z.array(z.string().max(100)).max(50).default([]),
+  dislikedFoods: z.array(z.string().max(100)).max(50).default([]),
+  medicalConditions: z.array(z.string().max(100)).max(50).default([]),
+  equipmentAvailable: z.array(z.string().max(100)).max(50).optional(),
+  equipment: z.array(z.string().max(100)).max(50).optional(),
+});
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -47,7 +78,15 @@ serve(async (req) => {
     const userId = claimsData.claims.sub;
     console.log('Authenticated user:', userId);
 
-    const { client } = await req.json();
+    const body = await req.json();
+    const parseResult = ClientSchema.safeParse(body.client);
+    if (!parseResult.success) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid client data' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const client = parseResult.data;
 
     // Create a detailed prompt for GPT-5 to generate the fitness plan
     const systemPrompt = `You are an expert fitness and nutrition coach specializing in personalized plans for men aged 25-55. 
@@ -69,32 +108,27 @@ Consider the client's:
 - Training experience
 - Schedule constraints`;
 
-    // Handle field name variations and provide defaults for arrays
-    const allergies = client.allergies || [];
-    const intolerances = client.intolerances || [];
-    const dislikedFoods = client.dislikedFoods || [];
-    const medicalConditions = client.medicalConditions || [];
     const equipment = client.equipmentAvailable || client.equipment || [];
 
     const userPrompt = `Generate a complete fitness plan for this client:
 
-Name: ${client.firstName || ''} ${client.lastName || ''}
-Age: ${client.age || 'unknown'} years
-Gender: ${client.gender || 'unknown'}
-Height: ${client.height || 'unknown'} cm
-Weight: ${client.weight || 'unknown'} kg
-Goal: ${client.primaryGoal || 'general fitness'}
-Training Experience: ${client.trainingExperience || 'beginner'}
-Activity Level: ${client.activityLevel || 'moderately_active'}
-Training Days Per Week: ${client.trainingDaysPerWeek || 3}
-Session Duration: ${client.sessionDuration || 60} minutes
-Diet Type: ${client.dietType || 'omnivore'}
-Meals Per Day: ${client.mealsPerDay || 3}
-Allergies: ${allergies.length > 0 ? allergies.join(', ') : 'None'}
-Intolerances: ${intolerances.length > 0 ? intolerances.join(', ') : 'None'}
-Disliked Foods: ${dislikedFoods.length > 0 ? dislikedFoods.join(', ') : 'None'}
-Medical Conditions: ${medicalConditions.length > 0 ? medicalConditions.join(', ') : 'None'}
-Equipment Available: ${equipment.length > 0 ? equipment.join(', ') : 'Bodyweight only'}
+Name: ${sanitize(client.firstName)} ${sanitize(client.lastName)}
+Age: ${client.age ?? 'unknown'} years
+Gender: ${sanitize(client.gender)}
+Height: ${client.height ?? 'unknown'} cm
+Weight: ${client.weight ?? 'unknown'} kg
+Goal: ${sanitize(client.primaryGoal)}
+Training Experience: ${sanitize(client.trainingExperience)}
+Activity Level: ${sanitize(client.activityLevel)}
+Training Days Per Week: ${client.trainingDaysPerWeek}
+Session Duration: ${client.sessionDuration} minutes
+Diet Type: ${sanitize(client.dietType)}
+Meals Per Day: ${client.mealsPerDay}
+Allergies: ${client.allergies.length > 0 ? sanitizeArray(client.allergies) : 'None'}
+Intolerances: ${client.intolerances.length > 0 ? sanitizeArray(client.intolerances) : 'None'}
+Disliked Foods: ${client.dislikedFoods.length > 0 ? sanitizeArray(client.dislikedFoods) : 'None'}
+Medical Conditions: ${client.medicalConditions.length > 0 ? sanitizeArray(client.medicalConditions) : 'None'}
+Equipment Available: ${equipment.length > 0 ? sanitizeArray(equipment) : 'Bodyweight only'}
 
 Generate a JSON response with this exact structure:
 {
@@ -206,7 +240,7 @@ Generate a JSON response with this exact structure:
     console.error('Error in generate-fitness-plan function:', error);
     return new Response(JSON.stringify({ 
       success: false,
-      error: error.message 
+      error: 'An unexpected error occurred. Please try again.' 
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -343,6 +343,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          locked_snapshot_json: Json | null
           note: string | null
           payload_hash: string
           plan_id: string
@@ -354,6 +355,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          locked_snapshot_json?: Json | null
           note?: string | null
           payload_hash: string
           plan_id: string
@@ -365,6 +367,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          locked_snapshot_json?: Json | null
           note?: string | null
           payload_hash?: string
           plan_id?: string

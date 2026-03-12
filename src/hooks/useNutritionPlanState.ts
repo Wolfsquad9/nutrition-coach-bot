@@ -1,392 +1,430 @@
 /**
  * useNutritionPlanState - State machine for nutrition plan lifecycle
- * 
- * Explicit states (Draft → Lock lifecycle):
- * - EMPTY: No plan exists for client, ready for generation
- * - DRAFT: Plan generated locally but not yet locked (coach can regenerate)
- * - LOCKED: Plan persisted and locked for 7 days (read-only)
- * - LOADING: Fetching plan from DB
- * - SAVING: Persisting plan to DB (during lock operation)
- * - ERROR: An error occurred
- * 
- * Key behavior:
- * - Generation creates a DRAFT (not persisted)
- * - Explicit "Lock Plan" action persists and locks the plan
- * - Only LOCKED plans are saved to Supabase
- * - Lock expires after 7 days, allowing new draft creation
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { PlanSnapshot } from '@/types/planSnapshot';
+
 import {
   checkPlanLockStatus,
   fetchCurrentPlan,
   lockNutritionPlan,
-  type PlanPayload,
   type PlanLockStatus,
 } from '@/services/supabasePlanService';
+
 import {
   fetchPendingOverrides,
   type PlanOverride,
 } from '@/services/supabaseOverrideService';
 
-// Explicit plan lifecycle states (Draft → Lock)
-export type PlanState = 'EMPTY' | 'DRAFT' | 'LOCKED' | 'LOADING' | 'SAVING' | 'ERROR';
+import {
+  fetchPersistedSnapshot,
+  persistSnapshot,
+} from '@/services/snapshotPersistence';
 
-export interface NutritionPlanStateContext {
-  // Current lifecycle state
-  state: PlanState;
-  
-  // Plan data (from DB when LOCKED, from generation when DRAFT)
-  weeklyPlan: WeeklyMealPlanResult | null;
-  macroTargets: { calories: number; protein: number; carbs: number; fat: number } | null;
-  likedIngredients: string[];
-  
-  // DB metadata (only present when LOCKED)
-  planId: string | null;
-  versionId: string | null;
-  planCreatedAt: string | null;
-  planGeneratedAt: string | null;
-  planLockedAt: string | null;
-  snapshot: PlanSnapshot | null;
-  
-  // Lock status
-  lockStatus: PlanLockStatus;
-  pendingOverrides: PlanOverride[];
-  
-  // Error
-  error: string | null;
-  
-  // Persistence failure tracking - blocks zombie state
-  lastPersistenceFailed: boolean;
-  
-  // Derived booleans for easy UI rendering
-  isEmpty: boolean;
-  isDraft: boolean;
-  isLocked: boolean;
-  isLoading: boolean;
-  isSaving: boolean;
-  isError: boolean;
-  canGenerate: boolean; // Can create/regenerate a draft
-  canLock: boolean;     // Can lock the current draft
-  isBlocked: boolean;   // True if persistence failed - blocks operations
-  
-  // Legacy compatibility
-  isPersisted: boolean;
-}
+import {
+  buildPlanSnapshot,
+  type SnapshotBuildInput,
+} from '@/domain/nutrition/snapshot';
 
-export interface NutritionPlanStateActions {
-  // Load plan from DB for a client
-  loadPlanForClient: (clientId: string) => Promise<void>;
-  
-  // Set a draft plan (after generation - NOT persisted)
-  setDraftPlan: (
-    weeklyPlan: WeeklyMealPlanResult,
-    macroTargets: { calories: number; protein: number; carbs: number; fat: number },
-    likedIngredients: string[]
-  ) => void;
-  
-  // Lock the current draft (persists to DB and starts 7-day lock)
-  lockPlan: (clientId: string) => Promise<{ success: boolean; error: string | null }>;
-  
-  // Clear all state (on client switch)
-  clearState: () => void;
-  
-  // Reset error state
-  clearError: () => void;
-  
-  // Discard draft and revert to previous state
-  discardDraft: (clientId: string) => Promise<void>;
+import {
+  mapWeeklyMealPlanToSnapshot,
+  buildGroceryListFromPlan,
+} from '@/domain/nutrition/snapshotAdapter';
+
+import {
+  derivePlanState,
+  calculateDaysRemaining,
+  calculateLockExpiry,
+  canLock as domainCanLock,
+  canRegenerate as domainCanRegenerate,
+  isImmutable as domainIsImmutable,
+  isActionPermitted,
+  validateImmutability,
+  checkShareability,
+  type PlanLifecycleState,
+  type PlanStateContext,
+  type PlanAction,
+} from '@/domain/nutrition/planLifecycle';
+
+export type UIState = 'IDLE' | 'LOADING' | 'SAVING' | 'ERROR';
+export type PlanState = PlanLifecycleState | 'LOADING' | 'SAVING' | 'ERROR';
+
+export interface LockClientInfo {
+  firstName: string;
+  lastName: string;
+  goal: string;
+  activityLevel: string;
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;
 };
 
-export function useNutritionPlanState(): NutritionPlanStateContext & NutritionPlanStateActions {
-  // Core state
-  const [state, setState] = useState<PlanState>('EMPTY');
-  const [weeklyPlan, setWeeklyPlan] = useState<WeeklyMealPlanResult | null>(null);
-  const [macroTargets, setMacroTargets] = useState<{ calories: number; protein: number; carbs: number; fat: number } | null>(null);
-  const [likedIngredients, setLikedIngredients] = useState<string[]>([]);
-  
-  // DB metadata
-  const [planId, setPlanId] = useState<string | null>(null);
-  const [versionId, setVersionId] = useState<string | null>(null);
-  const [planCreatedAt, setPlanCreatedAt] = useState<string | null>(null);
-  const [planGeneratedAt, setPlanGeneratedAt] = useState<string | null>(null);
-  const [planLockedAt, setPlanLockedAt] = useState<string | null>(null);
-  const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
-  
-  // Lock status
-  const [lockStatus, setLockStatus] = useState<PlanLockStatus>({
-    isLocked: false,
-    lockedUntil: null,
-    daysRemaining: 0,
-  });
-  const [pendingOverrides, setPendingOverrides] = useState<PlanOverride[]>([]);
-  
-  // Error and persistence failure tracking
+export function useNutritionPlanState() {
+
+  /* -------------------------------------------------------
+     CORE UI STATE
+  ------------------------------------------------------- */
+
+  const [uiState, setUiState] = useState<UIState>('IDLE');
   const [error, setError] = useState<string | null>(null);
   const [lastPersistenceFailed, setLastPersistenceFailed] = useState(false);
 
-  // Derived state
-  const isEmpty = state === 'EMPTY';
-  const isDraft = state === 'DRAFT';
-  const isLocked = state === 'LOCKED';
-  const isLoading = state === 'LOADING';
-  const isSaving = state === 'SAVING';
-  const isError = state === 'ERROR';
-  
-  // Legacy compatibility
-  const isPersisted = isLocked;
-  
-  // CRITICAL: Block operations if last persistence failed (zombie state prevention)
-  const isBlocked = lastPersistenceFailed || state === 'ERROR';
-  
-  // Can generate if not blocked, not loading/saving
-  // In DRAFT state: can regenerate freely
-  // In LOCKED state: only if lock has expired
-  // In EMPTY state: can generate
-  const canGenerate = !isBlocked && !isLoading && !isSaving && (
-    state === 'EMPTY' || 
-    state === 'DRAFT' || 
-    (state === 'LOCKED' && !lockStatus.isLocked) // Lock expired
-  );
-  
-  // Can only lock if in DRAFT state with valid plan data
-  const canLock = state === 'DRAFT' && !!weeklyPlan && !!macroTargets && !isBlocked;
+  /* -------------------------------------------------------
+     PLAN DATA
+  ------------------------------------------------------- */
 
-  /**
-   * Load plan from database for a given client
-   */
+  const [weeklyPlan, setWeeklyPlan] = useState<WeeklyMealPlanResult | null>(null);
+  const [macroTargets, setMacroTargets] = useState<any | null>(null);
+  const [likedIngredients, setLikedIngredients] = useState<string[]>([]);
+
+  /* -------------------------------------------------------
+     SNAPSHOT
+  ------------------------------------------------------- */
+
+  const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
+
+  /* -------------------------------------------------------
+     DB METADATA
+  ------------------------------------------------------- */
+
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [versionId, setVersionId] = useState<string | null>(null);
+  const [versionNumber, setVersionNumber] = useState<number | null>(null);
+  const [planCreatedAt, setPlanCreatedAt] = useState<string | null>(null);
+  const [payloadHash, setPayloadHash] = useState<string | null>(null);
+
+  /* -------------------------------------------------------
+     LOCK METADATA
+  ------------------------------------------------------- */
+
+  const [lockedAt, setLockedAt] = useState<Date | null>(null);
+  const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
+
+  /* -------------------------------------------------------
+     OVERRIDES
+  ------------------------------------------------------- */
+
+  const [pendingOverrides, setPendingOverrides] = useState<PlanOverride[]>([]);
+
+  /* -------------------------------------------------------
+     LIFECYCLE STATE
+  ------------------------------------------------------- */
+
+  const lifecycleState = useMemo<PlanLifecycleState>(() => {
+    return derivePlanState({
+      hasPlan: !!weeklyPlan,
+      isPersisted: !!versionId,
+      lockedAt,
+    });
+  }, [weeklyPlan, versionId, lockedAt]);
+
+  const daysRemaining = useMemo(() => {
+    if (!lockedAt) return 0;
+    return calculateDaysRemaining(lockedAt);
+  }, [lockedAt]);
+
+  const planStateContext: PlanStateContext = {
+    state: lifecycleState,
+    planId,
+    versionId,
+    versionNumber,
+    lockedAt,
+    lockedUntil,
+    daysRemaining,
+    payloadHash,
+  };
+
+  /* -------------------------------------------------------
+     PERMISSIONS
+  ------------------------------------------------------- */
+
+  const canGenerate =
+    !lastPersistenceFailed &&
+    uiState === 'IDLE' &&
+    (lifecycleState === 'EMPTY' || lifecycleState === 'EXPIRED');
+
+  const canRegenerate =
+    !lastPersistenceFailed &&
+    uiState === 'IDLE' &&
+    domainCanRegenerate(lifecycleState);
+
+  const canLock =
+    !lastPersistenceFailed &&
+    uiState === 'IDLE' &&
+    domainCanLock(lifecycleState) &&
+    !!weeklyPlan &&
+    !!macroTargets;
+
+  const canDiscard =
+    !lastPersistenceFailed &&
+    uiState === 'IDLE' &&
+    isActionPermitted(lifecycleState, 'DISCARD');
+
+  const canPrint = isActionPermitted(lifecycleState, 'PRINT');
+  const canShare = isActionPermitted(lifecycleState, 'SHARE');
+
+  const isImmutable = domainIsImmutable(lifecycleState);
+
+  const shareabilityCheck = checkShareability(planStateContext);
+  const isShareable = shareabilityCheck.isShareable;
+
+  const state: PlanState =
+    uiState === 'LOADING'
+      ? 'LOADING'
+      : uiState === 'SAVING'
+      ? 'SAVING'
+      : uiState === 'ERROR'
+      ? 'ERROR'
+      : lifecycleState;
+
+  /* -------------------------------------------------------
+     LOAD PLAN
+  ------------------------------------------------------- */
+
   const loadPlanForClient = useCallback(async (clientId: string) => {
-    if (!clientId) {
-      setState('EMPTY');
-      return;
-    }
 
-    setState('LOADING');
+    if (!clientId) return;
+
+    setUiState('LOADING');
     setError(null);
 
     try {
-      // Fetch current plan and lock status in parallel
+
       const [planResult, lockResult] = await Promise.all([
         fetchCurrentPlan(clientId),
         checkPlanLockStatus(clientId),
       ]);
 
-      if (planResult.error) {
-        console.error('Error loading plan:', planResult.error);
-        setError(planResult.error);
-        setState('ERROR');
-        return;
-      }
-
-      setLockStatus(lockResult);
-
       if (!planResult.plan) {
-        // No plan exists for this client
-        setWeeklyPlan(null);
-        setMacroTargets(null);
-        setLikedIngredients([]);
-        setPlanId(null);
-        setVersionId(null);
-        setPlanCreatedAt(null);
-        setPlanGeneratedAt(null);
-        setPlanLockedAt(null);
-        setSnapshot(null);
-        setPendingOverrides([]);
-        setState('EMPTY');
+        clearState();
+        setUiState('IDLE');
         return;
       }
 
-      // Plan exists - hydrate state from DB
       const payload = planResult.plan;
+
       setWeeklyPlan(payload.weeklyPlan);
       setMacroTargets(payload.macroTargets);
       setLikedIngredients(payload.likedIngredients || []);
+
       setPlanId(planResult.planId);
       setVersionId(planResult.versionId);
       setPlanCreatedAt(planResult.createdAt);
-      setPlanGeneratedAt(payload.generatedAt || null);
-      setPlanLockedAt(payload.lockedAt || null);
-      setSnapshot(planResult.snapshot);
-      
-      // Persisted plans are LOCKED (lock may have expired but data came from DB)
-      setState('LOCKED');
+      setPayloadHash(payload.payloadHash || null);
 
-      // Fetch pending overrides if we have a version
+      const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
+
+      setLockedAt(planLockedAt);
+
+      if (planLockedAt) {
+        setLockedUntil(calculateLockExpiry(planLockedAt));
+      } else {
+        setLockedUntil(lockResult.lockedUntil);
+      }
+
       if (planResult.versionId) {
-        const overridesResult = await fetchPendingOverrides(planResult.versionId);
+
+        const [overridesResult, snapshotResult] = await Promise.all([
+          fetchPendingOverrides(planResult.versionId),
+          fetchPersistedSnapshot(planResult.versionId),
+        ]);
+
         if (!overridesResult.error) {
           setPendingOverrides(overridesResult.overrides);
         }
+
+        setSnapshot(snapshotResult.snapshot || null);
       }
-    } catch (err: unknown) {
-      console.error('Error in loadPlanForClient:', err);
+
+      setUiState('IDLE');
+
+    } catch (err) {
+
+      console.error(err);
       setError(getErrorMessage(err, 'Failed to load plan'));
-      setState('ERROR');
-    }
-  }, []);
+      setUiState('ERROR');
 
-  /**
-   * Set a draft plan (after local generation - NOT persisted to DB)
-   * Coach can regenerate freely while in DRAFT state
-   */
-  const setDraftPlan = useCallback((
-    newWeeklyPlan: WeeklyMealPlanResult,
-    newMacroTargets: { calories: number; protein: number; carbs: number; fat: number },
-    newLikedIngredients: string[]
-  ) => {
-    setWeeklyPlan(newWeeklyPlan);
-    setMacroTargets(newMacroTargets);
-    setLikedIngredients(newLikedIngredients);
-    // Clear DB metadata since this is a new draft (NOT persisted)
-    setPlanId(null);
-    setVersionId(null);
-    setPlanCreatedAt(null);
-    setPlanGeneratedAt(null);
-    setPlanLockedAt(null);
-    setSnapshot(null);
-    setState('DRAFT');
-    setError(null);
-    // Reset lock status for draft
-    setLockStatus({ isLocked: false, lockedUntil: null, daysRemaining: 0 });
-  }, []);
-
-  /**
-   * Lock the current draft plan - persists to DB and starts 7-day lock
-   */
-  const lockPlan = useCallback(async (clientId: string): Promise<{ success: boolean; error: string | null }> => {
-    if (state !== 'DRAFT' || !weeklyPlan || !macroTargets) {
-      return { success: false, error: 'Aucun brouillon à verrouiller' };
     }
 
-    setState('SAVING');
-    setError(null);
+  }, []);
 
-    try {
-      const result = await lockNutritionPlan(
-        clientId,
-        weeklyPlan,
-        macroTargets,
-        likedIngredients
-      );
+  /* -------------------------------------------------------
+     DRAFT PLAN
+  ------------------------------------------------------- */
 
-      if (!result.success) {
-        // CRITICAL: Track persistence failure to block zombie state
-        setLastPersistenceFailed(true);
-        setError(result.error);
-        setState('ERROR');
-        return { success: false, error: result.error };
+  const setDraftPlan = useCallback(
+    (plan: WeeklyMealPlanResult, macros: any, ingredients: string[]) => {
+
+      const validation = validateImmutability(lifecycleState, 'REGENERATE');
+
+      if (!validation.valid) return;
+
+      setWeeklyPlan(plan);
+      setMacroTargets(macros);
+      setLikedIngredients(ingredients);
+
+      setPlanId(null);
+      setVersionId(null);
+      setVersionNumber(null);
+      setPlanCreatedAt(null);
+      setPayloadHash(null);
+      setLockedAt(null);
+      setLockedUntil(null);
+      setSnapshot(null);
+
+    },
+    [lifecycleState]
+  );
+
+  /* -------------------------------------------------------
+     LOCK PLAN
+  ------------------------------------------------------- */
+
+  const lockPlan = useCallback(
+    async (clientId: string, clientInfo: LockClientInfo) => {
+
+      if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
+        return { success: false, error: 'Aucun brouillon à verrouiller' };
       }
 
-      // Success - clear failure flag
-      setLastPersistenceFailed(false);
-      
-      // Reload from DB to get fresh state with IDs and lock status
-      await loadPlanForClient(clientId);
-      return { success: true, error: null };
-    } catch (err: unknown) {
-      console.error('Error locking plan:', err);
-      const errorMsg = getErrorMessage(err, 'Échec du verrouillage');
-      setLastPersistenceFailed(true);
-      setError(errorMsg);
-      setState('ERROR');
-      return { success: false, error: errorMsg };
-    }
-  }, [state, weeklyPlan, macroTargets, likedIngredients, loadPlanForClient]);
+      setUiState('SAVING');
 
-  /**
-   * Discard draft and revert to previous state
-   */
-  const discardDraft = useCallback(async (clientId: string) => {
-    if (state !== 'DRAFT') return;
-    
-    // Clear draft data
-    setWeeklyPlan(null);
-    setMacroTargets(null);
-    setLikedIngredients([]);
-    setPlanId(null);
-    setVersionId(null);
-    setPlanCreatedAt(null);
-    setPlanGeneratedAt(null);
-    setPlanLockedAt(null);
-    setSnapshot(null);
-    setError(null);
-    
-    // Reload from DB (will be EMPTY if no persisted plan, or LOCKED if one exists)
-    await loadPlanForClient(clientId);
-  }, [state, loadPlanForClient]);
+      try {
 
-  /**
-   * Clear all state (on client switch)
-   */
+        const result = await lockNutritionPlan(
+          clientId,
+          weeklyPlan,
+          macroTargets,
+          likedIngredients
+        );
+
+        if (!result.success || !result.versionId) {
+          setUiState('ERROR');
+          return { success: false, error: result.error };
+        }
+
+        const now = new Date();
+
+        const snapshotInput: SnapshotBuildInput = {
+          identifier: {
+            versionId: result.versionId,
+            lockedAt: now,
+            lockedUntil: calculateLockExpiry(now),
+            payloadHash: '',
+          },
+          client: clientInfo,
+          metrics: {
+            targetCalories: macroTargets.calories,
+            proteinGrams: macroTargets.protein,
+            carbsGrams: macroTargets.carbs,
+            fatGrams: macroTargets.fat,
+          },
+          weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
+          groceryList: buildGroceryListFromPlan(weeklyPlan),
+          createdAt: now.toISOString(),
+          planName: 'Plan Nutritionnel',
+          versionNumber: 0,
+          generatedBy: 'coach',
+        };
+
+        const snap = buildPlanSnapshot(snapshotInput);
+
+        const snapResult = await persistSnapshot(result.versionId, snap);
+
+        if (!snapResult.success) {
+          setUiState('ERROR');
+          return { success: false, error: snapResult.error };
+        }
+
+        await loadPlanForClient(clientId);
+
+        return { success: true, error: null };
+
+      } catch (err) {
+
+        setUiState('ERROR');
+        return { success: false, error: getErrorMessage(err, 'Lock failed') };
+
+      }
+    },
+    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, loadPlanForClient]
+  );
+
+  /* -------------------------------------------------------
+     CLEAR STATE
+  ------------------------------------------------------- */
+
   const clearState = useCallback(() => {
+
     setWeeklyPlan(null);
     setMacroTargets(null);
     setLikedIngredients([]);
+
+    setSnapshot(null);
+
     setPlanId(null);
     setVersionId(null);
+    setVersionNumber(null);
     setPlanCreatedAt(null);
-    setPlanGeneratedAt(null);
-    setPlanLockedAt(null);
-    setSnapshot(null);
-    setLockStatus({ isLocked: false, lockedUntil: null, daysRemaining: 0 });
+    setPayloadHash(null);
+
+    setLockedAt(null);
+    setLockedUntil(null);
+
     setPendingOverrides([]);
+
     setError(null);
     setLastPersistenceFailed(false);
-    setState('EMPTY');
+    setUiState('IDLE');
+
   }, []);
 
-  /**
-   * Clear error state and unblock operations
-   */
-  const clearError = useCallback(() => {
-    setError(null);
-    setLastPersistenceFailed(false);
-    if (state === 'ERROR') {
-      setState('EMPTY');
-    }
-  }, [state]);
+  /* -------------------------------------------------------
+     RETURN API
+  ------------------------------------------------------- */
 
   return {
-    // State
+
+    lifecycleState,
+    uiState,
     state,
+
     weeklyPlan,
     macroTargets,
     likedIngredients,
+
+    snapshot,
+
     planId,
     versionId,
+    versionNumber,
     planCreatedAt,
-    planGeneratedAt,
-    planLockedAt,
-    snapshot,
-    lockStatus,
+    payloadHash,
+
+    lockedAt,
+    lockedUntil,
+    daysRemaining,
+
     pendingOverrides,
     error,
-    lastPersistenceFailed,
-    
-    // Derived
-    isEmpty,
-    isDraft,
-    isLocked,
-    isLoading,
-    isSaving,
-    isError,
+
     canGenerate,
+    canRegenerate,
     canLock,
-    isBlocked,
-    isPersisted, // Legacy compatibility
-    
-    // Actions
+    canDiscard,
+    canPrint,
+    canShare,
+
+    isImmutable,
+    isShareable,
+
     loadPlanForClient,
     setDraftPlan,
     lockPlan,
     clearState,
-    clearError,
-    discardDraft,
+
   };
 }
