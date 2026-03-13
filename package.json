@@ -7,7 +7,7 @@
 "dev": "vite",
 "build": "vite build",
 "build:dev": "vite build --mode development",
-"lint": "eslint "src/**/*.{ts,tsx}"",
+"lint": "eslint src/**/*.{ts,tsx}",
 "preview": "vite preview",
 "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
 "test:snapshot": "npx tsc -p tsconfig.tests.json && node .tmp-tests/tests/planSnapshot.test.js",
