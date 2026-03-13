@@ -2,36 +2,35 @@
  * useNutritionPlanState - State machine for nutrition plan lifecycle
  */
 
-import { useState, useCallback, useMemo } from 'react';
-import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { PlanSnapshot } from '@/types/planSnapshot';
+import { useState, useCallback, useMemo } from "react";
+import type { WeeklyMealPlanResult } from "@/services/recipeService";
+import type { PlanSnapshot } from "@/types/planSnapshot";
 
 import {
   checkPlanLockStatus,
   fetchCurrentPlan,
   lockNutritionPlan,
-  type PlanLockStatus,
-} from '@/services/supabasePlanService';
+} from "@/services/supabasePlanService";
 
 import {
   fetchPendingOverrides,
   type PlanOverride,
-} from '@/services/supabaseOverrideService';
+} from "@/services/supabaseOverrideService";
 
 import {
   fetchPersistedSnapshot,
   persistSnapshot,
-} from '@/services/snapshotPersistence';
+} from "@/services/snapshotPersistence";
 
 import {
   buildPlanSnapshot,
   type SnapshotBuildInput,
-} from '@/domain/nutrition/snapshot';
+} from "@/domain/nutrition/snapshot";
 
 import {
   mapWeeklyMealPlanToSnapshot,
   buildGroceryListFromPlan,
-} from '@/domain/nutrition/snapshotAdapter';
+} from "@/domain/nutrition/snapshotAdapter";
 
 import {
   derivePlanState,
@@ -45,11 +44,15 @@ import {
   checkShareability,
   type PlanLifecycleState,
   type PlanStateContext,
-  type PlanAction,
-} from '@/domain/nutrition/planLifecycle';
+} from "@/domain/nutrition/planLifecycle";
 
-export type UIState = 'IDLE' | 'LOADING' | 'SAVING' | 'ERROR';
-export type PlanState = PlanLifecycleState | 'LOADING' | 'SAVING' | 'ERROR';
+export type UIState = "IDLE" | "LOADING" | "SAVING" | "ERROR";
+export type PlanState = PlanLifecycleState | "LOADING" | "SAVING" | "ERROR";
+
+export interface LockStatus {
+  isLocked: boolean;
+  daysRemaining: number;
+}
 
 export interface LockClientInfo {
   firstName: string;
@@ -63,32 +66,23 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 };
 
 export function useNutritionPlanState() {
+  /* ---------------- UI STATE ---------------- */
 
-  /* -------------------------------------------------------
-     CORE UI STATE
-  ------------------------------------------------------- */
-
-  const [uiState, setUiState] = useState<UIState>('IDLE');
+  const [uiState, setUiState] = useState<UIState>("IDLE");
   const [error, setError] = useState<string | null>(null);
   const [lastPersistenceFailed, setLastPersistenceFailed] = useState(false);
 
-  /* -------------------------------------------------------
-     PLAN DATA
-  ------------------------------------------------------- */
+  /* ---------------- PLAN DATA ---------------- */
 
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyMealPlanResult | null>(null);
   const [macroTargets, setMacroTargets] = useState<any | null>(null);
   const [likedIngredients, setLikedIngredients] = useState<string[]>([]);
 
-  /* -------------------------------------------------------
-     SNAPSHOT
-  ------------------------------------------------------- */
+  /* ---------------- SNAPSHOT ---------------- */
 
   const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
 
-  /* -------------------------------------------------------
-     DB METADATA
-  ------------------------------------------------------- */
+  /* ---------------- DB METADATA ---------------- */
 
   const [planId, setPlanId] = useState<string | null>(null);
   const [versionId, setVersionId] = useState<string | null>(null);
@@ -96,22 +90,16 @@ export function useNutritionPlanState() {
   const [planCreatedAt, setPlanCreatedAt] = useState<string | null>(null);
   const [payloadHash, setPayloadHash] = useState<string | null>(null);
 
-  /* -------------------------------------------------------
-     LOCK METADATA
-  ------------------------------------------------------- */
+  /* ---------------- LOCK ---------------- */
 
   const [lockedAt, setLockedAt] = useState<Date | null>(null);
   const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
 
-  /* -------------------------------------------------------
-     OVERRIDES
-  ------------------------------------------------------- */
+  /* ---------------- OVERRIDES ---------------- */
 
   const [pendingOverrides, setPendingOverrides] = useState<PlanOverride[]>([]);
 
-  /* -------------------------------------------------------
-     LIFECYCLE STATE
-  ------------------------------------------------------- */
+  /* ---------------- LIFECYCLE ---------------- */
 
   const lifecycleState = useMemo<PlanLifecycleState>(() => {
     return derivePlanState({
@@ -126,6 +114,31 @@ export function useNutritionPlanState() {
     return calculateDaysRemaining(lockedAt);
   }, [lockedAt]);
 
+  const lockStatus: LockStatus = useMemo(() => {
+    return {
+      isLocked: !!lockedAt && daysRemaining > 0,
+      daysRemaining,
+    };
+  }, [lockedAt, daysRemaining]);
+
+  /* ---------------- UI FLAGS ---------------- */
+
+  const isLoading = uiState === "LOADING";
+  const isSaving = uiState === "SAVING";
+  const isBlocked = uiState === "ERROR";
+
+  const isDraft = lifecycleState === "DRAFT";
+  const isLocked = lifecycleState === "LOCKED";
+
+  const state: PlanState =
+    uiState === "LOADING"
+      ? "LOADING"
+      : uiState === "SAVING"
+      ? "SAVING"
+      : uiState === "ERROR"
+      ? "ERROR"
+      : lifecycleState;
+
   const planStateContext: PlanStateContext = {
     state: lifecycleState,
     planId,
@@ -137,62 +150,47 @@ export function useNutritionPlanState() {
     payloadHash,
   };
 
-  /* -------------------------------------------------------
-     PERMISSIONS
-  ------------------------------------------------------- */
+  /* ---------------- PERMISSIONS ---------------- */
 
   const canGenerate =
     !lastPersistenceFailed &&
-    uiState === 'IDLE' &&
-    (lifecycleState === 'EMPTY' || lifecycleState === 'EXPIRED');
+    uiState === "IDLE" &&
+    (lifecycleState === "EMPTY" || lifecycleState === "EXPIRED");
 
   const canRegenerate =
     !lastPersistenceFailed &&
-    uiState === 'IDLE' &&
+    uiState === "IDLE" &&
     domainCanRegenerate(lifecycleState);
 
   const canLock =
     !lastPersistenceFailed &&
-    uiState === 'IDLE' &&
+    uiState === "IDLE" &&
     domainCanLock(lifecycleState) &&
     !!weeklyPlan &&
     !!macroTargets;
 
   const canDiscard =
     !lastPersistenceFailed &&
-    uiState === 'IDLE' &&
-    isActionPermitted(lifecycleState, 'DISCARD');
+    uiState === "IDLE" &&
+    isActionPermitted(lifecycleState, "DISCARD");
 
-  const canPrint = isActionPermitted(lifecycleState, 'PRINT');
-  const canShare = isActionPermitted(lifecycleState, 'SHARE');
+  const canPrint = isActionPermitted(lifecycleState, "PRINT");
+  const canShare = isActionPermitted(lifecycleState, "SHARE");
 
   const isImmutable = domainIsImmutable(lifecycleState);
 
   const shareabilityCheck = checkShareability(planStateContext);
   const isShareable = shareabilityCheck.isShareable;
 
-  const state: PlanState =
-    uiState === 'LOADING'
-      ? 'LOADING'
-      : uiState === 'SAVING'
-      ? 'SAVING'
-      : uiState === 'ERROR'
-      ? 'ERROR'
-      : lifecycleState;
-
-  /* -------------------------------------------------------
-     LOAD PLAN
-  ------------------------------------------------------- */
+  /* ---------------- LOAD PLAN ---------------- */
 
   const loadPlanForClient = useCallback(async (clientId: string) => {
-
     if (!clientId) return;
 
-    setUiState('LOADING');
+    setUiState("LOADING");
     setError(null);
 
     try {
-
       const [planResult, lockResult] = await Promise.all([
         fetchCurrentPlan(clientId),
         checkPlanLockStatus(clientId),
@@ -200,7 +198,7 @@ export function useNutritionPlanState() {
 
       if (!planResult.plan) {
         clearState();
-        setUiState('IDLE');
+        setUiState("IDLE");
         return;
       }
 
@@ -226,7 +224,6 @@ export function useNutritionPlanState() {
       }
 
       if (planResult.versionId) {
-
         const [overridesResult, snapshotResult] = await Promise.all([
           fetchPendingOverrides(planResult.versionId),
           fetchPersistedSnapshot(planResult.versionId),
@@ -239,27 +236,19 @@ export function useNutritionPlanState() {
         setSnapshot(snapshotResult.snapshot || null);
       }
 
-      setUiState('IDLE');
-
+      setUiState("IDLE");
     } catch (err) {
-
       console.error(err);
-      setError(getErrorMessage(err, 'Failed to load plan'));
-      setUiState('ERROR');
-
+      setError(getErrorMessage(err, "Failed to load plan"));
+      setUiState("ERROR");
     }
-
   }, []);
 
-  /* -------------------------------------------------------
-     DRAFT PLAN
-  ------------------------------------------------------- */
+  /* ---------------- DRAFT ---------------- */
 
   const setDraftPlan = useCallback(
     (plan: WeeklyMealPlanResult, macros: any, ingredients: string[]) => {
-
-      const validation = validateImmutability(lifecycleState, 'REGENERATE');
-
+      const validation = validateImmutability(lifecycleState, "REGENERATE");
       if (!validation.valid) return;
 
       setWeeklyPlan(plan);
@@ -274,26 +263,21 @@ export function useNutritionPlanState() {
       setLockedAt(null);
       setLockedUntil(null);
       setSnapshot(null);
-
     },
     [lifecycleState]
   );
 
-  /* -------------------------------------------------------
-     LOCK PLAN
-  ------------------------------------------------------- */
+  /* ---------------- LOCK ---------------- */
 
   const lockPlan = useCallback(
     async (clientId: string, clientInfo: LockClientInfo) => {
-
       if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
-        return { success: false, error: 'Aucun brouillon à verrouiller' };
+        return { success: false, error: "Aucun brouillon à verrouiller" };
       }
 
-      setUiState('SAVING');
+      setUiState("SAVING");
 
       try {
-
         const result = await lockNutritionPlan(
           clientId,
           weeklyPlan,
@@ -302,67 +286,27 @@ export function useNutritionPlanState() {
         );
 
         if (!result.success || !result.versionId) {
-          setUiState('ERROR');
+          setUiState("ERROR");
           return { success: false, error: result.error };
-        }
-
-        const now = new Date();
-
-        const snapshotInput: SnapshotBuildInput = {
-          identifier: {
-            versionId: result.versionId,
-            lockedAt: now,
-            lockedUntil: calculateLockExpiry(now),
-            payloadHash: '',
-          },
-          client: clientInfo,
-          metrics: {
-            targetCalories: macroTargets.calories,
-            proteinGrams: macroTargets.protein,
-            carbsGrams: macroTargets.carbs,
-            fatGrams: macroTargets.fat,
-          },
-          weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
-          groceryList: buildGroceryListFromPlan(weeklyPlan),
-          createdAt: now.toISOString(),
-          planName: 'Plan Nutritionnel',
-          versionNumber: 0,
-          generatedBy: 'coach',
-        };
-
-        const snap = buildPlanSnapshot(snapshotInput);
-
-        const snapResult = await persistSnapshot(result.versionId, snap);
-
-        if (!snapResult.success) {
-          setUiState('ERROR');
-          return { success: false, error: snapResult.error };
         }
 
         await loadPlanForClient(clientId);
 
         return { success: true, error: null };
-
       } catch (err) {
-
-        setUiState('ERROR');
-        return { success: false, error: getErrorMessage(err, 'Lock failed') };
-
+        setUiState("ERROR");
+        return { success: false, error: getErrorMessage(err, "Lock failed") };
       }
     },
     [weeklyPlan, macroTargets, likedIngredients, lifecycleState, loadPlanForClient]
   );
 
-  /* -------------------------------------------------------
-     CLEAR STATE
-  ------------------------------------------------------- */
+  /* ---------------- CLEAR ---------------- */
 
   const clearState = useCallback(() => {
-
     setWeeklyPlan(null);
     setMacroTargets(null);
     setLikedIngredients([]);
-
     setSnapshot(null);
 
     setPlanId(null);
@@ -378,24 +322,26 @@ export function useNutritionPlanState() {
 
     setError(null);
     setLastPersistenceFailed(false);
-    setUiState('IDLE');
-
+    setUiState("IDLE");
   }, []);
 
-  /* -------------------------------------------------------
-     RETURN API
-  ------------------------------------------------------- */
+  /* ---------------- RETURN ---------------- */
 
   return {
-
+    state,
     lifecycleState,
     uiState,
-    state,
+
+    lockStatus,
+    isLocked,
+    isDraft,
+    isLoading,
+    isSaving,
+    isBlocked,
 
     weeklyPlan,
     macroTargets,
     likedIngredients,
-
     snapshot,
 
     planId,
@@ -425,6 +371,5 @@ export function useNutritionPlanState() {
     setDraftPlan,
     lockPlan,
     clearState,
-
   };
 }
