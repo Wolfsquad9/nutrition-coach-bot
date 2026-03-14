@@ -358,6 +358,7 @@ export function useNutritionPlanState() {
 
     pendingOverrides,
     error,
+    lastPersistenceFailed,
 
     canGenerate,
     canRegenerate,
