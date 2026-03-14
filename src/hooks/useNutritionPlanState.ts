@@ -339,6 +339,7 @@ export function useNutritionPlanState() {
     isLoading,
     isSaving,
     isBlocked,
+    isError,
 
     weeklyPlan,
     macroTargets,
