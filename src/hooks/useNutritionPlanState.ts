@@ -319,6 +319,14 @@ try {
 
   const builtSnapshot = buildPlanSnapshot(snapshotInput);
 
+const normalizedSnapshot: PlanSnapshot = {
+  ...builtSnapshot,
+  status: "ACTIVE",
+  metadata: {
+    createdAt: new Date().toISOString(),
+  },
+};
+
   const persistResult = await persistSnapshot(result.versionId, builtSnapshot);
 
   if (!persistResult.success) {
