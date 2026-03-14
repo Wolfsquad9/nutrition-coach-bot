@@ -212,7 +212,7 @@ export function useNutritionPlanState() {
       setPlanId(planResult.planId);
       setVersionId(planResult.versionId);
       setPlanCreatedAt(planResult.createdAt);
-      setPayloadHash(payload.payloadHash || null);
+      setPayloadHash((payload as any).payloadHash ?? null);
 
       const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
 
