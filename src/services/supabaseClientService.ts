@@ -164,7 +164,7 @@ export async function createClient(client: Client): Promise<{ client: Client | n
 
     if (error) {
       console.error('Error creating client:', error);
-      return { client: null, error: error.message };
+      return { client: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     if (!data) {
@@ -173,9 +173,9 @@ export async function createClient(client: Client): Promise<{ client: Client | n
 
     const newClient = supabaseRowToClient(data as unknown as SupabaseClientRow);
     return { client: newClient, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to create client:', error);
-    return { client: null, error: error.message || 'Failed to create client' };
+    return { client: null, error: error instanceof Error ? error.message : 'Failed to create client' };
   }
 }
 
@@ -213,7 +213,7 @@ export async function updateClient(clientId: string, updates: Partial<Client>): 
 
     if (error) {
       console.error('Error updating client:', error);
-      return { client: null, error: error.message };
+      return { client: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     if (!data) {
@@ -222,9 +222,9 @@ export async function updateClient(clientId: string, updates: Partial<Client>): 
 
     const updatedClient = supabaseRowToClient(data as unknown as SupabaseClientRow);
     return { client: updatedClient, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to update client:', error);
-    return { client: null, error: error.message || 'Failed to update client' };
+    return { client: null, error: error instanceof Error ? error.message : 'Failed to update client' };
   }
 }
 
@@ -241,7 +241,7 @@ export async function fetchClientById(clientId: string): Promise<{ client: Clien
 
     if (error) {
       console.error('Error fetching client:', error);
-      return { client: null, error: error.message };
+      return { client: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     if (!data) {
@@ -250,8 +250,8 @@ export async function fetchClientById(clientId: string): Promise<{ client: Clien
 
     const client = supabaseRowToClient(data as unknown as SupabaseClientRow);
     return { client, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch client:', error);
-    return { client: null, error: error.message || 'Failed to fetch client' };
+    return { client: null, error: error instanceof Error ? error.message : 'Failed to fetch client' };
   }
 }

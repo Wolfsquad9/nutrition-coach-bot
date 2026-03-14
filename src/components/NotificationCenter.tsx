@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Bell, Dumbbell, Utensils, Trophy, Calendar, Check } from 'lucide-react';
+import { Bell, Dumbbell, Utensils, Trophy, Calendar, Check, type LucideIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Notification {
@@ -14,7 +14,7 @@ interface Notification {
   message: string;
   time: string;
   read: boolean;
-  icon: any;
+  icon: LucideIcon;
 }
 
 interface NotificationSettings {
@@ -36,6 +36,40 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
   });
   const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
+
+  const sendNotification = useCallback((type: Notification['type'], title: string, message: string) => {
+    const iconMap = {
+      workout: Dumbbell,
+      meal: Utensils,
+      progress: Calendar,
+      achievement: Trophy
+    };
+
+    const newNotification: Notification = {
+      id: Date.now().toString(),
+      type,
+      title,
+      message,
+      time: 'Just now',
+      read: false,
+      icon: iconMap[type as keyof typeof iconMap]
+    };
+
+    setNotifications(prev => [newNotification, ...prev]);
+    
+    // Browser notification if permission granted
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, {
+        body: message,
+        icon: '/favicon.ico'
+      });
+    }
+
+    toast({
+      title,
+      description: message,
+    });
+  }, [toast]);
 
   useEffect(() => {
     // Load settings from localStorage
@@ -92,41 +126,7 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
       }, 10000); // Send after 10 seconds
       return () => clearTimeout(timer);
     }
-  }, [clientId, settings.workoutReminders]);
-
-  const sendNotification = (type: any, title: string, message: string) => {
-    const iconMap = {
-      workout: Dumbbell,
-      meal: Utensils,
-      progress: Calendar,
-      achievement: Trophy
-    };
-
-    const newNotification: Notification = {
-      id: Date.now().toString(),
-      type,
-      title,
-      message,
-      time: 'Just now',
-      read: false,
-      icon: iconMap[type as keyof typeof iconMap]
-    };
-
-    setNotifications(prev => [newNotification, ...prev]);
-    
-    // Browser notification if permission granted
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, {
-        body: message,
-        icon: '/favicon.ico'
-      });
-    }
-
-    toast({
-      title,
-      description: message,
-    });
-  };
+  }, [clientId, settings.workoutReminders, sendNotification]);
 
   const markAsRead = (id: string) => {
     setNotifications(prev =>
@@ -142,7 +142,7 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
     );
   };
 
-  const updateSettings = (key: keyof NotificationSettings, value: any) => {
+  const updateSettings = <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     localStorage.setItem(`notifications_settings_${clientId}`, JSON.stringify(newSettings));

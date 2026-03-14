@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,38 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+
+
+type GeneratedDietPlan = {
+  totalCalories: number;
+  macros: { protein: number; carbs: number; fat: number };
+  meals: Array<{
+    day: number;
+    meals: Array<{
+      name: string;
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+    }>;
+  }>;
+  shoppingList?: unknown[];
+};
+
+type GeneratedTrainingPlan = {
+  split: string;
+  sessions: number;
+  workouts: Array<{
+    day: number;
+    name: string;
+    exercises: Array<{
+      name: string;
+      sets: number;
+      reps: string;
+    }>;
+  }>;
+};
+
 interface EnhancedIngredientManagerProps {
   activeClientId: string | null;
   activeClient: Client | null;
@@ -52,8 +84,8 @@ export default function EnhancedIngredientManager({
   const [substitutionMatrix, setSubstitutionMatrix] = useState<Map<string, SubstitutionRule[]>>(new Map());
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
-  const [generatedDietPlan, setGeneratedDietPlan] = useState<any>(null);
-  const [generatedTrainingPlan, setGeneratedTrainingPlan] = useState<any>(null);
+  const [generatedDietPlan, setGeneratedDietPlan] = useState<GeneratedDietPlan | null>(null);
+  const [generatedTrainingPlan, setGeneratedTrainingPlan] = useState<GeneratedTrainingPlan | null>(null);
   const [generatedRecipe, setGeneratedRecipe] = useState<GeneratedRecipe | null>(null);
   const [selectedMealType, setSelectedMealType] = useState<MealType>('lunch');
   const { toast } = useToast();
@@ -71,7 +103,7 @@ export default function EnhancedIngredientManager({
   );
 
   // Get client restriction for current active client
-  const getClientRestriction = (clientId: string | null): ClientIngredientRestrictions => {
+  const getClientRestriction = useCallback((clientId: string | null): ClientIngredientRestrictions => {
     if (!clientId) {
       return {
         clientId: '',
@@ -88,7 +120,7 @@ export default function EnhancedIngredientManager({
       preferredIngredients: [],
       substitutionRules: {}
     };
-  };
+  }, [activeClient, clientRestrictions]);
 
   const toggleIngredientStatus = (ingredientId: string, status: 'blocked' | 'preferred' | 'neutral') => {
     if (!activeClientId) return;
@@ -147,7 +179,7 @@ export default function EnhancedIngredientManager({
     }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
     return total;
-  }, [activeClientId, clientRestrictions]);
+  }, [activeClientId, getClientRestriction]);
 
   const exportRestrictions = () => {
     const dataStr = JSON.stringify(clientRestrictions, null, 2);
@@ -350,7 +382,7 @@ export default function EnhancedIngredientManager({
       };
 
       const clientLabel = getClientLabel(activeClient);
-      const pdf = generateCompletePlanPDF(completePlan as any);
+      const pdf = generateCompletePlanPDF(completePlan as unknown as Parameters<typeof generateCompletePlanPDF>[0]);
       downloadPDF(pdf, `${clientLabel.replace(/\s+/g, '_')}_plan.pdf`);
 
       toast({

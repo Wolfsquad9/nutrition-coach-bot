@@ -65,8 +65,20 @@ const exerciseVideos = [
 ];
 
 interface ExerciseLibraryProps {
-  onSelectExercise?: (exercise: any) => void;
+  onSelectExercise?: (exercise: Exercise) => void;
 }
+
+
+const toExercise = (exerciseVideo: typeof exerciseVideos[number]): Exercise => ({
+  id: exerciseVideo.id,
+  name: exerciseVideo.name,
+  category: exerciseVideo.category as Exercise['category'],
+  equipment: exerciseVideo.equipment,
+  difficulty: exerciseVideo.difficulty as Exercise['difficulty'],
+  primaryMuscles: exerciseVideo.primaryMuscles,
+  secondaryMuscles: [],
+  instructions: [],
+});
 
 export const ExerciseLibrary = ({ onSelectExercise }: ExerciseLibraryProps) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -155,7 +167,7 @@ export const ExerciseLibrary = ({ onSelectExercise }: ExerciseLibraryProps) => {
           <Card
             key={exercise.id}
             className="overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
-            onClick={() => onSelectExercise ? onSelectExercise(exercise) : setSelectedVideo(exercise.videoUrl)}
+            onClick={() => onSelectExercise ? onSelectExercise(toExercise(exercise)) : setSelectedVideo(exercise.videoUrl)}
           >
             <div className="relative aspect-video">
               <img
