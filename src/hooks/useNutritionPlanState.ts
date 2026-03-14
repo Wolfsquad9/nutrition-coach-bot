@@ -415,8 +415,9 @@ return { success: true, error: null };
     isShareable,
 
     loadPlanForClient,
-    setDraftPlan,
-    lockPlan,
-    clearState,
+ setDraftPlan,
+  discardDraft,
+  lockPlan,
+  clearState,
   };
 }
