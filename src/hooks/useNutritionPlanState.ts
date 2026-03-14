@@ -267,6 +267,24 @@ export function useNutritionPlanState() {
     },
     [lifecycleState]
   );
+  const discardDraft = useCallback(() => {
+  if (!isDraft) return;
+
+  setWeeklyPlan(null);
+  setMacroTargets(null);
+  setLikedIngredients([]);
+
+  setPlanId(null);
+  setVersionId(null);
+  setVersionNumber(null);
+  setPlanCreatedAt(null);
+  setPayloadHash(null);
+
+  setLockedAt(null);
+  setLockedUntil(null);
+
+  setSnapshot(null);
+}, [isDraft]);
 
   /* ---------------- LOCK ---------------- */
 
