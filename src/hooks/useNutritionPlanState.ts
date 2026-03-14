@@ -126,6 +126,7 @@ export function useNutritionPlanState() {
   const isLoading = uiState === "LOADING";
   const isSaving = uiState === "SAVING";
   const isBlocked = uiState === "ERROR";
+  const isError = uiState === "ERROR";
 
   const isDraft = lifecycleState === "DRAFT";
   const isLocked = lifecycleState === "LOCKED";
