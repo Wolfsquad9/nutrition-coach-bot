@@ -286,14 +286,40 @@ export function useNutritionPlanState() {
           likedIngredients
         );
 
-        if (!result.success || !result.versionId) {
-          setUiState("ERROR");
-          return { success: false, error: result.error };
-        }
+if (!result.success || !result.versionId) {
+  setUiState("ERROR");
+  return { success: false, error: result.error };
+}
 
-        await loadPlanForClient(clientId);
+try {
+  const snapshotInput: SnapshotBuildInput = {
+    weeklyPlan,
+    macroTargets,
+    likedIngredients,
+    versionId: result.versionId,
+  };
 
-        return { success: true, error: null };
+  const builtSnapshot = buildPlanSnapshot(snapshotInput);
+
+  const persistResult = await persistSnapshot(result.versionId, builtSnapshot);
+
+  if (!persistResult.success) {
+    setLastPersistenceFailed(true);
+    setUiState("ERROR");
+    return { success: false, error: persistResult.error };
+  }
+
+  setLastPersistenceFailed(false);
+
+} catch (err) {
+  setLastPersistenceFailed(true);
+  setUiState("ERROR");
+  return { success: false, error: getErrorMessage(err, "Snapshot persistence failed") };
+}
+
+await loadPlanForClient(clientId);
+
+return { success: true, error: null };
       } catch (err) {
         setUiState("ERROR");
         return { success: false, error: getErrorMessage(err, "Lock failed") };
