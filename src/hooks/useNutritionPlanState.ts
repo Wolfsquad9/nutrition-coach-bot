@@ -327,7 +327,7 @@ const normalizedSnapshot: PlanSnapshot = {
   },
 };
 
-  const persistResult = await persistSnapshot(result.versionId, builtSnapshot);
+  const persistResult = await persistSnapshot(result.versionId, normalizedSnapshot);
 
   if (!persistResult.success) {
     setLastPersistenceFailed(true);
