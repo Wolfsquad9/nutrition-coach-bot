@@ -319,13 +319,7 @@ const snapshotInput: SnapshotBuildInput = {
 
   const builtSnapshot = buildPlanSnapshot(snapshotInput);
 
-const normalizedSnapshot: PlanSnapshot = {
-  ...builtSnapshot,
-  status: "ACTIVE",
-  metadata: {
-    createdAt: new Date().toISOString(),
-  },
-};
+const normalizedSnapshot = mapWeeklyMealPlanToSnapshot(builtSnapshot);
 
   const persistResult = await persistSnapshot(result.versionId, normalizedSnapshot);
 
