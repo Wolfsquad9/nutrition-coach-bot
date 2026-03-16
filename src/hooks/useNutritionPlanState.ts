@@ -6,6 +6,8 @@ import { useState, useCallback, useMemo } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
 import type { PlanSnapshot as UISnapshot } from "@/types/planSnapshot";
 import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
+import type { NutritionMetrics } from "@/types";
+import { calculateLockExpiry } from "@/domain/nutrition/planLifecycle";
 
 import {
   checkPlanLockStatus,
