@@ -311,8 +311,7 @@ if (!result.success || !result.versionId) {
 
 try {
 const snapshotInput: SnapshotBuildInput = {
-  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
-  macroTargets,
+  weeklyPlan,
   likedIngredients,
   versionId: result.versionId,
 };
