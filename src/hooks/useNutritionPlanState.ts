@@ -416,7 +416,8 @@ return { success: true, error: null };
 
     loadPlanForClient,
  setDraftPlan,
-  discardDraft,
+  // After
+discardDraft(); // no arguments,
   lockPlan,
   clearState,
   };
