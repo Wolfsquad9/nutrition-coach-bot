@@ -312,8 +312,24 @@ if (!result.success || !result.versionId) {
 try {
 const snapshotInput: SnapshotBuildInput = {
   identifier: {
-    id: result.versionId,
+    versionId: result.versionId,
+    lockedAt: new Date(),
+    lockedUntil: calculateLockExpiry(new Date()),
+    payloadHash: result.payloadHash ?? "",
   },
+
+  client: clientInfo,
+
+  metrics: macroTargets as NutritionMetrics,
+
+  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
+  groceryList: buildGroceryListFromPlan(weeklyPlan!),
+
+  planName: `Plan – ${clientInfo.firstName} ${clientInfo.lastName}`,
+  versionNumber: versionNumber ?? 1,
+  createdAt: new Date().toISOString(),
+  generatedBy: "coach",
+};
 
   client: {
     id: clientId,
