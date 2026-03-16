@@ -311,12 +311,20 @@ if (!result.success || !result.versionId) {
 
 try {
 const snapshotInput: SnapshotBuildInput = {
-  identifier: result.versionId,
-  client: clientId,
+  identifier: {
+    id: result.versionId,
+  },
+
+  client: {
+    id: clientId,
+  },
+
   weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
+
   groceryList: buildGroceryListFromPlan(weeklyPlan!),
+
   metrics: {
-    macroTargets,
+    targets: macroTargets,
     likedIngredients,
   },
 };
