@@ -266,7 +266,7 @@ export function useNutritionPlanState() {
     },
     [lifecycleState]
   );
-  const discardDraft = useCallback(() => {
+const discardDraft = useCallback((_?: unknown) => {
   if (!isDraft) return;
 
   setWeeklyPlan(null);
