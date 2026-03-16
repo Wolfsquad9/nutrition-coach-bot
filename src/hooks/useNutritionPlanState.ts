@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
-import type { PlanSnapshot } from "@/types/planSnapshot";
+import type { PlanSnapshot as UISnapshot } from "@/types/planSnapshot";
 
 import {
   checkPlanLockStatus,
