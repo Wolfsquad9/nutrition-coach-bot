@@ -310,12 +310,12 @@ if (!result.success || !result.versionId) {
 }
 
 try {
-  const snapshotInput: SnapshotBuildInput = {
-    weeklyPlan,
-    macroTargets,
-    likedIngredients,
-    versionId: result.versionId,
-  };
+const snapshotInput: SnapshotBuildInput = {
+  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
+  macroTargets,
+  likedIngredients,
+  versionId: result.versionId,
+};
 
   const builtSnapshot = buildPlanSnapshot(snapshotInput);
 
