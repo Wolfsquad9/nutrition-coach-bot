@@ -311,7 +311,14 @@ if (!result.success || !result.versionId) {
 
 try {
 const snapshotInput: SnapshotBuildInput = {
+  identifier: result.versionId,
+  client: clientId,
   weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
+  groceryList: buildGroceryListFromPlan(weeklyPlan!),
+  metrics: {
+    macroTargets,
+    likedIngredients,
+  },
 };
 
   const builtSnapshot = buildPlanSnapshot(snapshotInput);
