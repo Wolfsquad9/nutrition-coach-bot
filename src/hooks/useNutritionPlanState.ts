@@ -310,7 +310,7 @@ if (!result.success || !result.versionId) {
 
 try {
 const snapshotInput: SnapshotBuildInput = {
-  weeklyPlan: weeklyPlan.days,
+  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
   likedIngredients,
   versionId: result.versionId,
 };
