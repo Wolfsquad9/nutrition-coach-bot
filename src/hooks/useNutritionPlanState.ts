@@ -80,7 +80,7 @@ export function useNutritionPlanState() {
 
   /* ---------------- SNAPSHOT ---------------- */
 
-  const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
+ const [snapshot, setSnapshot] = useState<UISnapshot | null>(null);
 
   /* ---------------- DB METADATA ---------------- */
 
