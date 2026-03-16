@@ -312,7 +312,6 @@ if (!result.success || !result.versionId) {
 try {
 const snapshotInput: SnapshotBuildInput = {
   weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
-  versionId: result.versionId,
 };
 
   const builtSnapshot = buildPlanSnapshot(snapshotInput);
