@@ -318,7 +318,7 @@ const snapshotInput: SnapshotBuildInput = {
 
   const builtSnapshot = buildPlanSnapshot(snapshotInput);
 
-const normalizedSnapshot = mapWeeklyMealPlanToSnapshot(builtSnapshot);
+const normalizedSnapshot = builtSnapshot;
 
   const persistResult = await persistSnapshot(result.versionId, normalizedSnapshot);
 
