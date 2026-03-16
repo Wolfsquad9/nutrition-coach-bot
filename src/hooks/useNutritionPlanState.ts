@@ -5,6 +5,7 @@
 import { useState, useCallback, useMemo } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
 import type { PlanSnapshot as UISnapshot } from "@/types/planSnapshot";
+import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
 
 import {
   checkPlanLockStatus,
@@ -310,8 +311,7 @@ if (!result.success || !result.versionId) {
 
 try {
 const snapshotInput: SnapshotBuildInput = {
-  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
-  likedIngredients,
+  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
   versionId: result.versionId,
 };
 
