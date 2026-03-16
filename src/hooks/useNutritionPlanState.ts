@@ -28,7 +28,6 @@ import {
 } from "@/domain/nutrition/snapshot";
 
 import {
-  mapWeeklyMealPlanToSnapshot,
   buildGroceryListFromPlan,
 } from "@/domain/nutrition/snapshotAdapter";
 
