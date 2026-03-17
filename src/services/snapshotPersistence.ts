@@ -85,7 +85,7 @@ export async function fetchPersistedSnapshot(
 } catch (err: unknown) {
   return { snapshot: null, error: err instanceof Error ? err.message : 'Unknown error' };
 }
-
+}
 /**
  * Build a snapshot from available data and persist it.
  * Used for backfill: when a locked plan has no snapshot yet.
