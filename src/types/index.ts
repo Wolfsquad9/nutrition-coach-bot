@@ -59,6 +59,13 @@ export interface NutritionMetrics {
   waterLiters: number;
 }
 
+export interface MacroTargets {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
 export interface Macros {
   calories: number;
   protein: number; // grams
