@@ -89,8 +89,8 @@ const fakeWeeklyPlan: WeeklyMealPlanResult = {
 const fakeClientInfo = {
   firstName: 'Jean',
   lastName: 'Dupont',
-  goal: 'Perte de poids',
-  activityLevel: 'Modéré',
+  goal: 'Weight loss',
+  activityLevel: 'Moderate',
 };
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

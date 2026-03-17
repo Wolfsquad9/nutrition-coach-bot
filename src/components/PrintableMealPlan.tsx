@@ -37,7 +37,7 @@ function PrintMealSection({ mealType, meal }: { mealType: MealTimeType; meal: Me
     return (
       <div className="print-meal-section print-meal-empty">
         <h4 className="print-meal-title">{MEAL_LABELS[mealType]}</h4>
-        <p className="print-no-ingredients">Aucun ingrédient disponible</p>
+        <p className="print-no-ingredients">No ingredients available</p>
       </div>
     );
   }
