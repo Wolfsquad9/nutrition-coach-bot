@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
-import type { PlanSnapshot as UISnapshot } from "@/types/planSnapshot";
+import type { PlanSnapshot } from "@/domain/nutrition/snapshot";
 import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
 import type { NutritionMetrics } from "@/types";
 
@@ -89,7 +89,7 @@ export function useNutritionPlanState() {
 
   /* ---------------- SNAPSHOT ---------------- */
 
-  const [snapshot, setSnapshot] = useState<UISnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
 
   /* ---------------- DB METADATA ---------------- */
 
