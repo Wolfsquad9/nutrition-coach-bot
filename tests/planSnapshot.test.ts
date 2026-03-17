@@ -4,7 +4,7 @@
  * Run: node .tmp-tests/tests/planSnapshot.test.js
  */
 
-import assert from "node:assert";
+import * as assert from 'node:assert';
 import { buildPlanSnapshot } from "../src/domain/nutrition/snapshot";
 import type { SnapshotBuildInput } from "../src/domain/nutrition/snapshot";
 import type { MealPlan, GroceryItem, Macros, NutritionMetrics } from "../src/types";
@@ -38,7 +38,7 @@ function buildWeeklyPlan(): MealPlan[] {
                     name: "Oats",
                     amount: 80,
                     unit: "g",
-                    category: "grains",
+                    category: "carb",
                     macrosPer100g: macros(389, 17, 66, 7),
                   },
                   {
