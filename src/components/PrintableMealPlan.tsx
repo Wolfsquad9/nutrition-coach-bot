@@ -67,7 +67,7 @@ function PrintMealSection({ mealType, meal }: { mealType: MealTimeType; meal: Me
 
       {meal.recipeText && (
         <div className="print-recipe">
-          <h5 className="print-recipe-title">Recette:</h5>
+          <h5 className="print-recipe-title">Recipe:</h5>
           <p className="print-recipe-text">{meal.recipeText}</p>
         </div>
       )}
