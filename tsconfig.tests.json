@@ -3,6 +3,7 @@
   "compilerOptions": {
     "noEmit": false,
     "allowImportingTsExtensions": false,
+    "module": "CommonJS",
     "moduleResolution": "node",
     "outDir": "./.tmp-tests",
     "strict": false
