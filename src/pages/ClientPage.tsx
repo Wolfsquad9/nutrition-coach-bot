@@ -153,7 +153,7 @@ export default function ClientPage() {
               {isCreatingNewClient ? 'New Client' : `Client: ${activeClient ? getClientLabel(activeClient) : ''}`}
             </h2>
             {!isCreatingNewClient && hasActiveClient && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium">
                 <CheckCircle className="h-3 w-3" />
                 Loaded
               </span>
