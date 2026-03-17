@@ -1,6 +1,6 @@
 /**
  * NutritionTabContent - Nutrition tab with Draft → Lock lifecycle
- * Fully aligned with MAIN `useNutritionPlanState`
+ * Fixed: err:any → unknown with getErrorMessage pattern
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -38,58 +38,54 @@ interface NutritionTabContentProps {
   clientRestrictions: ClientIngredientRestrictions[];
 }
 
-// State badge for plan status
 function PlanStateIndicator({ state, lockStatus }: { state: PlanState; lockStatus: { isLocked: boolean; daysRemaining: number } }) {
   const config: Record<PlanState, { label: string; variant: 'default' | 'secondary' | 'outline'; className: string; icon: React.ReactNode }> = {
-    EMPTY: { label: 'Aucun plan', variant: 'outline', className: 'text-muted-foreground border-muted', icon: <CloudOff className="w-3 h-3 mr-1" /> },
-    DRAFT: { label: 'Brouillon', variant: 'secondary', className: 'bg-warning/20 text-warning border-warning/30', icon: <FileEdit className="w-3 h-3 mr-1" /> },
-    LOCKED: { 
-      label: lockStatus.isLocked ? `Verrouillé (${lockStatus.daysRemaining}j)` : 'Enregistré', 
-      variant: 'default', 
-      className: lockStatus.isLocked ? 'bg-info/20 text-info border-info/30' : 'bg-success/20 text-success border-success/30', 
-      icon: lockStatus.isLocked ? <Lock className="w-3 h-3 mr-1" /> : <Database className="w-3 h-3 mr-1" /> 
+    EMPTY:   { label: 'Aucun plan',       variant: 'outline',    className: 'text-muted-foreground border-muted',              icon: <CloudOff className="w-3 h-3 mr-1" /> },
+    DRAFT:   { label: 'Brouillon',        variant: 'secondary',  className: 'bg-warning/20 text-warning border-warning/30',    icon: <FileEdit className="w-3 h-3 mr-1" /> },
+    LOCKED:  {
+      label: lockStatus.isLocked ? `Verrouillé (${lockStatus.daysRemaining}j)` : 'Enregistré',
+      variant: 'default',
+      className: lockStatus.isLocked ? 'bg-info/20 text-info border-info/30' : 'bg-success/20 text-success border-success/30',
+      icon: lockStatus.isLocked ? <Lock className="w-3 h-3 mr-1" /> : <Database className="w-3 h-3 mr-1" />,
     },
-    EXPIRED: { label: 'Verrou expiré', variant: 'default', className: 'bg-success/20 text-success border-success/30', icon: <Unlock className="w-3 h-3 mr-1" /> },
-    LOADING: { label: 'Chargement...', variant: 'outline', className: 'text-muted-foreground animate-pulse', icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" /> },
-    SAVING: { label: 'Verrouillage...', variant: 'outline', className: 'text-primary animate-pulse', icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" /> },
-    ERROR: { label: 'Erreur', variant: 'secondary', className: 'bg-destructive/20 text-destructive border-destructive/30', icon: <AlertCircle className="w-3 h-3 mr-1" /> },
+    EXPIRED: { label: 'Verrou expiré',    variant: 'default',    className: 'bg-success/20 text-success border-success/30',    icon: <Unlock className="w-3 h-3 mr-1" /> },
+    LOADING: { label: 'Chargement...',    variant: 'outline',    className: 'text-muted-foreground animate-pulse',             icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" /> },
+    SAVING:  { label: 'Verrouillage...', variant: 'outline',    className: 'text-primary animate-pulse',                      icon: <Loader2 className="w-3 h-3 mr-1 animate-spin" /> },
+    ERROR:   { label: 'Erreur',          variant: 'secondary',  className: 'bg-destructive/20 text-destructive border-destructive/30', icon: <AlertCircle className="w-3 h-3 mr-1" /> },
   };
 
   const { label, variant, className, icon } = config[state];
   return <Badge variant={variant} className={className}>{icon}{label}</Badge>;
 }
 
+const getErrorMessage = (err: unknown, fallback: string): string =>
+  err instanceof Error ? err.message : fallback;
+
 export function NutritionTabContent({ activeClientId, activeClient, clientRestrictions }: NutritionTabContentProps) {
   const { toast } = useToast();
 
-  // MAIN hook for plan state
   const planState = useNutritionPlanState();
-
-  // Ingredient validation
   const ingredientValidation = useIngredientValidation(activeClientId, clientRestrictions);
 
-  // Daily plan local state
   const [dailyMealPlan, setDailyMealPlan] = useState<FullDayMealPlanResult | null>(null);
   const [isGeneratingDaily, setIsGeneratingDaily] = useState(false);
   const [isGeneratingWeekly, setIsGeneratingWeekly] = useState(false);
 
-  // Load plan on client change
   useEffect(() => {
     if (activeClientId) {
       planState.loadPlanForClient(activeClientId);
       setDailyMealPlan(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeClientId]);
 
-  // Helper: liked foods
   const getLikedFoods = useCallback(() => {
     const restriction = clientRestrictions.find(r => r.clientId === activeClientId);
     return restriction?.preferredIngredients || [];
   }, [activeClientId, clientRestrictions]);
 
-  /** Generate Daily Plan */
   const handleGenerateDailyPlan = async () => {
-    if (planState.isBlocked) return toast({ title: 'Opération bloquée', description: 'Résolvez l’erreur avant de générer.', variant: 'destructive' });
+    if (planState.isBlocked) return toast({ title: 'Opération bloquée', description: 'Résolvez l\'erreur avant de générer.', variant: 'destructive' });
 
     const validation = ingredientValidation.validateForPlanType('daily');
     if (!validation.valid) return toast({ title: 'Ingrédients insuffisants', description: validation.message, variant: 'destructive' });
@@ -107,16 +103,15 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
       const result = generateFullDayMealPlan(likedFoods, macroTargets);
       setDailyMealPlan(result);
       toast({ title: 'Plan journalier généré !', description: `${result.totalMacros.calories} kcal` });
-    } catch (err: any) {
-      toast({ title: 'Erreur', description: err.message || 'Impossible de générer le plan journalier', variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Erreur', description: getErrorMessage(err, 'Impossible de générer le plan journalier'), variant: 'destructive' });
     } finally {
       setIsGeneratingDaily(false);
     }
   };
 
-  /** Generate Weekly Plan (Draft) */
   const handleGenerateWeeklyPlan = async () => {
-    if (planState.isBlocked) return toast({ title: 'Opération bloquée', description: 'Résolvez l’erreur avant de générer.', variant: 'destructive' });
+    if (planState.isBlocked) return toast({ title: 'Opération bloquée', description: 'Résolvez l\'erreur avant de générer.', variant: 'destructive' });
     if (planState.isLocked && planState.lockStatus.isLocked) return toast({ title: 'Plan verrouillé', description: `Plan verrouillé pour ${planState.lockStatus.daysRemaining} jour(s).`, variant: 'destructive' });
 
     const validation = ingredientValidation.validateForPlanType('weekly');
@@ -134,17 +129,14 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         carbs: metrics.carbsGrams,
         fat: metrics.fatGrams,
       };
-
       const weeklyPlan = generateWeeklyMealPlan(likedFoods, macroTargets);
       planState.setDraftPlan(weeklyPlan, macroTargets, likedFoods);
-
-      toast({ title: 'Brouillon généré !', description: 'Le plan est en mode brouillon. Cliquez sur "Verrouiller le Plan" pour l’enregistrer.' });
+      toast({ title: 'Brouillon généré !', description: 'Le plan est en mode brouillon. Cliquez sur "Verrouiller le Plan" pour l\'enregistrer.' });
     } finally {
       setIsGeneratingWeekly(false);
     }
   };
 
-  /** Lock Plan */
   const handleLockPlan = async () => {
     const result = await planState.lockPlan(activeClientId, {
       firstName: activeClient.firstName,
@@ -153,16 +145,14 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
       activityLevel: activeClient.activityLevel,
     });
     if (result.success) toast({ title: 'Plan verrouillé !', description: 'Le plan a été enregistré et verrouillé pour 7 jours.' });
-    else toast({ title: 'Échec du verrouillage', description: result.error || 'Le plan n’a pas pu être verrouillé.', variant: 'destructive' });
+    else toast({ title: 'Échec du verrouillage', description: result.error || 'Le plan n\'a pas pu être verrouillé.', variant: 'destructive' });
   };
 
-  /** Discard Draft */
   const handleDiscardDraft = async () => {
     await planState.discardDraft(activeClientId);
     toast({ title: 'Brouillon annulé', description: 'Le brouillon a été supprimé.' });
   };
 
-  /** Reload from DB */
   const handleReloadPlan = () => {
     planState.loadPlanForClient(activeClientId);
     toast({ title: 'Rechargement', description: 'Le plan est rechargé depuis la base de données.' });
@@ -176,7 +166,6 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <Card className="p-4 shadow-card bg-muted/30">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
@@ -194,11 +183,10 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         </div>
       </Card>
 
-      {/* Draft / Expired / Ingredient Alerts */}
       {planState.isDraft && (
         <Alert className="border-warning/50 bg-warning/10">
           <FileEdit className="h-4 w-4 text-warning" />
-          <AlertDescription className="text-warning"><strong>Mode Brouillon</strong> — Ce plan n’est pas encore enregistré.</AlertDescription>
+          <AlertDescription className="text-warning"><strong>Mode Brouillon</strong> — Ce plan n'est pas encore enregistré.</AlertDescription>
         </Alert>
       )}
       {planState.isLocked && !planState.lockStatus.isLocked && (
@@ -220,7 +208,6 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         </Alert>
       )}
 
-      {/* Generation Controls */}
       <Card className="p-6 shadow-card">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
@@ -230,10 +217,10 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
           </div>
           <div className="flex gap-3 flex-wrap">
             <Button onClick={handleGenerateDailyPlan} disabled={isGenerating || !ingredientValidation.canGenerateDaily || planState.isBlocked} variant="outline">
-              {isGeneratingDaily ? <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Génération... </> : <> <CalendarDays className="mr-2 h-4 w-4" /> Plan Journalier </>}
+              {isGeneratingDaily ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Génération...</> : <><CalendarDays className="mr-2 h-4 w-4" />Plan Journalier</>}
             </Button>
             <Button onClick={handleGenerateWeeklyPlan} disabled={isGenerating || !ingredientValidation.canGenerateWeekly || regenerationBlocked || planState.isBlocked} variant={planState.isDraft ? "outline" : "default"}>
-              {isGeneratingWeekly ? <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Génération... </> : <> <Calendar className="mr-2 h-4 w-4" /> {planState.isDraft ? 'Régénérer' : 'Plan Hebdomadaire'} </>}
+              {isGeneratingWeekly ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Génération...</> : <><Calendar className="mr-2 h-4 w-4" />{planState.isDraft ? 'Régénérer' : 'Plan Hebdomadaire'}</>}
             </Button>
             {planState.isDraft && <DiscardDraftButton onDiscard={handleDiscardDraft} disabled={planState.isSaving} />}
             <LockPlanButton canLock={planState.canLock} isLocking={planState.isSaving} onLock={handleLockPlan} disabled={!ingredientValidation.canGenerateWeekly || planState.isBlocked} />
@@ -241,7 +228,6 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         </div>
       </Card>
 
-      {/* Loading */}
       {planState.isLoading && (
         <Card className="p-12 shadow-card">
           <div className="flex flex-col items-center justify-center gap-4">
@@ -251,18 +237,16 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         </Card>
       )}
 
-      {/* Weekly & Daily Displays */}
       {hasWeeklyPlan && !planState.isLoading && <WeeklyMealPlanDisplay weeklyPlan={planState.weeklyPlan!} />}
       {hasDailyPlan && !planState.isLoading && <DailyMealPlanDisplay {...dailyMealPlan} />}
 
-      {/* Empty State */}
       {!hasAnyPlan && !planState.isLoading && planState.state !== 'ERROR' && (
         <Card className="p-6 shadow-card">
           <div className="text-center py-8">
             <CalendarDays className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">Aucun plan nutritionnel</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
-              {ingredientValidation.canGenerateWeekly 
+              {ingredientValidation.canGenerateWeekly
                 ? 'Générez un plan hebdomadaire pour créer un programme nutritionnel personnalisé.'
                 : `Sélectionnez au moins ${INGREDIENT_MINIMUMS.weeklyPlan} ingrédients aimés pour générer un plan.`}
             </p>
