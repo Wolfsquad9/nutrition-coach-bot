@@ -102,7 +102,7 @@ function MealSection({
       {/* Ingredients */}
       <div className="mb-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-          Ingrédients
+          Ingredients
         </p>
         <div className="flex flex-wrap gap-1.5">
           {mealData.ingredients.map((ing, idx) => (
