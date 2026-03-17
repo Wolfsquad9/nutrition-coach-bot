@@ -1,5 +1,5 @@
 import { coreIngredients, type IngredientData, calculateMacros, type MealTimeType } from '@/data/ingredientDatabase';
-import { Recipe, Ingredient, Macros } from '@/types';
+import { Recipe, Ingredient, Macros, MacroTargets } from '@/types';
 import {
   enhanceIngredientWithRole,
   calculateIngredientRole,
