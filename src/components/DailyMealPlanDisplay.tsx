@@ -216,9 +216,9 @@ export function DailyMealPlanDisplay({
 
         {/* Target vs Actual */}
         <div className="p-3 rounded-lg bg-muted/50 border border-border">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Objectifs journaliers</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Daily Targets</p>
           <div className="flex gap-4 text-xs">
-            <span>Cible: {targetMacros.calories} kcal</span>
+            <span>Target: {targetMacros.calories} kcal</span>
             <span>P: {targetMacros.protein}g</span>
             <span>C: {targetMacros.carbs}g</span>
             <span>L: {targetMacros.fat}g</span>
