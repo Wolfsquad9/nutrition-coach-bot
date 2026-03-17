@@ -73,7 +73,7 @@ function buildWeeklyPlan(): MealPlan[] {
 
 function buildGroceryList(): GroceryItem[] {
   return [
-    { ingredient: "Oats", totalAmount: 80, unit: "g", category: "grains" },
+    { ingredient: "Oats", totalAmount: 80, unit: "g", category: "carb" },
     { ingredient: "Banana", totalAmount: 1, unit: "piece", category: "fruit" },
   ];
 }
