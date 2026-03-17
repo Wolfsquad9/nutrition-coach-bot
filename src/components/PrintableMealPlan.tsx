@@ -55,7 +55,7 @@ function PrintMealSection({ mealType, meal }: { mealType: MealTimeType; meal: Me
       </div>
       
       <div className="print-ingredients">
-        <h5 className="print-ingredients-title">Ingrédients:</h5>
+        <h5 className="print-ingredients-title">Ingredients:</h5>
         <ul className="print-ingredients-list">
           {meal.ingredients.map((ing, idx) => (
             <li key={idx} className="print-ingredient-item">
