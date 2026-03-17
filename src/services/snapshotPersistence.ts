@@ -83,8 +83,7 @@ export async function fetchPersistedSnapshot(
       error: null,
     };
 } catch (err: unknown) {
-  return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
-}
+  return { snapshot: null, error: err instanceof Error ? err.message : 'Unknown error' };
 }
 
 /**
