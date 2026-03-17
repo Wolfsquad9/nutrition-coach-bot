@@ -62,13 +62,7 @@ export interface LockClientInfo {
   activityLevel: string;
 }
 
-/** Macro targets shape used throughout plan generation */
-export interface MacroTargets {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-}
+// MacroTargets is imported from @/types
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;

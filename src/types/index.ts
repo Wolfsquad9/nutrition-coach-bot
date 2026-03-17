@@ -64,6 +64,7 @@ export interface MacroTargets {
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number;
 }
 
 export interface Macros {
