@@ -62,6 +62,14 @@ export interface LockClientInfo {
   activityLevel: string;
 }
 
+/** Macro targets shape used throughout plan generation */
+export interface MacroTargets {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
 const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;
 };
@@ -76,7 +84,7 @@ export function useNutritionPlanState() {
   /* ---------------- PLAN DATA ---------------- */
 
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyMealPlanResult | null>(null);
-  const [macroTargets, setMacroTargets] = useState<any | null>(null);
+  const [macroTargets, setMacroTargets] = useState<MacroTargets | null>(null);
   const [likedIngredients, setLikedIngredients] = useState<string[]>([]);
 
   /* ---------------- SNAPSHOT ---------------- */
@@ -185,24 +193,21 @@ export function useNutritionPlanState() {
   const isShareable = shareabilityCheck.isShareable;
 
   /* ---------------- CLEAR ---------------- */
+  // Defined before loadPlanForClient so it is in scope
 
   const clearState = useCallback(() => {
     setWeeklyPlan(null);
     setMacroTargets(null);
     setLikedIngredients([]);
     setSnapshot(null);
-
     setPlanId(null);
     setVersionId(null);
     setVersionNumber(null);
     setPlanCreatedAt(null);
     setPayloadHash(null);
-
     setLockedAt(null);
     setLockedUntil(null);
-
     setPendingOverrides([]);
-
     setError(null);
     setLastPersistenceFailed(false);
     setUiState("IDLE");
@@ -223,21 +228,7 @@ export function useNutritionPlanState() {
       ]);
 
       if (!planResult.plan) {
-        // Inline reset — cannot call clearState here (not in scope at definition time)
-        setWeeklyPlan(null);
-        setMacroTargets(null);
-        setLikedIngredients([]);
-        setSnapshot(null);
-        setPlanId(null);
-        setVersionId(null);
-        setVersionNumber(null);
-        setPlanCreatedAt(null);
-        setPayloadHash(null);
-        setLockedAt(null);
-        setLockedUntil(null);
-        setPendingOverrides([]);
-        setError(null);
-        setLastPersistenceFailed(false);
+        clearState();
         setUiState("IDLE");
         return;
       }
@@ -245,13 +236,13 @@ export function useNutritionPlanState() {
       const payload = planResult.plan;
 
       setWeeklyPlan(payload.weeklyPlan);
-      setMacroTargets(payload.macroTargets);
+      setMacroTargets(payload.macroTargets as MacroTargets);
       setLikedIngredients(payload.likedIngredients || []);
 
       setPlanId(planResult.planId);
       setVersionId(planResult.versionId);
       setPlanCreatedAt(planResult.createdAt);
-      setPayloadHash((payload as any).payloadHash ?? null);
+      setPayloadHash((payload as { payloadHash?: string }).payloadHash ?? null);
 
       const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
 
@@ -273,7 +264,7 @@ export function useNutritionPlanState() {
           setPendingOverrides(overridesResult.overrides);
         }
 
-        setSnapshot(snapshotResult.snapshot as any);
+        setSnapshot(snapshotResult.snapshot as UISnapshot);
       }
 
       setUiState("IDLE");
@@ -282,12 +273,12 @@ export function useNutritionPlanState() {
       setError(getErrorMessage(err, "Failed to load plan"));
       setUiState("ERROR");
     }
-  }, []);
+  }, [clearState]);
 
   /* ---------------- DRAFT ---------------- */
 
   const setDraftPlan = useCallback(
-    (plan: WeeklyMealPlanResult, macros: any, ingredients: string[]) => {
+    (plan: WeeklyMealPlanResult, macros: MacroTargets, ingredients: string[]) => {
       const validation = validateImmutability(lifecycleState, "REGENERATE");
       if (!validation.valid) return;
 
@@ -313,16 +304,13 @@ export function useNutritionPlanState() {
     setWeeklyPlan(null);
     setMacroTargets(null);
     setLikedIngredients([]);
-
     setPlanId(null);
     setVersionId(null);
     setVersionNumber(null);
     setPlanCreatedAt(null);
     setPayloadHash(null);
-
     setLockedAt(null);
     setLockedUntil(null);
-
     setSnapshot(null);
   }, [isDraft]);
 
@@ -351,6 +339,19 @@ export function useNutritionPlanState() {
 
         try {
           const now = new Date();
+
+          // Map MacroTargets → NutritionMetrics for snapshot
+          const metrics: NutritionMetrics = {
+            tdee: 0,
+            bmr: 0,
+            targetCalories: macroTargets.calories,
+            proteinGrams: macroTargets.protein,
+            carbsGrams: macroTargets.carbs,
+            fatGrams: macroTargets.fat,
+            fiberGrams: 0,
+            waterLiters: 0,
+          };
+
           const snapshotInput: SnapshotBuildInput = {
             identifier: {
               versionId: result.versionId,
@@ -359,9 +360,9 @@ export function useNutritionPlanState() {
               payloadHash: payloadHash ?? "",
             },
             client: clientInfo,
-            metrics: macroTargets as NutritionMetrics,
-            weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
-            groceryList: buildGroceryListFromPlan(weeklyPlan!),
+            metrics,
+            weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
+            groceryList: buildGroceryListFromPlan(weeklyPlan),
             planName: `Plan – ${clientInfo.firstName} ${clientInfo.lastName}`,
             versionNumber: versionNumber ?? 1,
             createdAt: now.toISOString(),
