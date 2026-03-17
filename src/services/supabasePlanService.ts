@@ -287,7 +287,7 @@ export async function lockNutritionPlan(
         created_by: userId,
         plan_payload: planPayloadJson,
         payload_hash: payloadHash,
-        note: `Plan verrouillé - v${nextVersionNumber}`,
+        note: `Plan locked - v${nextVersionNumber}`,
       })
       .select('id')
       .single();
