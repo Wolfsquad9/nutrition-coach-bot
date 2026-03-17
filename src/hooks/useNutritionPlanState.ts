@@ -264,7 +264,7 @@ export function useNutritionPlanState() {
           setPendingOverrides(overridesResult.overrides);
         }
 
-        setSnapshot(snapshotResult.snapshot as UISnapshot);
+        setSnapshot(snapshotResult.snapshot);
       }
 
       setUiState("IDLE");
