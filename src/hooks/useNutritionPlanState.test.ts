@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useNutritionPlanState } from './useNutritionPlanState';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { MacroTargets } from './useNutritionPlanState';
+import type { MacroTargets } from '@/types';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
