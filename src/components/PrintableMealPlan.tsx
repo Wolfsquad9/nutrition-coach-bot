@@ -128,27 +128,27 @@ export function PrintableMealPlan({
 
       {/* Weekly Summary */}
       <section className="print-weekly-summary">
-        <h2 className="print-summary-title">Résumé Hebdomadaire</h2>
+        <h2 className="print-summary-title">Weekly Summary</h2>
         <div className="print-summary-grid">
           <div className="print-summary-item">
-            <span className="print-summary-label">Calories/semaine</span>
+            <span className="print-summary-label">Calories/week</span>
             <span className="print-summary-value">{formatCalories(weeklyPlan.weeklyTotalMacros.calories)}</span>
-            <span className="print-summary-target">Cible: {formatCalories(weeklyPlan.weeklyTargetMacros.calories)}</span>
+            <span className="print-summary-target">Target: {formatCalories(weeklyPlan.weeklyTargetMacros.calories)}</span>
           </div>
           <div className="print-summary-item">
-            <span className="print-summary-label">Protéines</span>
+            <span className="print-summary-label">Protein</span>
             <span className="print-summary-value">{formatMacro(weeklyPlan.weeklyTotalMacros.protein)}g</span>
-            <span className="print-summary-target">Cible: {formatMacro(weeklyPlan.weeklyTargetMacros.protein)}g</span>
+            <span className="print-summary-target">Target: {formatMacro(weeklyPlan.weeklyTargetMacros.protein)}g</span>
           </div>
           <div className="print-summary-item">
-            <span className="print-summary-label">Glucides</span>
+            <span className="print-summary-label">Carbs</span>
             <span className="print-summary-value">{formatMacro(weeklyPlan.weeklyTotalMacros.carbs)}g</span>
-            <span className="print-summary-target">Cible: {formatMacro(weeklyPlan.weeklyTargetMacros.carbs)}g</span>
+            <span className="print-summary-target">Target: {formatMacro(weeklyPlan.weeklyTargetMacros.carbs)}g</span>
           </div>
           <div className="print-summary-item">
-            <span className="print-summary-label">Lipides</span>
+            <span className="print-summary-label">Fat</span>
             <span className="print-summary-value">{formatMacro(weeklyPlan.weeklyTotalMacros.fat)}g</span>
-            <span className="print-summary-target">Cible: {formatMacro(weeklyPlan.weeklyTargetMacros.fat)}g</span>
+            <span className="print-summary-target">Target: {formatMacro(weeklyPlan.weeklyTargetMacros.fat)}g</span>
           </div>
         </div>
       </section>
