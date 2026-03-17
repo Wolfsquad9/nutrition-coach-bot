@@ -1,0 +1,16 @@
+/**
+ * Progress tab page — placeholder, extracted from Index.tsx
+ */
+
+import { Card } from '@/components/ui/card';
+
+export default function ProgressPage() {
+  return (
+    <Card className="p-6 shadow-card">
+      <h2 className="text-2xl font-bold text-primary">Progress Tracking</h2>
+      <p className="text-muted-foreground mt-2">
+        This feature is not yet implemented.
+      </p>
+    </Card>
+  );
+}
