@@ -74,7 +74,7 @@ function MealSection({
           <h4 className="font-semibold text-foreground">{config.label}</h4>
         </div>
         <p className="text-sm text-muted-foreground italic">
-          Aucun ingrédient disponible pour ce repas
+          No ingredients available for this meal
         </p>
       </div>
     );
