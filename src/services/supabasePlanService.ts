@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
 import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { PlanSnapshot } from '@/types/planSnapshot';
+import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
 
 // Plan version payload structure
