@@ -319,7 +319,7 @@ export function useNutritionPlanState() {
   const lockPlan = useCallback(
     async (clientId: string, clientInfo: LockClientInfo) => {
       if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
-        return { success: false, error: "Aucun brouillon à verrouiller" };
+        return { success: false, error: "No draft to lock" };
       }
 
       setUiState("SAVING");
