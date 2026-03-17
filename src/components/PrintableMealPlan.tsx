@@ -121,9 +121,9 @@ export function PrintableMealPlan({
     <div className="printable-meal-plan">
       {/* Header */}
       <header className="print-header">
-        <h1 className="print-title">Plan Repas Hebdomadaire</h1>
+        <h1 className="print-title">Weekly Meal Plan</h1>
         {clientName && <p className="print-client">Client: {clientName}</p>}
-        {generatedDate && <p className="print-date">Généré le: {generatedDate}</p>}
+        {generatedDate && <p className="print-date">Generated on: {generatedDate}</p>}
       </header>
 
       {/* Weekly Summary */}
