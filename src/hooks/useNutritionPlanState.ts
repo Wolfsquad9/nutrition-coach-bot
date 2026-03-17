@@ -288,119 +288,72 @@ const discardDraft = useCallback((_?: unknown) => {
   setSnapshot(null);
 }, [isDraft]);
 
-  /* ---------------- LOCK ---------------- */
+/* ---------------- LOCK ---------------- */
+const lockPlan = useCallback(
+  async (clientId: string, clientInfo: LockClientInfo) => {
+    if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
+      return { success: false, error: "Aucun brouillon à verrouiller" };
+    }
 
-  const lockPlan = useCallback(
-    async (clientId: string, clientInfo: LockClientInfo) => {
-      if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
-        return { success: false, error: "Aucun brouillon à verrouiller" };
+    setUiState("SAVING");
+
+    try {
+      const result = await lockNutritionPlan(
+        clientId,
+        weeklyPlan,
+        macroTargets,
+        likedIngredients
+      );
+
+      if (!result.success || !result.versionId) {
+        setUiState("ERROR");
+        return { success: false, error: result.error };
       }
-
-      setUiState("SAVING");
 
       try {
-        const result = await lockNutritionPlan(
-          clientId,
-          weeklyPlan,
-          macroTargets,
-          likedIngredients
-        );
+        const now = new Date();
+        const snapshotInput: SnapshotBuildInput = {
+          identifier: {
+            versionId: result.versionId,
+            lockedAt: now,
+            lockedUntil: calculateLockExpiry(now),
+            payloadHash: result.payloadHash ?? "",
+          },
+          client: clientInfo,
+          metrics: macroTargets as NutritionMetrics,
+          weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
+          groceryList: buildGroceryListFromPlan(weeklyPlan!),
+          planName: `Plan – ${clientInfo.firstName} ${clientInfo.lastName}`,
+          versionNumber: versionNumber ?? 1,
+          createdAt: now.toISOString(),
+          generatedBy: "coach",
+        };
 
-if (!result.success || !result.versionId) {
-  setUiState("ERROR");
-  return { success: false, error: result.error };
-}
+        const builtSnapshot = buildPlanSnapshot(snapshotInput);
+        const persistResult = await persistSnapshot(result.versionId, builtSnapshot);
 
-try {
-const snapshotInput: SnapshotBuildInput = {
-  identifier: {
-    versionId: result.versionId,
-    lockedAt: new Date(),
-    lockedUntil: calculateLockExpiry(new Date()),
-    payloadHash: result.payloadHash ?? "",
-  },
+        if (!persistResult.success) {
+          setLastPersistenceFailed(true);
+          setUiState("ERROR");
+          return { success: false, error: persistResult.error };
+        }
 
-  client: clientInfo,
-
-  metrics: macroTargets as NutritionMetrics,
-
-  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
-  groceryList: buildGroceryListFromPlan(weeklyPlan!),
-
-  planName: `Plan – ${clientInfo.firstName} ${clientInfo.lastName}`,
-  versionNumber: versionNumber ?? 1,
-  createdAt: new Date().toISOString(),
-  generatedBy: "coach",
-};
-
-  client: {
-    id: clientId,
-  },
-
-  weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan!),
-
-  groceryList: buildGroceryListFromPlan(weeklyPlan!),
-
-  metrics: {
-    targets: macroTargets,
-    likedIngredients,
-  },
-};
-
-  const builtSnapshot = buildPlanSnapshot(snapshotInput);
-
-const normalizedSnapshot = builtSnapshot;
-
-  const persistResult = await persistSnapshot(result.versionId, normalizedSnapshot);
-
-  if (!persistResult.success) {
-    setLastPersistenceFailed(true);
-    setUiState("ERROR");
-    return { success: false, error: persistResult.error };
-  }
-
-  setLastPersistenceFailed(false);
-
-} catch (err) {
-  setLastPersistenceFailed(true);
-  setUiState("ERROR");
-  return { success: false, error: getErrorMessage(err, "Snapshot persistence failed") };
-}
-
-await loadPlanForClient(clientId);
-
-return { success: true, error: null };
+        setLastPersistenceFailed(false);
       } catch (err) {
+        setLastPersistenceFailed(true);
         setUiState("ERROR");
-        return { success: false, error: getErrorMessage(err, "Lock failed") };
+        return { success: false, error: getErrorMessage(err, "Snapshot persistence failed") };
       }
-    },
-    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, loadPlanForClient]
-  );
 
-  /* ---------------- CLEAR ---------------- */
-
-  const clearState = useCallback(() => {
-    setWeeklyPlan(null);
-    setMacroTargets(null);
-    setLikedIngredients([]);
-    setSnapshot(null);
-
-    setPlanId(null);
-    setVersionId(null);
-    setVersionNumber(null);
-    setPlanCreatedAt(null);
-    setPayloadHash(null);
-
-    setLockedAt(null);
-    setLockedUntil(null);
-
-    setPendingOverrides([]);
-
-    setError(null);
-    setLastPersistenceFailed(false);
-    setUiState("IDLE");
-  }, []);
+      await loadPlanForClient(clientId);
+      return { success: true, error: null };
+    } catch (err) {
+      setUiState("ERROR");
+      return { success: false, error: getErrorMessage(err, "Lock failed") };
+    }
+  },
+  [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient]
+);
 
   /* ---------------- RETURN ---------------- */
 
