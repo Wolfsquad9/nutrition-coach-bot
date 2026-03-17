@@ -10,7 +10,7 @@
 "lint": "eslint src/**/*.{ts,tsx}",
 "preview": "vite preview",
 "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
-"test:snapshot": "npx tsc -p tsconfig.tests.json && find .tmp-tests -name '*.js' -exec bash -c 'mv \"$1\" \"${1%.js}.cjs\"' _ {} \\; && node .tmp-tests/tests/planSnapshot.test.cjs",
+  "test:snapshot": "npx tsc -p tsconfig.tests.json && echo '{\"type\":\"commonjs\"}' > .tmp-tests/package.json && node .tmp-tests/tests/planSnapshot.test.js",
 "test": "npm run test:snapshot"
 },
 "dependencies": {
