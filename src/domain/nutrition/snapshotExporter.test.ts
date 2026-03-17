@@ -102,7 +102,7 @@ function createTestInput(): SnapshotBuildInput {
   };
 }
 
-function deepCloneSnapshot(s: PlanSnapshot): any {
+function deepCloneSnapshot(s: PlanSnapshot): PlanSnapshot {
   return JSON.parse(JSON.stringify(s));
 }
 
@@ -139,7 +139,7 @@ describe('buildPlanSnapshot', () => {
 
 describe('Snapshot immutability after export', () => {
   let snapshot: PlanSnapshot;
-  let snapshotBefore: any;
+let snapshotBefore: PlanSnapshot;
 
   function freshSnapshot() {
     const s = buildPlanSnapshot(createTestInput());
