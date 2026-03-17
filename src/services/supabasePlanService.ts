@@ -210,7 +210,7 @@ export async function lockNutritionPlan(
         success: false,
         planId: null,
         versionId: null,
-        error: 'Non authentifié. Veuillez rafraîchir la page.',
+        error: 'Not authenticated. Please refresh the page.',
       };
     }
 
