@@ -1,5 +1,5 @@
 import { coreIngredients, type IngredientData, calculateMacros, type MealTimeType } from '@/data/ingredientDatabase';
-import { Recipe, Ingredient, Macros } from '@/types';
+import { Recipe, Ingredient, Macros, MacroTargets } from '@/types';
 import {
   enhanceIngredientWithRole,
   calculateIngredientRole,
@@ -332,13 +332,7 @@ const MAX_CONVERGENCE_ITERATIONS = 5;
 // Minimum ingredient serving size (grams) - never go below this
 const MIN_INGREDIENT_GRAMS = 10;
 
-export interface MacroTargets {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  fiber?: number;
-}
+// MacroTargets is imported from @/types
 
 interface MacroVariance {
   calories: number;

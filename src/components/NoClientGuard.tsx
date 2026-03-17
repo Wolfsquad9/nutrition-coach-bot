@@ -10,14 +10,14 @@ interface NoClientGuardProps {
 }
 
 export function NoClientGuard({ 
-  message = 'Veuillez sélectionner ou créer un client pour continuer.' 
+  message = 'Please select or create a client to continue.' 
 }: NoClientGuardProps) {
   return (
     <Card className="p-8 shadow-card">
       <div className="flex flex-col items-center justify-center text-center py-8">
         <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
         <h3 className="text-lg font-semibold text-foreground mb-2">
-          Aucun client sélectionné
+          No client selected
         </h3>
         <p className="text-muted-foreground max-w-md">
           {message}

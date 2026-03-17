@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
 import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { PlanSnapshot } from '@/types/planSnapshot';
+import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
 
 // Plan version payload structure
@@ -210,7 +210,7 @@ export async function lockNutritionPlan(
         success: false,
         planId: null,
         versionId: null,
-        error: 'Non authentifié. Veuillez rafraîchir la page.',
+        error: 'Not authenticated. Please refresh the page.',
       };
     }
 
@@ -287,7 +287,7 @@ export async function lockNutritionPlan(
         created_by: userId,
         plan_payload: planPayloadJson,
         payload_hash: payloadHash,
-        note: `Plan verrouillé - v${nextVersionNumber}`,
+        note: `Plan locked - v${nextVersionNumber}`,
       })
       .select('id')
       .single();

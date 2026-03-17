@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useNutritionPlanState } from './useNutritionPlanState';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { MacroTargets } from './useNutritionPlanState';
+import type { MacroTargets } from '@/types';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -89,8 +89,8 @@ const fakeWeeklyPlan: WeeklyMealPlanResult = {
 const fakeClientInfo = {
   firstName: 'Jean',
   lastName: 'Dupont',
-  goal: 'Perte de poids',
-  activityLevel: 'Modéré',
+  goal: 'Weight loss',
+  activityLevel: 'Moderate',
 };
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

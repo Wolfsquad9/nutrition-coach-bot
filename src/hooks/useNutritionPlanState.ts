@@ -6,7 +6,7 @@ import { useState, useCallback, useMemo } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
 import type { PlanSnapshot } from "@/domain/nutrition/snapshot";
 import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
-import type { NutritionMetrics } from "@/types";
+import type { NutritionMetrics, MacroTargets } from "@/types";
 
 import {
   checkPlanLockStatus,
@@ -62,13 +62,7 @@ export interface LockClientInfo {
   activityLevel: string;
 }
 
-/** Macro targets shape used throughout plan generation */
-export interface MacroTargets {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-}
+// MacroTargets is imported from @/types
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;
@@ -319,7 +313,7 @@ export function useNutritionPlanState() {
   const lockPlan = useCallback(
     async (clientId: string, clientInfo: LockClientInfo) => {
       if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
-        return { success: false, error: "Aucun brouillon à verrouiller" };
+        return { success: false, error: "No draft to lock" };
       }
 
       setUiState("SAVING");
