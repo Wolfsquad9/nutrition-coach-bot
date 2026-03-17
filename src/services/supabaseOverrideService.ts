@@ -77,16 +77,16 @@ export async function createOverride(params: CreateOverrideParams): Promise<{
 
     if (error) {
       console.error('Error creating override:', error);
-      return { override: null, error: error.message };
+      return { override: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     return {
       override: mapRowToOverride(data),
       error: null,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to create override:', error);
-    return { override: null, error: error.message };
+    return { override: null, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -108,16 +108,16 @@ export async function fetchPendingOverrides(planVersionId: string): Promise<{
 
     if (error) {
       console.error('Error fetching pending overrides:', error);
-      return { overrides: [], error: error.message };
+      return { overrides: [], error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     return {
       overrides: (data || []).map(mapRowToOverride),
       error: null,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch pending overrides:', error);
-    return { overrides: [], error: error.message };
+    return { overrides: [], error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -138,16 +138,16 @@ export async function fetchClientOverrides(clientId: string): Promise<{
 
     if (error) {
       console.error('Error fetching client overrides:', error);
-      return { overrides: [], error: error.message };
+      return { overrides: [], error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     return {
       overrides: (data || []).map(mapRowToOverride),
       error: null,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch client overrides:', error);
-    return { overrides: [], error: error.message };
+    return { overrides: [], error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -166,13 +166,13 @@ export async function approveOverride(overrideId: string, approverId: string): P
 
     if (error) {
       console.error('Error approving override:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     return { success: true, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to approve override:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -191,13 +191,13 @@ export async function archiveOverride(overrideId: string): Promise<{
 
     if (error) {
       console.error('Error archiving override:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
     return { success: true, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to archive override:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 

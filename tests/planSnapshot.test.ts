@@ -1,83 +1,85 @@
 /**
  * Standalone snapshot fidelity test.
- * Compiled with: npx tsc -p tsconfig.tests.json
- * Run with: node .tmp-tests/tests/planSnapshot.test.js
+ * Compile: npx tsc -p tsconfig.tests.json
+ * Run: node .tmp-tests/tests/planSnapshot.test.js
  */
-import assert from 'node:assert';
-import { buildPlanSnapshot } from '../src/domain/nutrition/snapshot';
-import type { SnapshotBuildInput } from '../src/domain/nutrition/snapshot';
-import type { MealPlan, GroceryItem, Macros, NutritionMetrics } from '../src/types/index';
 
-function makeMacros(cals: number, p: number, c: number, f: number): Macros {
-  return { calories: cals, protein: p, carbs: c, fat: f };
+import * as assert from 'node:assert';
+import { buildPlanSnapshot } from "../src/domain/nutrition/snapshot";
+import type { SnapshotBuildInput } from "../src/domain/nutrition/snapshot";
+import type { MealPlan, GroceryItem, Macros, NutritionMetrics } from "../src/types";
+
+function macros(cal: number, p: number, c: number, f: number): Macros {
+  return { calories: cal, protein: p, carbs: c, fat: f };
 }
 
-function makeWeeklyPlan(): MealPlan[] {
+function buildWeeklyPlan(): MealPlan[] {
   return [
     {
       day: 1,
       meals: [
         {
-          id: 'meal-1',
+          id: "meal-1",
           mealNumber: 1,
-          mealType: 'breakfast',
-          time: '07:00',
+          mealType: "breakfast",
+          time: "07:00",
           recipes: [
             {
               recipe: {
-                id: 'r-1',
-                name: 'Oatmeal Bowl',
-                category: 'breakfast',
+                id: "recipe-1",
+                name: "Oatmeal Bowl",
+                category: "breakfast",
                 prepTime: 5,
                 cookTime: 10,
                 servings: 1,
                 ingredients: [
                   {
-                    id: 'i-1',
-                    name: 'Oats',
+                    id: "i-oats",
+                    name: "Oats",
                     amount: 80,
-                    unit: 'g',
-                    category: 'carb',
-                    macrosPer100g: makeMacros(389, 17, 66, 7),
+                    unit: "g",
+                    category: "carb",
+                    macrosPer100g: macros(389, 17, 66, 7),
                   },
                   {
-                    id: 'i-2',
-                    name: 'Banana',
+                    id: "i-banana",
+                    name: "Banana",
                     amount: 1,
-                    unit: 'piece',
-                    category: 'fruit',
-                    macrosPer100g: makeMacros(89, 1, 23, 0),
+                    unit: "piece",
+                    category: "fruit",
+                    macrosPer100g: macros(89, 1, 23, 0),
                   },
                 ],
-                instructions: ['Cook oats', 'Slice banana'],
-                macrosPerServing: makeMacros(350, 12, 60, 8),
-                tags: ['quick'],
-                dietTypes: ['omnivore'],
-                allergens: ['gluten'],
+                instructions: ["Cook oats", "Slice banana"],
+                macrosPerServing: macros(350, 12, 60, 8),
+                tags: ["quick"],
+                dietTypes: ["omnivore"],
+                allergens: ["gluten"],
                 equipment: [],
-                difficulty: 'easy',
+                difficulty: "easy",
               },
               servings: 1,
-              adjustedMacros: makeMacros(350, 12, 60, 8),
+              adjustedMacros: macros(350, 12, 60, 8),
             },
           ],
-          totalMacros: makeMacros(350, 12, 60, 8),
+          totalMacros: macros(350, 12, 60, 8),
         },
       ],
-      totalMacros: makeMacros(350, 12, 60, 8),
+      totalMacros: macros(350, 12, 60, 8),
       hydration: 2.5,
     },
   ];
 }
 
-function makeGroceryList(): GroceryItem[] {
+function buildGroceryList(): GroceryItem[] {
   return [
-    { ingredient: 'Oats', totalAmount: 80, unit: 'g', category: 'grains' },
-    { ingredient: 'Banana', totalAmount: 1, unit: 'piece', category: 'fruit' },
+    { ingredient: "Oats", totalAmount: 80, unit: "g", category: "carb" },
+    { ingredient: "Banana", totalAmount: 1, unit: "piece", category: "fruit" },
   ];
 }
 
-function run(): void {
+function run() {
+
   const now = new Date();
   const lockedUntil = new Date(now);
   lockedUntil.setDate(lockedUntil.getDate() + 14);
@@ -95,62 +97,90 @@ function run(): void {
 
   const input: SnapshotBuildInput = {
     identifier: {
-      versionId: 'v-001',
+      versionId: "version-1",
       lockedAt: now,
       lockedUntil,
-      payloadHash: 'abc123',
+      payloadHash: "payload-hash-test",
     },
     client: {
-      firstName: 'Test',
-      lastName: 'Client',
-      goal: 'muscle_gain',
-      activityLevel: 'moderate',
+      firstName: "Test",
+      lastName: "Client",
+      goal: "muscle_gain",
+      activityLevel: "moderate",
     },
     metrics,
-    weeklyPlan: makeWeeklyPlan(),
-    groceryList: makeGroceryList(),
-    planName: 'Test Plan',
+    weeklyPlan: buildWeeklyPlan(),
+    groceryList: buildGroceryList(),
+    planName: "Test Plan",
     versionNumber: 1,
-    createdAt: '2025-01-01T00:00:00Z',
-    generatedBy: 'coach',
+    createdAt: "2025-01-01T00:00:00Z",
+    generatedBy: "coach",
   };
 
-  const snap = buildPlanSnapshot(input);
+  const snapshot = buildPlanSnapshot(input);
 
-  // Structure
-  assert.strictEqual(snap.meta.versionNumber, 1, 'version must match');
-  assert.strictEqual(snap.client.firstName, 'Test');
-  assert.strictEqual(snap.client.lastName, 'Client');
-  assert.ok(snap.meta.createdAt, 'createdAt must exist');
+  /* -------------------------------------------------------
+     STRUCTURE
+  ------------------------------------------------------- */
 
-  // Meals preserved
-  assert.strictEqual(snap.weeklyPlan.length, 1, 'must have 1 day');
-  assert.strictEqual(snap.weeklyPlan[0].meals.length, 1, 'must have 1 meal');
-  assert.strictEqual(snap.weeklyPlan[0].meals[0].recipes[0].recipe.name, 'Oatmeal Bowl');
-  assert.strictEqual(snap.weeklyPlan[0].meals[0].recipes[0].recipe.ingredients.length, 2);
+  assert.strictEqual(snapshot.meta.versionNumber, 1);
+  assert.strictEqual(snapshot.client.firstName, "Test");
+  assert.strictEqual(snapshot.client.lastName, "Client");
 
-  // Ingredient quantities preserved
-  const oats = snap.weeklyPlan[0].meals[0].recipes[0].recipe.ingredients[0];
-  assert.strictEqual(oats.name, 'Oats');
+  assert.ok(snapshot.meta.createdAt);
+
+  /* -------------------------------------------------------
+     WEEKLY PLAN INTEGRITY
+  ------------------------------------------------------- */
+
+  assert.strictEqual(snapshot.weeklyPlan.length, 1);
+  assert.strictEqual(snapshot.weeklyPlan[0].meals.length, 1);
+
+  const recipe =
+    snapshot.weeklyPlan[0].meals[0].recipes[0].recipe;
+
+  assert.strictEqual(recipe.name, "Oatmeal Bowl");
+  assert.strictEqual(recipe.ingredients.length, 2);
+
+  /* -------------------------------------------------------
+     INGREDIENT FIDELITY
+  ------------------------------------------------------- */
+
+  const oats = recipe.ingredients[0];
+
+  assert.strictEqual(oats.name, "Oats");
   assert.strictEqual(oats.amount, 80);
-  assert.strictEqual(oats.unit, 'g');
+  assert.strictEqual(oats.unit, "g");
 
-  // Macros preserved
-  assert.strictEqual(snap.weeklyPlan[0].totalMacros.calories, 350);
-  assert.strictEqual(snap.metrics.proteinGrams, 150);
+  /* -------------------------------------------------------
+     MACROS PRESERVED
+  ------------------------------------------------------- */
 
-  // Hydration preserved
-  assert.strictEqual(snap.weeklyPlan[0].hydration, 2.5);
+  assert.strictEqual(snapshot.weeklyPlan[0].totalMacros.calories, 350);
+  assert.strictEqual(snapshot.metrics.proteinGrams, 150);
 
-  // Grocery list preserved
-  assert.strictEqual(snap.groceryList.length, 2);
-  assert.strictEqual(snap.groceryList[0].ingredient, 'Oats');
+  /* -------------------------------------------------------
+     HYDRATION PRESERVED
+  ------------------------------------------------------- */
 
-  // Identifier preserved
-  assert.strictEqual(snap.identifier.versionId, 'v-001');
-  assert.strictEqual(snap.identifier.payloadHash, 'abc123');
+  assert.strictEqual(snapshot.weeklyPlan[0].hydration, 2.5);
 
-  console.log('✅ All snapshot fidelity assertions passed');
+  /* -------------------------------------------------------
+     GROCERY LIST
+  ------------------------------------------------------- */
+
+  assert.strictEqual(snapshot.groceryList.length, 2);
+  assert.strictEqual(snapshot.groceryList[0].ingredient, "Oats");
+
+  /* -------------------------------------------------------
+     IDENTIFIER
+  ------------------------------------------------------- */
+
+  assert.strictEqual(snapshot.identifier.versionId, "version-1");
+  assert.strictEqual(snapshot.identifier.payloadHash, "payload-hash-test");
+
+  console.log("✅ Snapshot fidelity tests passed");
+
 }
 
 run();

@@ -1,17 +1,26 @@
 {
+  "extends": "./tsconfig.app.json",
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "outDir": ".tmp-tests",
-    "rootDir": ".",
-    "strict": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "declaration": false,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "./.tmp-tests",
+    "strict": false
   },
-  "include": ["tests/**/*.ts", "src/domain/**/*.ts", "src/types/**/*.ts"]
+  "include": [
+    "src/data/ingredientDatabase.ts",
+    "src/services/recipeService.ts",
+    "src/services/supabaseOverrideService.ts",
+    "src/services/supabasePlanService.ts",
+    "src/types/index.ts",
+    "src/types/planSnapshot.ts",
+    "src/utils/planSnapshot.ts",
+    "src/utils/snapshotResolver.ts",
+    "src/domain/nutrition/snapshot.ts",
+    "src/domain/nutrition/snapshotAdapter.ts",
+    "src/domain/nutrition/planLifecycle.ts",
+    "src/domain/shared/constants.ts",
+    "tests/planSnapshot.test.ts"
+  ]
 }

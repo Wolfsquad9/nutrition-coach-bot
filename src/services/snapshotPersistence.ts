@@ -50,10 +50,9 @@ export async function persistSnapshot(
     }
 
     return { success: true, error: null };
-  } catch (err: any) {
-    console.error('Failed to persist snapshot:', err);
-    return { success: false, error: err.message };
-  }
+} catch (err: unknown) {
+  return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+}
 }
 
 /**
@@ -83,12 +82,10 @@ export async function fetchPersistedSnapshot(
       snapshot: data.locked_snapshot_json as unknown as PlanSnapshot,
       error: null,
     };
-  } catch (err: any) {
-    console.error('Failed to fetch snapshot:', err);
-    return { snapshot: null, error: err.message };
-  }
+} catch (err: unknown) {
+  return { snapshot: null, error: err instanceof Error ? err.message : 'Unknown error' };
 }
-
+}
 /**
  * Build a snapshot from available data and persist it.
  * Used for backfill: when a locked plan has no snapshot yet.

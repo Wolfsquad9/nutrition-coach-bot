@@ -216,7 +216,7 @@ export function generateRecipe(
     name: ing.name,
     amount: ing.typical_serving_size_g,
     unit: 'g' as const,
-    category: ing.category === 'carbohydrate' ? 'carb' : ing.category === 'misc' ? 'spice' : ing.category as any,
+    category: ing.category === 'carbohydrate' ? 'carb' : ing.category === 'misc' ? 'spice' : ing.category as 'protein' | 'carb' | 'fat' | 'vegetable' | 'fruit' | 'spice',
     macrosPer100g: {
       calories: ing.macros.calories,
       protein: ing.macros.protein,
@@ -513,7 +513,7 @@ function adjustMealIngredients(
         const minGrams = MIN_INGREDIENT_GRAMS;
         
         // Clamp to science-based bounds
-        let newServing = Math.max(minGrams, Math.min(maxGrams, newServingRaw));
+        const newServing = Math.max(minGrams, Math.min(maxGrams, newServingRaw));
         
         // Track if constraint was hit
         if (newServingRaw > maxGrams) {
@@ -894,7 +894,7 @@ export function generateFullDayMealPlan(
   let converged = false;
   let bestResult = { plan: JSON.parse(JSON.stringify(dailyPlan)), macros: { ...totalMacros } };
   let bestVariance = Infinity;
-  let accumulatedConstraints = createEmptyConstraints();
+  const accumulatedConstraints = createEmptyConstraints();
 
   while (iteration < MAX_CONVERGENCE_ITERATIONS && !converged) {
     const toleranceCheck = checkMacroTolerance(totalMacros, macroTargets);

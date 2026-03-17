@@ -56,6 +56,10 @@ interface UseSupabaseClientsResult {
   createNewClientDraft: () => Client;
 }
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  return error instanceof Error ? error.message : fallback;
+};
+
 export function useSupabaseClients(): UseSupabaseClientsResult {
   const [clients, setClients] = useState<Client[]>([]);
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
@@ -85,9 +89,9 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
         // Current selection no longer exists, select first available
         setActiveClientId(result.clients[0]?.id || null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading clients:', err);
-      setError(err.message || 'Failed to load clients from Supabase');
+      setError(getErrorMessage(err, 'Failed to load clients from Supabase'));
       setClients([]);
       setActiveClientId(null);
     } finally {
@@ -113,9 +117,9 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       setActiveClientId(result.client.id);
       
       return { success: true, client: result.client, error: null };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating client:', err);
-      return { success: false, client: null, error: err.message || 'Failed to create client' };
+      return { success: false, client: null, error: getErrorMessage(err, 'Failed to create client') };
     }
   }, []);
 
@@ -131,9 +135,9 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       setClients(prev => prev.map(c => c.id === clientId ? result.client! : c));
       
       return { success: true, error: null };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating client:', err);
-      return { success: false, error: err.message || 'Failed to update client' };
+      return { success: false, error: getErrorMessage(err, 'Failed to update client') };
     }
   }, []);
 

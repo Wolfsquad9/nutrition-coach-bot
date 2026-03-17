@@ -188,7 +188,7 @@ export function adaptRecipe(
  * Recalculate recipe macros based on ingredients
  */
 function recalculateRecipeMacros(ingredients: Ingredient[]) {
-  let totalMacros = {
+  const totalMacros = {
     calories: 0,
     protein: 0,
     carbs: 0,

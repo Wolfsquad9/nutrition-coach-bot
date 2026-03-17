@@ -8,6 +8,65 @@ import { calculateNutritionMetrics, distributeMacrosAcrossMeals } from './calcul
 import { sampleRecipes, sampleExercises } from '@/data/sampleData';
 import { supabase } from '@/integrations/supabase/client';
 
+
+interface AIFoodEntry {
+  name: string;
+  amount: number;
+  unit: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+interface AIMealEntry {
+  meal_number: number;
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  time: string;
+  foods: AIFoodEntry[];
+}
+
+interface AIDayMealPlan {
+  day: number;
+  meals: AIMealEntry[];
+}
+
+interface AIGroceryCategory {
+  category: string;
+  items: Array<{
+    name: string;
+    amount: number;
+    unit: string;
+  }>;
+}
+
+interface AINutritionPlanPayload {
+  daily_calories: number;
+  daily_macros: { protein: number; carbs: number; fat: number };
+  meal_plans: AIDayMealPlan[];
+  grocery_list?: AIGroceryCategory[];
+}
+
+interface AIWorkoutExercise {
+  name: string;
+  sets: number;
+  reps: string;
+  rest: string;
+  intensity: string;
+  notes: string;
+}
+
+interface AIWorkoutEntry {
+  day: number;
+  name: string;
+  exercises: AIWorkoutExercise[];
+}
+
+interface AITrainingPlanPayload {
+  split?: string;
+  workouts: AIWorkoutEntry[];
+}
+
 /**
  * Filtre les recettes selon les préférences et intolérances du client
  */
@@ -264,7 +323,7 @@ function generateWorkoutSession(
         ['legs', 'glutes'].includes(ex.category)
       );
       break;
-    case 'full_body':
+    case 'full_body': {
       // Prendre un peu de chaque catégorie
       const categories = ['chest', 'back', 'legs', 'shoulders'];
       selectedExercises = [];
@@ -275,6 +334,7 @@ function generateWorkoutSession(
         }
       });
       break;
+    }
   }
   
   // Limiter le nombre d'exercices selon la durée de session
@@ -467,7 +527,7 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
     } else {
       throw new Error('Format de réponse invalide');
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erreur génération IA, utilisation du générateur local:', error);
     // Fallback automatique vers la génération locale si l'IA échoue
     const nutritionPlan = generateNutritionPlan(client);
@@ -492,33 +552,33 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
 /**
  * Transforme le plan nutrition AI en format de l'app
  */
-function transformAINutritionPlan(aiPlan: any, client: Client): NutritionPlan {
+function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client): NutritionPlan {
   const weeklyMealPlan: MealPlan[] = [];
   
-  aiPlan.meal_plans.forEach((dayPlan: any) => {
-    const meals: Meal[] = dayPlan.meals.map((meal: any, index: number) => {
+  aiPlan.meal_plans.forEach((dayPlan) => {
+    const meals: Meal[] = dayPlan.meals.map((meal, index: number) => {
       const recipes: RecipeServing[] = [{
         recipe: {
           id: `ai-recipe-${dayPlan.day}-${index}`,
-          name: meal.foods.map((f: any) => f.name).join(', '),
+          name: meal.foods.map((f) => f.name).join(', '),
           category: meal.meal_type,
           prepTime: 10,
           cookTime: 15,
           servings: 1,
-          ingredients: meal.foods.map((food: any) => ({
+          ingredients: meal.foods.map((food) => ({
             id: `ing-${dayPlan.day}-${index}`,
             name: food.name,
             amount: food.amount,
-            unit: food.unit,
-            category: 'various',
+            unit: food.unit as Recipe['ingredients'][number]['unit'],
+            category: 'other',
             macrosPer100g: { calories: 0, protein: 0, carbs: 0, fat: 0 }
           })),
           instructions: [],
           macrosPerServing: {
-            calories: meal.foods.reduce((sum: number, f: any) => sum + f.calories, 0),
-            protein: meal.foods.reduce((sum: number, f: any) => sum + f.protein, 0),
-            carbs: meal.foods.reduce((sum: number, f: any) => sum + f.carbs, 0),
-            fat: meal.foods.reduce((sum: number, f: any) => sum + f.fat, 0)
+            calories: meal.foods.reduce((sum: number, f) => sum + f.calories, 0),
+            protein: meal.foods.reduce((sum: number, f) => sum + f.protein, 0),
+            carbs: meal.foods.reduce((sum: number, f) => sum + f.carbs, 0),
+            fat: meal.foods.reduce((sum: number, f) => sum + f.fat, 0)
           },
           allergens: [],
           dietTypes: [],
@@ -528,10 +588,10 @@ function transformAINutritionPlan(aiPlan: any, client: Client): NutritionPlan {
         },
         servings: 1,
         adjustedMacros: {
-          calories: meal.foods.reduce((sum: number, f: any) => sum + f.calories, 0),
-          protein: meal.foods.reduce((sum: number, f: any) => sum + f.protein, 0),
-          carbs: meal.foods.reduce((sum: number, f: any) => sum + f.carbs, 0),
-          fat: meal.foods.reduce((sum: number, f: any) => sum + f.fat, 0)
+          calories: meal.foods.reduce((sum: number, f) => sum + f.calories, 0),
+          protein: meal.foods.reduce((sum: number, f) => sum + f.protein, 0),
+          carbs: meal.foods.reduce((sum: number, f) => sum + f.carbs, 0),
+          fat: meal.foods.reduce((sum: number, f) => sum + f.fat, 0)
         }
       }];
       
@@ -563,8 +623,8 @@ function transformAINutritionPlan(aiPlan: any, client: Client): NutritionPlan {
   
   // Transformer la liste de courses
   const groceryList: GroceryItem[] = [];
-  aiPlan.grocery_list?.forEach((category: any) => {
-    category.items.forEach((item: any) => {
+  aiPlan.grocery_list?.forEach((category) => {
+    category.items.forEach((item) => {
       groceryList.push({
         ingredient: item.name,
         totalAmount: item.amount,
@@ -601,24 +661,27 @@ function transformAINutritionPlan(aiPlan: any, client: Client): NutritionPlan {
 /**
  * Transforme le plan training AI en format de l'app
  */
-function transformAITrainingPlan(aiPlan: any, client: Client): TrainingPlan {
-  const workouts: WorkoutSession[] = aiPlan.workouts.map((workout: any) => ({
+function transformAITrainingPlan(aiPlan: AITrainingPlanPayload, client: Client): TrainingPlan {
+  const workouts: WorkoutSession[] = aiPlan.workouts.map((workout) => ({
     id: `session-${workout.day}`,
     dayNumber: workout.day,
-    sessionType: workout.name.toLowerCase().replace(' ', '_'),
+    sessionType: (workout.name.toLowerCase().replace(' ', '_') as WorkoutSession['sessionType']),
     name: workout.name,
     duration: client.sessionDuration,
-    exercises: workout.exercises.map((ex: any) => ({
+    exercises: workout.exercises.map((ex) => ({
       exercise: {
         id: `ex-${workout.day}-${ex.name}`,
         name: ex.name,
-        category: 'various',
+        category: 'back',
         equipment: client.equipmentAvailable,
-        difficulty: client.trainingExperience
+        difficulty: client.trainingExperience,
+        primaryMuscles: [] as string[],
+        secondaryMuscles: [] as string[],
+        instructions: [] as string[]
       },
       sets: ex.sets,
       reps: ex.reps,
-      rest: ex.rest,
+      rest: Number.parseInt(ex.rest, 10) || 60,
       intensity: ex.intensity,
       tempo: '2-0-2-0',
       notes: ex.notes
@@ -632,7 +695,7 @@ function transformAITrainingPlan(aiPlan: any, client: Client): TrainingPlan {
     name: `AI ${client.primaryGoal.replace('_', ' ')} Training Program`,
     duration: 4,
     frequency: client.trainingDaysPerWeek,
-    split: aiPlan.split || 'custom',
+    split: (aiPlan.split || 'custom') as TrainingPlan['split'],
     phase: client.primaryGoal === 'muscle_gain' ? 'hypertrophy' : 
            client.primaryGoal === 'fat_loss' ? 'endurance' : 'strength',
     workouts,

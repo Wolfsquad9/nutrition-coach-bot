@@ -190,5 +190,5 @@ export interface CompletePlan {
   generatedAt: string;
   validUntil: string;
   status: 'active' | 'pending_review' | 'archived';
-  aiRecommendations?: any;
+  aiRecommendations?: Record<string, unknown>;
 }

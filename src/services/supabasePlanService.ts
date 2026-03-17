@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
 import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
+import type { PlanSnapshot } from '@/types/planSnapshot';
 import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
 
 // Plan version payload structure
@@ -29,6 +30,7 @@ export interface PlanPayload {
   realismConstraintHit?: boolean;
   constraintsHitDetails?: string[];
   likedIngredients: string[];
+  locked_snapshot_json?: PlanSnapshot | null;
 }
 
 export interface NutritionPlanRow {
@@ -59,6 +61,10 @@ export interface PlanLockStatus {
   lockedUntil: Date | null;
   daysRemaining: number;
 }
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  return error instanceof Error ? error.message : fallback;
+};
 
 // Simple hash function for payload deduplication
 function hashPayload(payload: PlanPayload): string {
@@ -136,6 +142,7 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
   planId: string | null;
   versionId: string | null;
   createdAt: string | null;
+  snapshot: PlanSnapshot | null;
   error: string | null;
 }> {
   try {
@@ -151,11 +158,11 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
 
     if (planError) {
       console.error('Error fetching plan:', planError);
-      return { plan: null, planId: null, versionId: null, createdAt: null, error: planError.message };
+      return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: planError.message };
     }
 
     if (!planData || !planData.current_version_id) {
-      return { plan: null, planId: null, versionId: null, createdAt: null, error: null };
+      return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null };
     }
 
     // Get the current version payload
@@ -166,7 +173,7 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       .maybeSingle();
 
     if (versionError || !versionData) {
-      return { plan: null, planId: planData.id, versionId: null, createdAt: null, error: versionError?.message || 'Version not found' };
+      return { plan: null, planId: planData.id, versionId: null, createdAt: null, snapshot: null, error: versionError?.message || 'Version not found' };
     }
 
     return {
@@ -174,11 +181,12 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       planId: planData.id,
       versionId: planData.current_version_id,
       createdAt: versionData.created_at,
+      snapshot: ((versionData.plan_payload as unknown as PlanPayload).locked_snapshot_json ?? null) as PlanSnapshot | null,
       error: null,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch current plan:', error);
-    return { plan: null, planId: null, versionId: null, createdAt: null, error: error.message };
+    return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: getErrorMessage(error, 'Failed to fetch current plan') };
   }
 }
 
@@ -301,9 +309,9 @@ export async function lockNutritionPlan(
     }
 
     return { success: true, planId, versionId: newVersion.id, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to lock nutrition plan:', error);
-    return { success: false, planId: null, versionId: null, error: error.message };
+    return { success: false, planId: null, versionId: null, error: getErrorMessage(error, 'Failed to lock nutrition plan') };
   }
 }
 
@@ -346,9 +354,9 @@ export async function fetchPlanHistory(clientId: string): Promise<{
       })),
       error: null,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch plan history:', error);
-    return { versions: [], error: error.message };
+    return { versions: [], error: getErrorMessage(error, 'Failed to fetch plan history') };
   }
 }
 
