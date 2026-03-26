@@ -158,7 +158,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   };
 
   const isGenerating = isGeneratingDaily || isGeneratingWeekly;
-  const hasWeeklyPlan = !!planState.weeklyPlan;
+  const hasWeeklyPlan = !!planState.resolvedWeeklyPlan;
   const hasDailyPlan = !!dailyMealPlan;
   const hasAnyPlan = hasWeeklyPlan || hasDailyPlan;
   const regenerationBlocked = planState.isLocked && planState.lockStatus.isLocked;
@@ -236,7 +236,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         </Card>
       )}
 
-      {hasWeeklyPlan && !planState.isLoading && <WeeklyMealPlanDisplay weeklyPlan={planState.weeklyPlan!} />}
+      {hasWeeklyPlan && !planState.isLoading && <WeeklyMealPlanDisplay weeklyPlan={planState.resolvedWeeklyPlan!} />}
       {hasDailyPlan && !planState.isLoading && <DailyMealPlanDisplay {...dailyMealPlan} />}
 
       {!hasAnyPlan && !planState.isLoading && planState.state !== 'ERROR' && (
