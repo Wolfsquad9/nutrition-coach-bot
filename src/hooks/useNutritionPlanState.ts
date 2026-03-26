@@ -402,10 +402,18 @@ export function useNutritionPlanState() {
 
   /* ---------------- RESOLVED PLAN ---------------- */
 
-  const resolvedWeeklyPlan = useMemo(() => {
-    if (snapshot?.weeklyPlan) return snapshot.weeklyPlan;
+const resolvedWeeklyPlan = useMemo(() => {
+  if (!snapshot?.weeklyPlan || !snapshot?.metrics) {
     return weeklyPlan;
-  }, [snapshot, weeklyPlan]);
+  }
+
+  return {
+    days: snapshot.weeklyPlan,
+    weeklyTotalMacros: snapshot.metrics.total,
+    weeklyTargetMacros: snapshot.metrics.target,
+    weeklyVariance: snapshot.metrics.variance,
+  };
+}, [snapshot, weeklyPlan]);
 
   /* ---------------- RETURN ---------------- */
 
