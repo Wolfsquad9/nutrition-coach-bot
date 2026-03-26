@@ -2,7 +2,7 @@
  * useNutritionPlanState - State machine for nutrition plan lifecycle
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
 import type { PlanSnapshot } from "@/domain/nutrition/snapshot";
 import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
@@ -101,6 +101,10 @@ export function useNutritionPlanState() {
   /* ---------------- OVERRIDES ---------------- */
 
   const [pendingOverrides, setPendingOverrides] = useState<PlanOverride[]>([]);
+
+  /* ---------------- ASYNC GUARD ---------------- */
+
+  const loadRequestIdRef = useRef(0);
 
   /* ---------------- LIFECYCLE ---------------- */
 
@@ -212,6 +216,8 @@ export function useNutritionPlanState() {
   const loadPlanForClient = useCallback(async (clientId: string) => {
     if (!clientId) return;
 
+    const currentRequestId = ++loadRequestIdRef.current;
+
     setUiState("LOADING");
     setError(null);
 
@@ -220,6 +226,8 @@ export function useNutritionPlanState() {
         fetchCurrentPlan(clientId),
         checkPlanLockStatus(clientId),
       ]);
+
+      if (currentRequestId !== loadRequestIdRef.current) return;
 
       if (!planResult.plan) {
         clearState();
@@ -254,6 +262,8 @@ export function useNutritionPlanState() {
           fetchPersistedSnapshot(planResult.versionId),
         ]);
 
+        if (currentRequestId !== loadRequestIdRef.current) return;
+
         if (!overridesResult.error) {
           setPendingOverrides(overridesResult.overrides);
         }
@@ -263,6 +273,7 @@ export function useNutritionPlanState() {
 
       setUiState("IDLE");
     } catch (err) {
+      if (currentRequestId !== loadRequestIdRef.current) return;
       console.error(err);
       setError(getErrorMessage(err, "Failed to load plan"));
       setUiState("ERROR");
@@ -389,6 +400,13 @@ export function useNutritionPlanState() {
     [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, payloadHash, loadPlanForClient]
   );
 
+  /* ---------------- RESOLVED PLAN ---------------- */
+
+  const resolvedWeeklyPlan = useMemo(() => {
+    if (snapshot?.weeklyPlan) return snapshot.weeklyPlan;
+    return weeklyPlan;
+  }, [snapshot, weeklyPlan]);
+
   /* ---------------- RETURN ---------------- */
 
   return {
@@ -405,6 +423,7 @@ export function useNutritionPlanState() {
     isError,
 
     weeklyPlan,
+    resolvedWeeklyPlan,
     macroTargets,
     likedIngredients,
     snapshot,
