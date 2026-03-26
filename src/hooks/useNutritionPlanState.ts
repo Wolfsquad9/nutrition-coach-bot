@@ -1,7 +1,7 @@
 /**
  * useNutritionPlanState - State machine for nutrition plan lifecycle
  */
-
+import { mapSnapshotToWeeklyPlan } from '@/domain/nutrition/snapshotAdapter';
 import { useState, useCallback, useMemo, useRef } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
 import type { PlanSnapshot } from "@/domain/nutrition/snapshot";
@@ -404,7 +404,6 @@ export function useNutritionPlanState() {
 
 const resolvedWeeklyPlan = useMemo(() => {
   if (!snapshot) return weeklyPlan;
-
   return mapSnapshotToWeeklyPlan(snapshot);
 }, [snapshot, weeklyPlan]);
 
