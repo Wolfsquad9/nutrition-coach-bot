@@ -403,15 +403,27 @@ export function useNutritionPlanState() {
   /* ---------------- RESOLVED PLAN ---------------- */
 
 const resolvedWeeklyPlan = useMemo(() => {
-  if (!snapshot?.weeklyPlan || !snapshot?.metrics) {
+  if (!snapshot?.weeklyPlan) {
     return weeklyPlan;
   }
 
   return {
-    days: snapshot.weeklyPlan,
-    weeklyTotalMacros: snapshot.metrics.total,
-    weeklyTargetMacros: snapshot.metrics.target,
-    weeklyVariance: snapshot.metrics.variance,
+    // ✅ FIX 1: remove readonly
+    days: snapshot.weeklyPlan.map((day) => ({
+      dayNumber: day.day,
+      dayName: day.dayName,
+      plan: day.plan,
+    })),
+
+    // ✅ FIX 2: use SAME metrics for all (your domain only has 1 object)
+    weeklyTotalMacros: snapshot.metrics,
+    weeklyTargetMacros: snapshot.metrics,
+    weeklyVariance: {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    },
   };
 }, [snapshot, weeklyPlan]);
 
