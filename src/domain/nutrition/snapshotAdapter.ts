@@ -137,7 +137,53 @@ export function mapWeeklyMealPlanToSnapshot(
     };
   });
 }
+// 👇 ADD HERE (right after mapWeeklyMealPlanToSnapshot)
 
+export function mapSnapshotToWeeklyPlan(snapshot: {
+  weeklyPlan: readonly Readonly<MealPlan>[];
+  metrics: Readonly<Macros>;
+}): WeeklyMealPlanResult {
+  return {
+    days: snapshot.weeklyPlan.map((day, index) => ({
+      dayNumber: day.day,
+      dayName: `Day ${day.day}`, // UI requires this
+      plan: {
+        dailyPlan: reconstructDailyPlan(day.meals),
+        totalMacros: {
+          calories: day.totalMacros.calories,
+          protein: day.totalMacros.protein,
+          carbs: day.totalMacros.carbs,
+          fat: day.totalMacros.fat,
+        },
+      },
+    })),
+
+    weeklyTotalMacros: snapshot.metrics,
+    weeklyTargetMacros: snapshot.metrics,
+
+    weeklyVariance: {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    },
+  };
+}
+function reconstructDailyPlan(meals: Meal[]): any {
+  const dailyPlan: Record<string, any> = {};
+
+  for (const meal of meals) {
+    const recipe = meal.recipes[0]?.recipe;
+
+    dailyPlan[meal.mealType] = {
+      ingredients: recipe?.ingredients ?? [],
+      macros: meal.totalMacros,
+      recipeText: recipe?.name ?? '',
+    };
+  }
+
+  return dailyPlan;
+}
 /**
  * Build a grocery list from the full weekly plan.
  * Aggregates all ingredients across all days and meals.
