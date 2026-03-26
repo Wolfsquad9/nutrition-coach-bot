@@ -400,6 +400,13 @@ export function useNutritionPlanState() {
     [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, payloadHash, loadPlanForClient]
   );
 
+  /* ---------------- RESOLVED PLAN ---------------- */
+
+  const resolvedWeeklyPlan = useMemo(() => {
+    if (snapshot?.weeklyPlan) return snapshot.weeklyPlan;
+    return weeklyPlan;
+  }, [snapshot, weeklyPlan]);
+
   /* ---------------- RETURN ---------------- */
 
   return {
@@ -416,6 +423,7 @@ export function useNutritionPlanState() {
     isError,
 
     weeklyPlan,
+    resolvedWeeklyPlan,
     macroTargets,
     likedIngredients,
     snapshot,
