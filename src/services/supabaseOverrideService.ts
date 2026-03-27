@@ -55,7 +55,7 @@ export async function createOverride(params: CreateOverrideParams): Promise<{
     // Get current user ID for FK ownership
     const userId = await getCurrentUserId();
     if (!userId) {
-      return { override: null, error: 'Non authentifié. Veuillez rafraîchir la page.' };
+      return { override: null, error: 'Not authenticated. Please refresh the page.' };
     }
 
     const { data, error } = await supabase

@@ -251,7 +251,7 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
           </>
         ) : (
           <div className="text-center py-8 text-muted-foreground">
-            Sélectionnez un client pour gérer ses restrictions alimentaires
+            Select a client to manage their dietary restrictions
           </div>
         )}
       </CardContent>
