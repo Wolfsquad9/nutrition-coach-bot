@@ -184,8 +184,10 @@ export function mapSnapshotToWeeklyPlan(snapshot: {
     },
   };
 }
+import type { IngredientData } from '@/data/ingredientDatabase';
+
 type ReconstructedMeal = {
-  ingredients: Ingredient[];
+  ingredients: IngredientData[];
   macros: {
     calories: number;
     protein: number;
