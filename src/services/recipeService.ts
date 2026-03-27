@@ -722,37 +722,37 @@ function generateDeterministicInstructions(
     instructions.push('Mix and consume fresh or refrigerate for later.');
   } else {
     // Lunch or Dinner
-    instructions.push('Peser et préparer tous les ingrédients avant de commencer la cuisson.');
+    instructions.push('Weigh and prepare all ingredients before starting to cook.');
     if (vegetables.length > 0) {
       const vegList = vegetables.map(v => v.name.toLowerCase()).join(', ');
-      instructions.push(`Laver et découper les légumes (${vegList}) en morceaux de taille uniforme.`);
+      instructions.push(`Wash and cut the vegetables (${vegList}) into uniform-sized pieces.`);
     }
     if (protein) {
       const proteinName = protein.name.toLowerCase();
-      instructions.push(`Assaisonner ${protein.typical_serving_size_g}g de ${proteinName} avec sel, poivre et épices au choix.`);
+      instructions.push(`Season ${protein.typical_serving_size_g}g of ${proteinName} with salt, pepper and spices of choice.`);
       if (proteinName.includes('chicken') || proteinName.includes('poulet') || 
           proteinName.includes('turkey') || proteinName.includes('dinde')) {
-        instructions.push(`Cuire le ${proteinName} dans une poêle à feu moyen-vif, 6-8 minutes de chaque côté jusqu'à cuisson complète.`);
+        instructions.push(`Cook the ${proteinName} in a pan over medium-high heat, 6-8 minutes per side until fully cooked.`);
       } else if (proteinName.includes('salmon') || proteinName.includes('saumon') ||
                  proteinName.includes('fish') || proteinName.includes('poisson')) {
-        instructions.push(`Cuire le ${proteinName} à la poêle ou au four, 4-5 minutes de chaque côté.`);
+        instructions.push(`Cook the ${proteinName} in a pan or oven, 4-5 minutes per side.`);
       } else {
-        instructions.push(`Cuire le ${proteinName} à feu moyen jusqu'à la température désirée.`);
+        instructions.push(`Cook the ${proteinName} over medium heat to desired temperature.`);
       }
     }
     if (carb) {
       const carbName = carb.name.toLowerCase();
-      instructions.push(`Pendant ce temps, cuire ${carb.typical_serving_size_g}g de ${carbName} selon les instructions du paquet.`);
+      instructions.push(`Meanwhile, cook ${carb.typical_serving_size_g}g of ${carbName} according to package directions.`);
     }
     if (vegetables.length > 0) {
       const totalVegGrams = vegetables.reduce((sum, v) => sum + v.typical_serving_size_g, 0);
-      instructions.push(`Faire sauter les légumes (${totalVegGrams}g au total) dans un peu d'huile pendant 5-7 minutes jusqu'à tendreté.`);
+      instructions.push(`Sauté the vegetables (${totalVegGrams}g total) in a little oil for 5-7 minutes until tender.`);
     }
     if (fats.length > 0) {
       const fatItem = fats[0];
-      instructions.push(`Finaliser avec ${fatItem.typical_serving_size_g}g de ${fatItem.name.toLowerCase()} pour l'assaisonnement.`);
+      instructions.push(`Finish with ${fatItem.typical_serving_size_g}g of ${fatItem.name.toLowerCase()} for seasoning.`);
     }
-    instructions.push('Dresser la protéine avec les accompagnements dans une assiette et servir chaud.');
+    instructions.push('Plate the protein with sides and serve hot.');
   }
 
   // Limit to 3-6 steps
@@ -768,7 +768,7 @@ function generateFinalRecipeText(
   mealType: MealType
 ): string {
   if (ingredients.length === 0) {
-    return `Aucun ingrédient disponible pour ce repas. Veuillez sélectionner plus d'aliments adaptés.`;
+    return `No ingredients available for this meal. Please select more suitable foods.`;
   }
   
   // Generate deterministic recipe name
@@ -796,9 +796,9 @@ function generateFinalRecipeText(
     };
   }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
   
-  const macroSummary = `Macros: ${mealMacros.calories} kcal | P: ${mealMacros.protein}g | G: ${mealMacros.carbs}g | L: ${mealMacros.fat}g`;
+  const macroSummary = `Macros: ${mealMacros.calories} kcal | P: ${mealMacros.protein}g | C: ${mealMacros.carbs}g | F: ${mealMacros.fat}g`;
   
-  return `**${recipeName}**\n\n${macroSummary}\n\n**Ingrédients:**\n${ingredientList}\n\n**Préparation:**\n${instructionList}`;
+  return `**${recipeName}**\n\n${macroSummary}\n\n**Ingredients:**\n${ingredientList}\n\n**Preparation:**\n${instructionList}`;
 }
 
 /**
