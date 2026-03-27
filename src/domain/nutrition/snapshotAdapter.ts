@@ -184,8 +184,22 @@ export function mapSnapshotToWeeklyPlan(snapshot: {
     },
   };
 }
-function reconstructDailyPlan(meals: Meal[]): any {
-  const dailyPlan: Record<string, any> = {};
+type ReconstructedMeal = {
+  ingredients: Ingredient[];
+  macros: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber?: number;
+  };
+  recipeText: string;
+};
+
+function reconstructDailyPlan(
+  meals: Meal[]
+): Partial<Record<MealTimeType, ReconstructedMeal>> {
+  const dailyPlan: Partial<Record<MealTimeType, ReconstructedMeal>> = {};
 
   for (const meal of meals) {
     const recipe = meal.recipes[0]?.recipe;
