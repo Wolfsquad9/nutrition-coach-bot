@@ -5,8 +5,17 @@
  * It preserves 100% of generated plan data: meals, recipes, ingredients, macros, hydration.
  */
 
-import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { MealPlan, Meal, Recipe, Ingredient, RecipeServing, Macros, GroceryItem } from '@/types';
+import type { WeeklyMealPlanResult, FullDayMealPlanResult } from '@/services/recipeService';
+import type {
+  MealPlan,
+  Meal,
+  Recipe,
+  Ingredient,
+  RecipeServing,
+  Macros,
+  GroceryItem,
+} from '@/types';
+import type { MealData, MealTimeType, IngredientData } from '@/data/ingredientDatabase';
 
 const MEAL_ORDER: MealTimeType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -29,7 +38,7 @@ function mapMealDataToMeal(
     id: ing.id,
     name: ing.name,
     amount: ing.typical_serving_size_g,
-    unit: 'g' as const,
+    unit: 'g',
     category: mapIngredientCategory(ing.category),
     macrosPer100g: {
       calories: ing.macros.calories,
@@ -77,19 +86,11 @@ function mapMealDataToMeal(
     mealType,
     time: MEAL_TIMES[mealType],
     recipes: [serving],
-    totalMacros: {
-      calories: mealData.macros.calories,
-      protein: mealData.macros.protein,
-      carbs: mealData.macros.carbs,
-      fat: mealData.macros.fat,
-      fiber: mealData.macros.fiber,
-    },
+    totalMacros: { ...recipe.macrosPerServing },
   };
 }
 
-function mapIngredientCategory(
-  cat: IngredientData['category'],
-): Ingredient['category'] {
+function mapIngredientCategory(cat: IngredientData['category']): Ingredient['category'] {
   const mapping: Record<string, Ingredient['category']> = {
     protein: 'protein',
     carbohydrate: 'carb',
@@ -103,8 +104,6 @@ function mapIngredientCategory(
 
 /**
  * Map a WeeklyMealPlanResult into the canonical MealPlan[] used by PlanSnapshot.
- *
- * Preserves every day, every meal, every recipe, every ingredient, every macro value.
  */
 export function mapWeeklyMealPlanToSnapshot(
   weeklyPlan: WeeklyMealPlanResult,
@@ -125,134 +124,38 @@ export function mapWeeklyMealPlanToSnapshot(
     return {
       day: day.dayNumber,
       meals,
-      totalMacros: {
-        calories: day.plan.totalMacros.calories,
-        protein: day.plan.totalMacros.protein,
-        carbs: day.plan.totalMacros.carbs,
-        fat: day.plan.totalMacros.fat,
-        fiber: day.plan.totalMacros.fiber,
-      },
+      totalMacros: { ...day.plan.totalMacros },
       hydration: 0, // populated from metrics if available
     };
   });
 }
-// 👇 ADD HERE (right after mapWeeklyMealPlanToSnapshot)
 
+/**
+ * Convert PlanSnapshot back to WeeklyMealPlanResult
+ */
 export function mapSnapshotToWeeklyPlan(snapshot: {
   weeklyPlan: readonly Readonly<MealPlan>[];
   metrics: Readonly<Macros>;
 }): WeeklyMealPlanResult {
   return {
-    days: snapshot.weeklyPlan.map((day, index) => ({
-  dayNumber: day.day,
-  dayName: `Day ${day.day}`,
-  plan: (() => {
-    const totalMacros = {
-      calories: day.totalMacros.calories,
-      protein: day.totalMacros.protein,
-      carbs: day.totalMacros.carbs,
-      fat: day.totalMacros.fat,
-    };
-
-    const targetMacros = { ...totalMacros };
-
-    const variance = {
-      calories: totalMacros.calories - targetMacros.calories,
-      protein: totalMacros.protein - targetMacros.protein,
-      carbs: totalMacros.carbs - targetMacros.carbs,
-      fat: totalMacros.fat - targetMacros.fat,
-    };
-
-    return {
-      dailyPlan: reconstructDailyPlan(day.meals),
-      totalMacros,
-      targetMacros,
-      variance,
-    };
-  })(),
-})),
-
+    days: snapshot.weeklyPlan.map((day) => ({
+      dayNumber: day.day,
+      dayName: `Day ${day.day}`,
+      plan: {
+        dailyPlan: reconstructDailyPlan(day.meals),
+        totalMacros: { ...day.totalMacros },
+        targetMacros: { ...snapshot.metrics },
+        variance: zeroMacros(),
+      },
+    })),
     weeklyTotalMacros: snapshot.metrics,
     weeklyTargetMacros: snapshot.metrics,
-
-    weeklyVariance: {
-      calories: 0,
-      protein: 0,
-      carbs: 0,
-      fat: 0,
-    },
+    weeklyVariance: zeroMacros(),
   };
-}
-import type { IngredientData } from '@/data/ingredientDatabase';
-
-type ReconstructedMeal = {
-  ingredients: IngredientData[];
-  macros: {
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    fiber?: number;
-  };
-  recipeText: string;
-};
-function reconstructDailyPlan(meals: Meal[]) {
-  const emptyMeal = {
-    ingredients: [],
-    macros: {
-      calories: 0,
-      protein: 0,
-      carbs: 0,
-      fat: 0,
-      fiber: 0,
-    },
-    recipeText: '',
-  };
-
-  const dailyPlan: Record<MealTimeType, typeof emptyMeal> = {
-    breakfast: { ...emptyMeal },
-    lunch: { ...emptyMeal },
-    dinner: { ...emptyMeal },
-    snack: { ...emptyMeal },
-  };
-
-  for (const meal of meals) {
-    const recipe = meal.recipes[0]?.recipe;
-
-    dailyPlan[meal.mealType] = {
-      ingredients:
-        recipe?.ingredients.map((ing) => ({
-          id: ing.id,
-          name: ing.name,
-          category: ing.category,
-          typical_serving_size_g: ing.amount,
-          macros: {
-            calories: ing.macrosPer100g.calories,
-            protein: ing.macrosPer100g.protein,
-            carbs: ing.macrosPer100g.carbs,
-            fat: ing.macrosPer100g.fat,
-            fiber: ing.macrosPer100g.fiber ?? 0,
-          },
-          allowedMeals: [],
-          tags: [],
-        })) ?? [],
-      macros: {
-        calories: meal.totalMacros.calories,
-        protein: meal.totalMacros.protein,
-        carbs: meal.totalMacros.carbs,
-        fat: meal.totalMacros.fat,
-        fiber: meal.totalMacros.fiber,
-      },
-      recipeText: recipe?.name ?? '',
-    };
-  }
-
-  return dailyPlan;
 }
 
 /**
  * Build a grocery list from the full weekly plan.
- * Aggregates all ingredients across all days and meals.
  */
 export function buildGroceryListFromPlan(
   weeklyPlan: WeeklyMealPlanResult,
@@ -280,7 +183,6 @@ export function buildGroceryListFromPlan(
 
   const items: GroceryItem[] = [];
   for (const [id, val] of agg) {
-    // We need the ingredient name — look it up from the plan data
     let name = id;
     outer: for (const day of weeklyPlan.days) {
       for (const mealType of MEAL_ORDER) {
@@ -303,4 +205,52 @@ export function buildGroceryListFromPlan(
   }
 
   return items;
+}
+
+/**
+ * Reconstruct dailyPlan from Meal[] for mapSnapshotToWeeklyPlan
+ */
+function reconstructDailyPlan(meals: Meal[]): FullDayMealPlanResult['dailyPlan'] {
+  const emptyMeal = {
+    ingredients: [] as IngredientData[],
+    macros: zeroMacros(),
+    recipeText: '',
+  };
+
+  const dailyPlan: FullDayMealPlanResult['dailyPlan'] = {
+    breakfast: { ...emptyMeal },
+    lunch: { ...emptyMeal },
+    dinner: { ...emptyMeal },
+    snack: { ...emptyMeal },
+  };
+
+  for (const meal of meals) {
+    const recipe = meal.recipes[0]?.recipe;
+    dailyPlan[meal.mealType] = {
+      ingredients:
+        recipe?.ingredients.map((ing) => ({
+          id: ing.id,
+          name: ing.name,
+          category: ing.category,
+          typical_serving_size_g: ing.amount,
+          macros: {
+            calories: ing.macrosPer100g.calories,
+            protein: ing.macrosPer100g.protein,
+            carbs: ing.macrosPer100g.carbs,
+            fat: ing.macrosPer100g.fat,
+            fiber: ing.macrosPer100g.fiber ?? 0,
+          },
+          allowedMeals: [],
+          tags: [],
+        })) ?? [],
+      macros: { ...meal.totalMacros },
+      recipeText: recipe?.name ?? '',
+    };
+  }
+
+  return dailyPlan;
+}
+
+function zeroMacros(): Macros {
+  return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
 }
