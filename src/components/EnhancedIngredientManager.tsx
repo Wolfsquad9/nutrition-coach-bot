@@ -801,7 +801,7 @@ export default function EnhancedIngredientManager({
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handlePrintPlan}>
                     <Printer className="mr-2 h-4 w-4" />
-                    Imprimer
+                    Print
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleExportPDF}>
                     <Download className="mr-2 h-4 w-4" />

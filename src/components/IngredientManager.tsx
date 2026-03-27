@@ -112,14 +112,14 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Gestion des Ingrédients par Client</CardTitle>
+        <CardTitle>Ingredient Management by Client</CardTitle>
         <div className="flex gap-4 mt-4">
           <select
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             value={selectedClient}
             onChange={(e) => setSelectedClient(e.target.value)}
           >
-            <option value="">Sélectionner un client</option>
+            <option value="">Select a client</option>
             {clients.map(client => (
               <option key={client.id} value={client.id}>
                 {client.firstName} {client.lastName}
@@ -130,7 +130,7 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
             variant="outline"
             size="icon"
             onClick={exportRestrictions}
-            title="Exporter les restrictions"
+            title="Export restrictions"
           >
             <Download className="h-4 w-4" />
           </Button>
@@ -157,7 +157,7 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Rechercher un ingrédient..."
+                  placeholder="Search ingredient..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -168,7 +168,7 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
                 <TabsList className="grid grid-cols-7 w-full">
                   {categories.map(cat => (
                     <TabsTrigger key={cat} value={cat}>
-                      {cat === 'all' ? 'Tous' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                      {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -176,12 +176,12 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <Badge variant="destructive">Bloqué</Badge>
-                  <span className="text-muted-foreground">Ne sera pas utilisé dans les recettes</span>
+                  <Badge variant="destructive">Blocked</Badge>
+                  <span className="text-muted-foreground">Will not be used in recipes</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-green-500">Préféré</Badge>
-                  <span className="text-muted-foreground">Prioritaire dans les suggestions</span>
+                  <Badge className="bg-green-500">Preferred</Badge>
+                  <span className="text-muted-foreground">Priority in suggestions</span>
                 </div>
               </div>
             </div>
@@ -240,10 +240,10 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
             {selectedClient && (
               <div className="mt-4 p-3 bg-muted rounded-lg">
                 <div className="text-sm">
-                  <div className="font-medium mb-2">Résumé pour ce client:</div>
+                  <div className="font-medium mb-2">Summary for this client:</div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div>Ingrédients bloqués: {getClientRestriction(selectedClient).blockedIngredients.length}</div>
-                    <div>Ingrédients préférés: {getClientRestriction(selectedClient).preferredIngredients.length}</div>
+                    <div>Blocked ingredients: {getClientRestriction(selectedClient).blockedIngredients.length}</div>
+                    <div>Preferred ingredients: {getClientRestriction(selectedClient).preferredIngredients.length}</div>
                   </div>
                 </div>
               </div>
