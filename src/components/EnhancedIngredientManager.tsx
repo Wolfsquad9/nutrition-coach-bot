@@ -190,8 +190,8 @@ export default function EnhancedIngredientManager({
     linkElement.click();
     
     toast({
-      title: "Export réussi",
-      description: "Les restrictions ont été exportées en JSON",
+      title: "Export successful",
+      description: "Restrictions have been exported as JSON",
     });
   };
 
@@ -205,13 +205,13 @@ export default function EnhancedIngredientManager({
           setClientRestrictions(imported);
           onRestrictionsUpdate(imported);
           toast({
-            title: "Import réussi",
-            description: "Les restrictions ont été importées",
+            title: "Import successful",
+            description: "Restrictions have been imported",
           });
         } catch (error) {
           toast({
-            title: "Erreur d'import",
-            description: "Fichier JSON invalide",
+            title: "Import error",
+            description: "Invalid JSON file",
             variant: "destructive",
           });
         }
@@ -223,8 +223,8 @@ export default function EnhancedIngredientManager({
   const handleGenerateRecipe = async () => {
     if (!activeClientId || !activeClient) {
       toast({
-        title: "Aucun client sélectionné",
-        description: "Le client doit être sélectionné dans l'onglet Client",
+        title: "No client selected",
+        description: "A client must be selected in the Client tab",
         variant: "destructive",
       });
       return;
@@ -235,8 +235,8 @@ export default function EnhancedIngredientManager({
 
     if (preferredIngredients.length === 0) {
       toast({
-        title: "Aucun ingrédient sélectionné",
-        description: "Marquez d'abord des ingrédients comme 'aimés' (étoile verte)",
+        title: "No ingredients selected",
+        description: "First mark ingredients as 'liked' (green star)",
         variant: "destructive",
       });
       return;
@@ -252,14 +252,14 @@ export default function EnhancedIngredientManager({
       setGeneratedRecipe(recipe);
 
       toast({
-        title: "Recette générée !",
-        description: `${recipe.name} créée avec succès`,
+        title: "Recipe generated!",
+        description: `${recipe.name} created successfully`,
       });
     } catch (error) {
       console.error('Recipe generation error:', error);
       toast({
-        title: "Erreur de génération",
-        description: error instanceof Error ? error.message : "Impossible de générer la recette",
+        title: "Generation error",
+        description: error instanceof Error ? error.message : "Unable to generate recipe",
         variant: "destructive",
       });
     } finally {
@@ -270,8 +270,8 @@ export default function EnhancedIngredientManager({
   const generateAIPlan = async (planType: 'full') => {
     if (!activeClientId || !activeClient) {
       toast({
-        title: "Aucun client sélectionné",
-        description: "Le client doit être sélectionné dans l'onglet Client",
+        title: "No client selected",
+        description: "A client must be selected in the Client tab",
         variant: "destructive",
       });
       return;
@@ -327,15 +327,15 @@ export default function EnhancedIngredientManager({
       setGeneratedTrainingPlan(mockResponse.trainingPlan);
 
       toast({
-        title: "Plan généré !",
-        description: "Plan complet généré avec succès",
+        title: "Plan generated!",
+        description: "Complete plan generated successfully",
       });
 
     } catch (error) {
       console.error('AI generation error:', error);
       toast({
-        title: "Erreur de génération",
-        description: "Impossible de générer le plan",
+        title: "Generation error",
+        description: "Unable to generate plan",
         variant: "destructive",
       });
     } finally {
@@ -346,16 +346,16 @@ export default function EnhancedIngredientManager({
   const handlePrintPlan = () => {
     window.print();
     toast({
-      title: "Impression lancée",
-      description: "Le plan est prêt à imprimer",
+      title: "Print started",
+      description: "The plan is ready to print",
     });
   };
 
   const handleExportPDF = async () => {
     if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
       toast({
-        title: "Données manquantes",
-        description: "Générez d'abord un plan complet",
+        title: "Missing data",
+        description: "Generate a complete plan first",
         variant: "destructive",
       });
       return;
@@ -386,14 +386,14 @@ export default function EnhancedIngredientManager({
       downloadPDF(pdf, `${clientLabel.replace(/\s+/g, '_')}_plan.pdf`);
 
       toast({
-        title: "PDF exporté",
-        description: "Le plan a été téléchargé avec succès",
+        title: "PDF exported",
+        description: "The plan has been downloaded successfully",
       });
     } catch (error) {
       console.error('PDF export error:', error);
       toast({
-        title: "Erreur d'export",
-        description: "Impossible de générer le PDF",
+        title: "Export error",
+        description: "Unable to generate PDF",
         variant: "destructive",
       });
     }
@@ -402,8 +402,8 @@ export default function EnhancedIngredientManager({
   const handleSendWhatsApp = async () => {
     if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
       toast({
-        title: "Données manquantes",
-        description: "Générez d'abord un plan complet",
+        title: "Missing data",
+        description: "Generate a complete plan first",
         variant: "destructive",
       });
       return;
@@ -421,14 +421,14 @@ export default function EnhancedIngredientManager({
       if (error) throw error;
 
       toast({
-        title: "WhatsApp - Prêt",
-        description: data.note || "Intégration Twilio/Make.com requise",
+        title: "WhatsApp - Ready",
+        description: data.note || "Twilio/Make.com integration required",
       });
     } catch (error) {
       console.error('WhatsApp send error:', error);
       toast({
-        title: "Erreur WhatsApp",
-        description: "Impossible d'envoyer le plan",
+        title: "WhatsApp error",
+        description: "Unable to send the plan",
         variant: "destructive",
       });
     }
@@ -439,8 +439,8 @@ export default function EnhancedIngredientManager({
     return (
       <Card className="p-8 shadow-card">
         <div className="text-center py-12 text-muted-foreground">
-          <p className="text-lg">Aucun client sélectionné</p>
-          <p className="text-sm mt-2">Sélectionnez un client dans l'onglet Client pour gérer ses ingrédients</p>
+          <p className="text-lg">No client selected</p>
+          <p className="text-sm mt-2">Select a client in the Client tab to manage their ingredients</p>
         </div>
       </Card>
     );
