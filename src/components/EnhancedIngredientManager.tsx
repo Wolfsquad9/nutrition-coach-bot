@@ -660,10 +660,10 @@ export default function EnhancedIngredientManager({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-background border border-border z-50">
-                  <SelectItem value="breakfast">Petit-déjeuner</SelectItem>
-                  <SelectItem value="lunch">Déjeuner</SelectItem>
-                  <SelectItem value="dinner">Dîner</SelectItem>
-                  <SelectItem value="snack">Collation</SelectItem>
+                  <SelectItem value="breakfast">Breakfast</SelectItem>
+                  <SelectItem value="lunch">Lunch</SelectItem>
+                  <SelectItem value="dinner">Dinner</SelectItem>
+                  <SelectItem value="snack">Snack</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -676,7 +676,7 @@ export default function EnhancedIngredientManager({
                 className="flex-1 bg-gradient-primary text-white shadow-glow"
               >
                 {isGeneratingRecipe ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Générer une Recette
+                Generate Recipe
               </Button>
               <Button
                 onClick={() => generateAIPlan('full')}
@@ -684,7 +684,7 @@ export default function EnhancedIngredientManager({
                 className="flex-1 bg-gradient-accent text-white shadow-glow"
               >
                 {isGeneratingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Générer Plan Complet
+                Generate Full Plan
               </Button>
             </div>
           </div>
@@ -699,19 +699,19 @@ export default function EnhancedIngredientManager({
                     {generatedRecipe.name}
                   </CardTitle>
                   <Badge variant="secondary" className="capitalize">
-                    {selectedMealType === 'breakfast' ? 'Petit-déjeuner' : 
-                     selectedMealType === 'lunch' ? 'Déjeuner' : 
-                     selectedMealType === 'dinner' ? 'Dîner' : 'Collation'}
+                    {selectedMealType === 'breakfast' ? 'Breakfast' : 
+                     selectedMealType === 'lunch' ? 'Lunch' : 
+                     selectedMealType === 'dinner' ? 'Dinner' : 'Snack'}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
                   <span className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    Préparation: {generatedRecipe.prepTime}min
+                    Prep: {generatedRecipe.prepTime}min
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    Cuisson: {generatedRecipe.cookTime}min
+                    Cook: {generatedRecipe.cookTime}min
                   </span>
                   <Badge variant="outline" className="capitalize">{generatedRecipe.difficulty}</Badge>
                 </div>
@@ -726,15 +726,15 @@ export default function EnhancedIngredientManager({
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
                     <p className="text-lg font-bold text-primary">{generatedRecipe.macrosPerServing.protein}g</p>
-                    <p className="text-xs text-muted-foreground">Protéines</p>
+                    <p className="text-xs text-muted-foreground">Protein</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
                     <p className="text-lg font-bold text-amber-500">{generatedRecipe.macrosPerServing.carbs}g</p>
-                    <p className="text-xs text-muted-foreground">Glucides</p>
+                    <p className="text-xs text-muted-foreground">Carbs</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
                     <p className="text-lg font-bold text-emerald-500">{generatedRecipe.macrosPerServing.fat}g</p>
-                    <p className="text-xs text-muted-foreground">Lipides</p>
+                    <p className="text-xs text-muted-foreground">Fat</p>
                   </div>
                 </div>
 
@@ -742,7 +742,7 @@ export default function EnhancedIngredientManager({
 
                 {/* Ingredients */}
                 <div>
-                  <h4 className="font-semibold text-foreground mb-2">Ingrédients</h4>
+                  <h4 className="font-semibold text-foreground mb-2">Ingredients</h4>
                   <ul className="space-y-1">
                     {generatedRecipe.ingredients.map((ing, idx) => (
                       <li key={idx} className="flex items-center justify-between text-sm">
@@ -780,7 +780,7 @@ export default function EnhancedIngredientManager({
                     ))}
                     {generatedRecipe.allergens.length > 0 && (
                       <Badge variant="destructive" className="text-xs">
-                        Allergènes: {generatedRecipe.allergens.join(', ')}
+                        Allergens: {generatedRecipe.allergens.join(', ')}
                       </Badge>
                     )}
                   </div>
@@ -797,7 +797,7 @@ export default function EnhancedIngredientManager({
           <Card className="bg-card shadow-card border-border">
             <CardHeader className="border-b border-border">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xl font-bold text-foreground">Plans Générés</CardTitle>
+                <CardTitle className="text-xl font-bold text-foreground">Generated Plans</CardTitle>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handlePrintPlan}>
                     <Printer className="mr-2 h-4 w-4" />
