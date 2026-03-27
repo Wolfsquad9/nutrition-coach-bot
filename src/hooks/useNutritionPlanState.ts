@@ -404,8 +404,15 @@ export function useNutritionPlanState() {
 
 const resolvedWeeklyPlan = useMemo(() => {
   if (!snapshot) return weeklyPlan;
-  return mapSnapshotToWeeklyPlan(snapshot);
-}, [snapshot, weeklyPlan]);
+  return mapSnapshotToWeeklyPlan({
+  weeklyPlan: snapshot.weeklyPlan,
+  metrics: {
+    calories: snapshot.metrics.calories,
+    protein: snapshot.metrics.protein,
+    carbs: snapshot.metrics.carbs,
+    fat: snapshot.metrics.fat,
+  },
+}));
 
   /* ---------------- RETURN ---------------- */
 
