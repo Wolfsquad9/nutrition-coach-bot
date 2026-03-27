@@ -1,6 +1,6 @@
 /**
  * Plan Generation Engine
- * Génère automatiquement des plans nutrition et entraînement personnalisés
+ * Automatically generates personalized nutrition and training plans
  */
 
 import { Client, NutritionPlan, TrainingPlan, CompletePlan, MealPlan, Meal, Recipe, WorkoutSession, Exercise, GroceryItem, RecipeServing } from '@/types';
@@ -68,11 +68,11 @@ interface AITrainingPlanPayload {
 }
 
 /**
- * Filtre les recettes selon les préférences et intolérances du client
+ * Filters recipes according to client preferences and intolerances
  */
 function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
   return recipes.filter(recipe => {
-    // Exclure si contient des allergènes
+    // Exclude if contains allergens
     if (client.allergies.some(allergy => 
       recipe.allergens.some(allergen => 
         allergen.toLowerCase().includes(allergy.toLowerCase())
@@ -81,7 +81,7 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
       return false;
     }
     
-    // Exclure si contient des intolérances
+    // Exclude if contains intolerances
     if (client.intolerances.some(intolerance => 
       recipe.allergens.some(allergen => 
         allergen.toLowerCase().includes(intolerance.toLowerCase())
@@ -90,7 +90,7 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
       return false;
     }
     
-    // Exclure si contient des aliments non aimés
+    // Exclude if contains disliked foods
     if (client.dislikedFoods.some(disliked => 
       recipe.ingredients.some(ing => 
         ing.name.toLowerCase().includes(disliked.toLowerCase())
@@ -99,7 +99,7 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
       return false;
     }
     
-    // Vérifier compatibilité avec le régime
+    // Check diet compatibility
     if (client.dietType === 'vegan' && !recipe.dietTypes.includes('vegan')) {
       return false;
     }
@@ -115,31 +115,31 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
 }
 
 /**
- * Sélectionne les meilleures recettes pour matcher les macros cibles
+ * Selects the best recipes to match target macros
  */
 function selectRecipesForMeal(
   availableRecipes: Recipe[],
   targetMacros: { calories: number; protein: number; carbs: number; fat: number },
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack'
 ): RecipeServing[] {
-  // Filtrer par type de repas
+  // Filter by meal type
   const mealRecipes = availableRecipes.filter(r => r.category === mealType);
   
   if (mealRecipes.length === 0) {
-    // Fallback: utiliser n'importe quelle recette si pas de recette pour ce type
+    // Fallback: use any recipe if none match this type
     mealRecipes.push(...availableRecipes);
   }
   
-  // Sélectionner la recette la plus proche des macros cibles
+  // Select the recipe closest to target macros
   let bestRecipe = mealRecipes[0];
   let bestScore = Infinity;
   let bestServings = 1;
   
   for (const recipe of mealRecipes) {
-    // Calculer le nombre de portions optimal
+    // Calculate optimal servings
     const servings = Math.max(0.5, Math.min(3, targetMacros.calories / recipe.macrosPerServing.calories));
     
-    // Calculer les macros ajustés
+    // Calculate adjusted macros
     const adjustedMacros = {
       calories: recipe.macrosPerServing.calories * servings,
       protein: recipe.macrosPerServing.protein * servings,
@@ -147,7 +147,7 @@ function selectRecipesForMeal(
       fat: recipe.macrosPerServing.fat * servings
     };
     
-    // Calculer le score (différence avec les cibles)
+    // Calculate score (difference from targets)
     const score = 
       Math.abs(adjustedMacros.calories - targetMacros.calories) * 0.3 +
       Math.abs(adjustedMacros.protein - targetMacros.protein) * 2 +
@@ -163,7 +163,7 @@ function selectRecipesForMeal(
   
   return [{
     recipe: bestRecipe,
-    servings: Math.round(bestServings * 10) / 10, // Arrondir à 0.1
+    servings: Math.round(bestServings * 10) / 10, // Round to 0.1
     adjustedMacros: {
       calories: Math.round(bestRecipe.macrosPerServing.calories * bestServings),
       protein: Math.round(bestRecipe.macrosPerServing.protein * bestServings),
@@ -175,7 +175,7 @@ function selectRecipesForMeal(
 }
 
 /**
- * Génère un plan de repas pour une journée
+ * Generates a meal plan for a single day
  */
 function generateDailyMealPlan(
   client: Client,
