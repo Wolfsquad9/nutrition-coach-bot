@@ -493,10 +493,10 @@ export function generateNutritionPlan(client: Client): NutritionPlan {
  * Generates a complete plan (nutrition + training) with AI
  */
 export async function generateCompletePlan(client: Client): Promise<CompletePlan> {
-  // Vérifier les red flags
+  // Check for red flags
   const redFlags = checkForRedFlags(client);
   if (redFlags.length > 0) {
-    throw new Error(`⚠️ Red flags détectés: ${redFlags.join(', ')}. Révision manuelle requise.`);
+    throw new Error(`⚠️ Red flags detected: ${redFlags.join(', ')}. Manual review required.`);
   }
   
   try {
@@ -507,11 +507,11 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
 
     if (error) {
       console.error('Edge function error:', error);
-      throw new Error('Service IA temporairement indisponible');
+      throw new Error('AI service temporarily unavailable');
     }
     
     if (data?.success && data?.plan) {
-      // Transformer la réponse AI en format attendu par l'application
+      // Transform AI response to app format
       const nutritionPlan = transformAINutritionPlan(data.plan.nutrition_plan, client);
       const trainingPlan = transformAITrainingPlan(data.plan.training_plan, client);
       
@@ -525,11 +525,11 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
         aiRecommendations: data.plan.recommendations
       };
     } else {
-      throw new Error('Format de réponse invalide');
+      throw new Error('Invalid response format');
     }
   } catch (error: unknown) {
-    console.error('Erreur génération IA, utilisation du générateur local:', error);
-    // Fallback automatique vers la génération locale si l'IA échoue
+    console.error('AI generation error, using local generator:', error);
+    // Automatic fallback to local generation if AI fails
     const nutritionPlan = generateNutritionPlan(client);
     const trainingPlan = generateTrainingPlan(client);
     
@@ -541,16 +541,16 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
       validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       status: 'active',
       aiRecommendations: {
-        nutrition_tips: ["Plan généré localement (service IA temporairement indisponible)"],
-        training_tips: ["Suivez le programme avec progression régulière"],
-        adherence_strategies: ["Restez constant et patient pour voir les résultats"]
+        nutrition_tips: ["Plan generated locally (AI service temporarily unavailable)"],
+        training_tips: ["Follow the program with regular progression"],
+        adherence_strategies: ["Stay consistent and patient to see results"]
       }
     };
   }
 }
 
 /**
- * Transforme le plan nutrition AI en format de l'app
+ * Transforms AI nutrition plan to app format
  */
 function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client): NutritionPlan {
   const weeklyMealPlan: MealPlan[] = [];
@@ -621,7 +621,7 @@ function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client
     });
   });
   
-  // Transformer la liste de courses
+  // Transform grocery list
   const groceryList: GroceryItem[] = [];
   aiPlan.grocery_list?.forEach((category) => {
     category.items.forEach((item) => {
@@ -643,7 +643,7 @@ function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client
     endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     metrics: {
       tdee: aiPlan.daily_calories,
-      bmr: Math.round(aiPlan.daily_calories / 1.5), // Estimation du BMR
+      bmr: Math.round(aiPlan.daily_calories / 1.5), // BMR estimate
       targetCalories: aiPlan.daily_calories,
       proteinGrams: aiPlan.daily_macros.protein,
       carbsGrams: aiPlan.daily_macros.carbs,
@@ -659,7 +659,7 @@ function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client
 }
 
 /**
- * Transforme le plan training AI en format de l'app
+ * Transforms AI training plan to app format
  */
 function transformAITrainingPlan(aiPlan: AITrainingPlanPayload, client: Client): TrainingPlan {
   const workouts: WorkoutSession[] = aiPlan.workouts.map((workout) => ({
@@ -705,7 +705,7 @@ function transformAITrainingPlan(aiPlan: AITrainingPlanPayload, client: Client):
 }
 
 /**
- * Vérifie les red flags médicaux
+ * Checks for medical red flags
  */
 function checkForRedFlags(client: Client): string[] {
   const redFlags: string[] = [];
@@ -722,12 +722,12 @@ function checkForRedFlags(client: Client): string[] {
     }
   });
   
-  // Vérifier les objectifs extrêmes
+  // Check for extreme goals
   if (client.weeklyWeightChange && Math.abs(client.weeklyWeightChange) > 1) {
     redFlags.push('Extreme weekly weight change goal');
   }
   
-  // Vérifier le BMI
+  // Check BMI
   const bmi = client.weight / Math.pow(client.height / 100, 2);
   if (bmi < 17 || bmi > 40) {
     redFlags.push(`Extreme BMI: ${bmi.toFixed(1)}`);
