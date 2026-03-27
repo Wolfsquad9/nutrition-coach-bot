@@ -26,10 +26,10 @@ interface PrintableMealPlanProps {
 const MEAL_ORDER: MealTimeType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 const MEAL_LABELS: Record<MealTimeType, string> = {
-  breakfast: 'Petit-déjeuner',
-  lunch: 'Déjeuner',
-  dinner: 'Dîner',
-  snack: 'Collation',
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
 };
 
 function PrintMealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealData }) {

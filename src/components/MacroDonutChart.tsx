@@ -13,9 +13,9 @@ interface MacroDonutChartProps {
 
 export function MacroDonutChart({ macros }: MacroDonutChartProps) {
   const data = [
-    { name: 'Protéines', value: macros.protein * 4, color: 'hsl(var(--success))' },
-    { name: 'Glucides', value: macros.carbs * 4, color: 'hsl(var(--info))' },
-    { name: 'Lipides', value: macros.fat * 9, color: 'hsl(var(--warning))' },
+    { name: 'Protein', value: macros.protein * 4, color: 'hsl(var(--success))' },
+    { name: 'Carbs', value: macros.carbs * 4, color: 'hsl(var(--info))' },
+    { name: 'Fat', value: macros.fat * 9, color: 'hsl(var(--warning))' },
   ];
 
   const total = data.reduce((sum, item) => sum + item.value, 0);
@@ -51,17 +51,17 @@ export function MacroDonutChart({ macros }: MacroDonutChartProps) {
 
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="p-2 rounded bg-success/10 border border-success/20">
-          <p className="text-xs text-muted-foreground">Protéines</p>
+          <p className="text-xs text-muted-foreground">Protein</p>
           <p className="text-lg font-bold text-success">{formatMacro(macros.protein)}g</p>
           <p className="text-xs text-muted-foreground">{total > 0 ? formatPercentage((macros.protein * 4 / total) * 100) : 0}%</p>
         </div>
         <div className="p-2 rounded bg-info/10 border border-info/20">
-          <p className="text-xs text-muted-foreground">Glucides</p>
+          <p className="text-xs text-muted-foreground">Carbs</p>
           <p className="text-lg font-bold text-info">{formatMacro(macros.carbs)}g</p>
           <p className="text-xs text-muted-foreground">{total > 0 ? formatPercentage((macros.carbs * 4 / total) * 100) : 0}%</p>
         </div>
         <div className="p-2 rounded bg-warning/10 border border-warning/20">
-          <p className="text-xs text-muted-foreground">Lipides</p>
+          <p className="text-xs text-muted-foreground">Fat</p>
           <p className="text-lg font-bold text-warning">{formatMacro(macros.fat)}g</p>
           <p className="text-xs text-muted-foreground">{total > 0 ? formatPercentage((macros.fat * 9 / total) * 100) : 0}%</p>
         </div>
