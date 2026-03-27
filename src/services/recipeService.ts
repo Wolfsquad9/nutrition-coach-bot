@@ -643,26 +643,26 @@ function generateDeterministicRecipeName(
 
   switch (mealType) {
     case 'breakfast':
-      if (proteinName && carbName) return `${proteinName} Power Bowl avec ${carbName}`;
-      if (proteinName && fruitName) return `${proteinName} & ${fruitName} Énergisant`;
-      if (proteinName) return `Petit-déjeuner Protéiné au ${proteinName}`;
-      return 'Petit-déjeuner Équilibré';
+      if (proteinName && carbName) return `${proteinName} Power Bowl with ${carbName}`;
+      if (proteinName && fruitName) return `${proteinName} & ${fruitName} Energizer`;
+      if (proteinName) return `High-Protein ${proteinName} Breakfast`;
+      return 'Balanced Breakfast';
     case 'lunch':
-      if (proteinName && vegName) return `${proteinName} Grillé aux ${vegName}`;
-      if (proteinName && carbName) return `Assiette ${proteinName} & ${carbName}`;
-      if (proteinName) return `Déjeuner au ${proteinName}`;
-      return 'Déjeuner Nutritif';
+      if (proteinName && vegName) return `Grilled ${proteinName} with ${vegName}`;
+      if (proteinName && carbName) return `${proteinName} & ${carbName} Plate`;
+      if (proteinName) return `${proteinName} Lunch`;
+      return 'Nutritious Lunch';
     case 'dinner':
-      if (proteinName && vegName) return `${proteinName} Rôti avec ${vegName}`;
-      if (proteinName && carbName) return `${proteinName} Savoureux et ${carbName}`;
-      if (proteinName) return `Dîner au ${proteinName}`;
-      return 'Dîner Complet';
+      if (proteinName && vegName) return `Roasted ${proteinName} with ${vegName}`;
+      if (proteinName && carbName) return `Savory ${proteinName} and ${carbName}`;
+      if (proteinName) return `${proteinName} Dinner`;
+      return 'Complete Dinner';
     case 'snack':
-      if (proteinName && fruitName) return `Snack ${proteinName} & ${fruitName}`;
-      if (proteinName) return `Collation Protéinée`;
-      return 'Snack Énergétique';
+      if (proteinName && fruitName) return `${proteinName} & ${fruitName} Snack`;
+      if (proteinName) return `High-Protein Snack`;
+      return 'Energy Snack';
     default:
-      return 'Repas Équilibré';
+      return 'Balanced Meal';
   }
 }
 
@@ -682,44 +682,44 @@ function generateDeterministicInstructions(
   const instructions: string[] = [];
 
   if (mealType === 'breakfast') {
-    instructions.push('Rassembler et peser tous les ingrédients selon les quantités indiquées.');
+    instructions.push('Gather and weigh all ingredients according to the specified quantities.');
     if (carb) {
       const carbName = carb.name.toLowerCase();
       if (carbName.includes('oat') || carbName.includes('avoine')) {
-        instructions.push(`Cuire ${carb.typical_serving_size_g}g de ${carbName} dans de l'eau ou du lait pendant 5 minutes.`);
+        instructions.push(`Cook ${carb.typical_serving_size_g}g of ${carbName} in water or milk for 5 minutes.`);
       } else {
-        instructions.push(`Préparer ${carb.typical_serving_size_g}g de ${carbName} selon les indications.`);
+        instructions.push(`Prepare ${carb.typical_serving_size_g}g of ${carbName} according to package directions.`);
       }
     }
     if (protein) {
       const proteinName = protein.name.toLowerCase();
       if (proteinName.includes('egg') || proteinName.includes('œuf')) {
-        instructions.push(`Cuire ${protein.typical_serving_size_g}g d'œufs (brouillés ou pochés) à feu moyen.`);
+        instructions.push(`Cook ${protein.typical_serving_size_g}g of eggs (scrambled or poached) over medium heat.`);
       } else if (proteinName.includes('yogurt') || proteinName.includes('yaourt')) {
-        instructions.push(`Ajouter ${protein.typical_serving_size_g}g de ${proteinName} dans un bol.`);
+        instructions.push(`Add ${protein.typical_serving_size_g}g of ${proteinName} to a bowl.`);
       } else {
-        instructions.push(`Préparer ${protein.typical_serving_size_g}g de ${proteinName}.`);
+        instructions.push(`Prepare ${protein.typical_serving_size_g}g of ${proteinName}.`);
       }
     }
     if (fruits.length > 0) {
-      const fruitList = fruits.map(f => `${f.typical_serving_size_g}g de ${f.name.toLowerCase()}`).join(', ');
-      instructions.push(`Laver et couper les fruits: ${fruitList}.`);
+      const fruitList = fruits.map(f => `${f.typical_serving_size_g}g of ${f.name.toLowerCase()}`).join(', ');
+      instructions.push(`Wash and cut the fruits: ${fruitList}.`);
     }
     if (fats.length > 0) {
-      const fatList = fats.map(f => `${f.typical_serving_size_g}g de ${f.name.toLowerCase()}`).join(', ');
-      instructions.push(`Ajouter les matières grasses: ${fatList}.`);
+      const fatList = fats.map(f => `${f.typical_serving_size_g}g of ${f.name.toLowerCase()}`).join(', ');
+      instructions.push(`Add the fats: ${fatList}.`);
     }
-    instructions.push('Assembler tous les éléments dans un bol et servir immédiatement.');
+    instructions.push('Assemble all elements in a bowl and serve immediately.');
   } else if (mealType === 'snack') {
-    instructions.push('Peser les ingrédients selon les quantités spécifiées.');
+    instructions.push('Weigh ingredients according to the specified quantities.');
     if (protein) {
-      instructions.push(`Préparer ${protein.typical_serving_size_g}g de ${protein.name.toLowerCase()}.`);
+      instructions.push(`Prepare ${protein.typical_serving_size_g}g of ${protein.name.toLowerCase()}.`);
     }
     if (fruits.length > 0 || fats.length > 0) {
-      const items = [...fruits, ...fats].map(i => `${i.typical_serving_size_g}g de ${i.name.toLowerCase()}`);
-      instructions.push(`Ajouter: ${items.join(', ')}.`);
+      const items = [...fruits, ...fats].map(i => `${i.typical_serving_size_g}g of ${i.name.toLowerCase()}`);
+      instructions.push(`Add: ${items.join(', ')}.`);
     }
-    instructions.push('Mélanger et consommer frais ou réfrigérer pour plus tard.');
+    instructions.push('Mix and consume fresh or refrigerate for later.');
   } else {
     // Lunch or Dinner
     instructions.push('Peser et préparer tous les ingrédients avant de commencer la cuisson.');
