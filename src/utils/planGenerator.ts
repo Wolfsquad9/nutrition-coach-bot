@@ -237,7 +237,7 @@ function generateDailyMealPlan(
 }
 
 /**
- * Génère une liste de courses consolidée
+ * Generates a consolidated grocery list
  */
 function generateGroceryList(weeklyMealPlan: MealPlan[]): GroceryItem[] {
   const groceryMap = new Map<string, GroceryItem>();
@@ -258,7 +258,7 @@ function generateGroceryList(weeklyMealPlan: MealPlan[]): GroceryItem[] {
               totalAmount: amount,
               unit: ingredient.unit,
               category: ingredient.category,
-              estimatedCost: amount * 0.05 // Estimation simple
+              estimatedCost: amount * 0.05 // Simple estimate
             });
           }
         });
@@ -266,14 +266,14 @@ function generateGroceryList(weeklyMealPlan: MealPlan[]): GroceryItem[] {
     });
   });
   
-  // Convertir en array et trier par catégorie
+  // Convert to array and sort by category
   return Array.from(groceryMap.values()).sort((a, b) => 
     a.category.localeCompare(b.category)
   );
 }
 
 /**
- * Sélectionne un template d'entraînement approprié
+ * Selects an appropriate training template
  */
 function selectTrainingTemplate(client: Client): 'upper_lower' | 'push_pull_legs' | 'full_body' {
   if (client.trainingDaysPerWeek <= 3) {
@@ -286,7 +286,7 @@ function selectTrainingTemplate(client: Client): 'upper_lower' | 'push_pull_legs
 }
 
 /**
- * Génère une session d'entraînement
+ * Generates a workout session
  */
 function generateWorkoutSession(
   sessionType: 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body',
@@ -294,7 +294,7 @@ function generateWorkoutSession(
   dayNumber: number,
   client: Client
 ): WorkoutSession {
-  // Sélectionner les exercices selon le type de session
+  // Select exercises by session type
   let selectedExercises: Exercise[] = [];
   
   switch (sessionType) {
@@ -324,7 +324,7 @@ function generateWorkoutSession(
       );
       break;
     case 'full_body': {
-      // Prendre un peu de chaque catégorie
+      // Take some from each category
       const categories = ['chest', 'back', 'legs', 'shoulders'];
       selectedExercises = [];
       categories.forEach(cat => {
@@ -337,7 +337,7 @@ function generateWorkoutSession(
     }
   }
   
-  // Limiter le nombre d'exercices selon la durée de session
+  // Limit exercise count based on session duration
   const exerciseCount = Math.min(
     selectedExercises.length,
     Math.floor(client.sessionDuration / 10) // ~10 min par exercice
@@ -345,14 +345,14 @@ function generateWorkoutSession(
   
   selectedExercises = selectedExercises.slice(0, exerciseCount);
   
-  // Créer les exercices de la session
+  // Create session exercises
   const workoutExercises = selectedExercises.map(exercise => {
     let sets: number;
     let reps: string;
     let rest: number;
     let intensity: string;
     
-    // Adapter selon l'objectif
+    // Adapt based on goal
     switch (client.primaryGoal) {
       case 'muscle_gain':
         sets = 4;
@@ -373,7 +373,7 @@ function generateWorkoutSession(
         intensity = 'RPE 7';
     }
     
-    // Ajuster pour les exercices composés
+    // Adjust for compound exercises
     if (['Deadlift', 'Squat', 'Bench Press'].some(name => exercise.name.includes(name))) {
       reps = client.primaryGoal === 'muscle_gain' ? '5-8' : '6-10';
       rest = 120;
@@ -403,19 +403,19 @@ function generateWorkoutSession(
 }
 
 /**
- * Génère un plan d'entraînement complet
+ * Generates a complete training plan
  */
 export function generateTrainingPlan(client: Client): TrainingPlan {
   const template = selectTrainingTemplate(client);
   const workouts: WorkoutSession[] = [];
   
-  // Générer les sessions selon le template
+  // Generate sessions based on template
   if (template === 'full_body') {
     for (let i = 0; i < client.trainingDaysPerWeek; i++) {
       workouts.push(generateWorkoutSession('full_body', sampleExercises, i + 1, client));
     }
   } else if (template === 'upper_lower') {
-    // Alterner Upper/Lower
+    // Alternate Upper/Lower
     for (let i = 0; i < client.trainingDaysPerWeek; i++) {
       const sessionType = i % 2 === 0 ? 'upper' : 'lower';
       workouts.push(generateWorkoutSession(sessionType, sampleExercises, i + 1, client));
@@ -428,7 +428,7 @@ export function generateTrainingPlan(client: Client): TrainingPlan {
     }
   }
   
-  // Déterminer la phase selon l'objectif
+  // Determine phase based on goal
   let phase: 'strength' | 'hypertrophy' | 'power' | 'endurance';
   switch (client.primaryGoal) {
     case 'muscle_gain':
@@ -445,7 +445,7 @@ export function generateTrainingPlan(client: Client): TrainingPlan {
     id: `training-${Date.now()}`,
     clientId: client.id,
     name: `${client.primaryGoal.replace('_', ' ')} Training Program`,
-    duration: 4, // 4 semaines par défaut
+    duration: 4, // 4 weeks default
     frequency: client.trainingDaysPerWeek,
     split: template,
     phase,
@@ -456,23 +456,23 @@ export function generateTrainingPlan(client: Client): TrainingPlan {
 }
 
 /**
- * Génère un plan nutritionnel complet
+ * Generates a complete nutrition plan
  */
 export function generateNutritionPlan(client: Client): NutritionPlan {
-  // Filtrer les recettes selon le client
+  // Filter recipes for client
   const availableRecipes = filterRecipesForClient(sampleRecipes, client);
   
   if (availableRecipes.length < 3) {
     throw new Error('Not enough compatible recipes for this client. Please adjust preferences.');
   }
   
-  // Générer un plan pour 7 jours
+  // Generate a 7-day plan
   const weeklyMealPlan: MealPlan[] = [];
   for (let day = 1; day <= 7; day++) {
     weeklyMealPlan.push(generateDailyMealPlan(client, day, availableRecipes));
   }
   
-  // Générer la liste de courses
+  // Generate grocery list
   const groceryList = generateGroceryList(weeklyMealPlan);
   
   return {
@@ -490,7 +490,7 @@ export function generateNutritionPlan(client: Client): NutritionPlan {
 }
 
 /**
- * Génère un plan complet (nutrition + entraînement) avec IA
+ * Generates a complete plan (nutrition + training) with AI
  */
 export async function generateCompletePlan(client: Client): Promise<CompletePlan> {
   // Vérifier les red flags
