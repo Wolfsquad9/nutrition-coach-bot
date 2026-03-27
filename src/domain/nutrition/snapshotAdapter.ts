@@ -205,7 +205,22 @@ function reconstructDailyPlan(
     const recipe = meal.recipes[0]?.recipe;
 
     dailyPlan[meal.mealType] = {
-      ingredients: recipe?.ingredients ?? [],
+      ingredients:
+  recipe?.ingredients.map((ing) => ({
+    id: ing.id,
+    name: ing.name,
+    category: ing.category,
+    typical_serving_size_g: ing.amount,
+    macros: {
+      calories: ing.macrosPer100g.calories,
+      protein: ing.macrosPer100g.protein,
+      carbs: ing.macrosPer100g.carbs,
+      fat: ing.macrosPer100g.fat,
+      fiber: ing.macrosPer100g.fiber ?? 0,
+    },
+    allowedMeals: [],
+    tags: [],
+  })) ?? [],
       macros: meal.totalMacros,
       recipeText: recipe?.name ?? '',
     };
