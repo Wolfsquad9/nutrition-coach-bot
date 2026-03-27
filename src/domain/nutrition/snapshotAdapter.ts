@@ -145,18 +145,33 @@ export function mapSnapshotToWeeklyPlan(snapshot: {
 }): WeeklyMealPlanResult {
   return {
     days: snapshot.weeklyPlan.map((day, index) => ({
-      dayNumber: day.day,
-      dayName: `Day ${day.day}`, // UI requires this
-      plan: {
-        dailyPlan: reconstructDailyPlan(day.meals),
-        totalMacros: {
-          calories: day.totalMacros.calories,
-          protein: day.totalMacros.protein,
-          carbs: day.totalMacros.carbs,
-          fat: day.totalMacros.fat,
-        },
-      },
-    })),
+  dayNumber: day.day,
+  dayName: `Day ${day.day}`,
+  plan: (() => {
+    const totalMacros = {
+      calories: day.totalMacros.calories,
+      protein: day.totalMacros.protein,
+      carbs: day.totalMacros.carbs,
+      fat: day.totalMacros.fat,
+    };
+
+    const targetMacros = { ...totalMacros };
+
+    const variance = {
+      calories: totalMacros.calories - targetMacros.calories,
+      protein: totalMacros.protein - targetMacros.protein,
+      carbs: totalMacros.carbs - targetMacros.carbs,
+      fat: totalMacros.fat - targetMacros.fat,
+    };
+
+    return {
+      dailyPlan: reconstructDailyPlan(day.meals),
+      totalMacros,
+      targetMacros,
+      variance,
+    };
+  })(),
+})),
 
     weeklyTotalMacros: snapshot.metrics,
     weeklyTargetMacros: snapshot.metrics,
