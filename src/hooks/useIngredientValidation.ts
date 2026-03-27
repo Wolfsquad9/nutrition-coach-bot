@@ -78,9 +78,9 @@ export function useIngredientValidation(
     
     let validationMessage: string | null = null;
     if (!canGenerateWeekly && likedCount > 0) {
-      validationMessage = `Sélectionnez ${weeklyShortfall} ingrédient(s) de plus pour générer un plan hebdomadaire (minimum: ${INGREDIENT_MINIMUMS.weeklyPlan})`;
+      validationMessage = `Select ${weeklyShortfall} more ingredient(s) to generate a weekly plan (minimum: ${INGREDIENT_MINIMUMS.weeklyPlan})`;
     } else if (likedCount === 0) {
-      validationMessage = `Sélectionnez au moins ${INGREDIENT_MINIMUMS.weeklyPlan} ingrédients aimés dans l'onglet Ingrédients`;
+      validationMessage = `Select at least ${INGREDIENT_MINIMUMS.weeklyPlan} liked ingredients in the Ingredients tab`;
     }
     
     return {
@@ -108,7 +108,7 @@ export function useIngredientValidation(
       const shortfall = minimum - likedCount;
       return {
         valid: false,
-        message: `Sélectionnez au moins ${minimum} ingrédients aimés dans l'onglet Ingrédients (${shortfall} de plus requis)`,
+        message: `Select at least ${minimum} liked ingredients in the Ingredients tab (${shortfall} more required)`,
       };
     }
     
@@ -135,7 +135,7 @@ export function validateIngredients(
     const shortfall = minimum - likedCount;
     return {
       valid: false,
-      message: `Sélectionnez au moins ${minimum} ingrédients aimés (${shortfall} de plus requis)`,
+      message: `Select at least ${minimum} liked ingredients (${shortfall} more required)`,
     };
   }
   

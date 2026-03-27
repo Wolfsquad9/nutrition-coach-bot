@@ -1,19 +1,19 @@
 /**
  * PDF Export Module
- * Génère des PDFs professionnels pour les plans nutrition et entraînement
+ * Generates professional PDFs for nutrition and training plans
  */
 
 import jsPDF from 'jspdf';
 import { CompletePlan, NutritionPlan, TrainingPlan, MealPlan, GroceryItem } from '@/types';
 
 /**
- * Génère un PDF complet du plan client
+ * Generates a complete PDF of the client plan
  */
 export function generateCompletePlanPDF(plan: CompletePlan): jsPDF {
   const doc = new jsPDF();
   let yPosition = 20;
   
-  // En-tête
+  // Header
   doc.setFontSize(24);
   doc.setTextColor(33, 37, 41);
   doc.text('FitPlan Pro', 105, yPosition, { align: 'center' });
@@ -23,7 +23,7 @@ export function generateCompletePlanPDF(plan: CompletePlan): jsPDF {
   doc.text('Complete Client Plan', 105, yPosition, { align: 'center' });
   yPosition += 15;
   
-  // Informations client
+  // Client information
   doc.setFontSize(18);
   doc.setTextColor(0, 123, 255);
   doc.text('Client Information', 20, yPosition);
@@ -42,7 +42,7 @@ export function generateCompletePlanPDF(plan: CompletePlan): jsPDF {
   doc.text(`Activity Level: ${plan.client.activityLevel.replace('_', ' ')}`, 20, yPosition);
   yPosition += 12;
   
-  // Métriques nutritionnelles
+  // Nutrition metrics
   doc.setFontSize(18);
   doc.setTextColor(0, 123, 255);
   doc.text('Nutrition Metrics', 20, yPosition);
@@ -60,7 +60,7 @@ export function generateCompletePlanPDF(plan: CompletePlan): jsPDF {
   doc.text(`Fiber: ${metrics.fiberGrams}g | Water: ${metrics.waterLiters}L`, 20, yPosition);
   yPosition += 12;
   
-  // Plan d'entraînement résumé
+  // Training plan summary
   doc.setFontSize(18);
   doc.setTextColor(0, 123, 255);
   doc.text('Training Plan', 20, yPosition);
@@ -76,15 +76,15 @@ export function generateCompletePlanPDF(plan: CompletePlan): jsPDF {
   yPosition += 6;
   doc.text(`Phase: ${plan.trainingPlan.phase}`, 20, yPosition);
   
-  // Nouvelle page pour le plan nutritionnel détaillé
+  // New page for detailed nutrition plan
   doc.addPage();
   addNutritionPlanPages(doc, plan.nutritionPlan);
   
-  // Nouvelle page pour le plan d'entraînement détaillé
+  // New page for detailed training plan
   doc.addPage();
   addTrainingPlanPages(doc, plan.trainingPlan);
   
-  // Nouvelle page pour la liste de courses
+  // New page for grocery list
   doc.addPage();
   addGroceryListPage(doc, plan.nutritionPlan.groceryList);
   
@@ -92,7 +92,7 @@ export function generateCompletePlanPDF(plan: CompletePlan): jsPDF {
 }
 
 /**
- * Ajoute les pages du plan nutritionnel
+ * Adds nutrition plan pages
  */
 function addNutritionPlanPages(doc: jsPDF, nutritionPlan: NutritionPlan): void {
   let yPosition = 20;
@@ -102,9 +102,9 @@ function addNutritionPlanPages(doc: jsPDF, nutritionPlan: NutritionPlan): void {
   doc.text('Weekly Nutrition Plan', 105, yPosition, { align: 'center' });
   yPosition += 15;
   
-  // Afficher chaque jour
+  // Display each day
   nutritionPlan.weeklyMealPlan.forEach((dayPlan: MealPlan) => {
-    // Vérifier si on a besoin d'une nouvelle page
+    // Check if we need a new page
     if (yPosition > 240) {
       doc.addPage();
       yPosition = 20;
@@ -143,7 +143,7 @@ function addNutritionPlanPages(doc: jsPDF, nutritionPlan: NutritionPlan): void {
 }
 
 /**
- * Ajoute les pages du plan d'entraînement
+ * Adds training plan pages
  */
 function addTrainingPlanPages(doc: jsPDF, trainingPlan: TrainingPlan): void {
   let yPosition = 20;
@@ -154,7 +154,7 @@ function addTrainingPlanPages(doc: jsPDF, trainingPlan: TrainingPlan): void {
   yPosition += 15;
   
   trainingPlan.workouts.forEach(workout => {
-    // Vérifier si on a besoin d'une nouvelle page
+    // Check if we need a new page
     if (yPosition > 200) {
       doc.addPage();
       yPosition = 20;
@@ -192,7 +192,7 @@ function addTrainingPlanPages(doc: jsPDF, trainingPlan: TrainingPlan): void {
     yPosition += 6;
   });
   
-  // Ajouter les notes de progression
+  // Add progression notes
   if (yPosition > 240) {
     doc.addPage();
     yPosition = 20;
@@ -213,7 +213,7 @@ function addTrainingPlanPages(doc: jsPDF, trainingPlan: TrainingPlan): void {
 }
 
 /**
- * Ajoute la page de liste de courses
+ * Adds grocery list page
  */
 function addGroceryListPage(doc: jsPDF, groceryList: GroceryItem[]): void {
   let yPosition = 20;
@@ -223,11 +223,11 @@ function addGroceryListPage(doc: jsPDF, groceryList: GroceryItem[]): void {
   doc.text('Weekly Grocery List', 105, yPosition, { align: 'center' });
   yPosition += 15;
   
-  // Grouper par catégorie
+  // Group by category
   const categories = [...new Set(groceryList.map(item => item.category))];
   
   categories.forEach(category => {
-    // Vérifier si on a besoin d'une nouvelle page
+    // Check if we need a new page
     if (yPosition > 250) {
       doc.addPage();
       yPosition = 20;
@@ -243,7 +243,7 @@ function addGroceryListPage(doc: jsPDF, groceryList: GroceryItem[]): void {
       doc.setFontSize(10);
       doc.setTextColor(33, 37, 41);
       
-      // Formater la quantité
+      // Format quantity
       const formattedAmount = formatAmount(item.totalAmount, item.unit);
       doc.text(`□ ${item.ingredient}: ${formattedAmount}`, 25, yPosition);
       yPosition += 5;
@@ -252,7 +252,7 @@ function addGroceryListPage(doc: jsPDF, groceryList: GroceryItem[]): void {
     yPosition += 3;
   });
   
-  // Ajouter le coût estimé total
+  // Add estimated total cost
   const totalCost = groceryList.reduce((sum, item) => sum + (item.estimatedCost || 0), 0);
   
   if (yPosition > 250) {
@@ -267,10 +267,10 @@ function addGroceryListPage(doc: jsPDF, groceryList: GroceryItem[]): void {
 }
 
 /**
- * Formate les quantités pour la liste de courses
+ * Formats quantities for the grocery list
  */
 function formatAmount(amount: number, unit: string): string {
-  // Convertir en unités pratiques
+  // Convert to practical units
   if (unit === 'g' && amount >= 1000) {
     return `${(amount / 1000).toFixed(1)} kg`;
   }
@@ -278,7 +278,7 @@ function formatAmount(amount: number, unit: string): string {
     return `${(amount / 1000).toFixed(1)} L`;
   }
   
-  // Arrondir intelligemment
+  // Round intelligently
   if (amount % 1 === 0) {
     return `${amount} ${unit}`;
   }
@@ -287,7 +287,7 @@ function formatAmount(amount: number, unit: string): string {
 }
 
 /**
- * Calcule l'âge à partir de la date de naissance
+ * Calculates age from birth date
  */
 function calculateAge(birthDate: string): number {
   const today = new Date();
@@ -303,21 +303,21 @@ function calculateAge(birthDate: string): number {
 }
 
 /**
- * Exporte le plan en JSON
+ * Exports plan as JSON
  */
 export function exportPlanAsJSON(plan: CompletePlan): string {
   return JSON.stringify(plan, null, 2);
 }
 
 /**
- * Télécharge le PDF
+ * Downloads the PDF
  */
 export function downloadPDF(pdf: jsPDF, filename: string = 'client-plan.pdf'): void {
   pdf.save(filename);
 }
 
 /**
- * Télécharge le JSON
+ * Downloads the JSON
  */
 export function downloadJSON(data: string, filename: string = 'client-plan.json'): void {
   const blob = new Blob([data], { type: 'application/json' });
