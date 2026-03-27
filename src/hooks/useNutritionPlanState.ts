@@ -404,12 +404,12 @@ export function useNutritionPlanState() {
 
 const resolvedWeeklyPlan = mapSnapshotToWeeklyPlan({
   weeklyPlan: snapshot.weeklyPlan,
-  metrics: {
-    calories: snapshot.metrics.calories,
-    protein: snapshot.metrics.protein,
-    carbs: snapshot.metrics.carbs,
-    fat: snapshot.metrics.fat,
-  },
+metrics: {
+  calories: snapshot.metrics.total.calories,
+  protein: snapshot.metrics.total.protein,
+  carbs: snapshot.metrics.total.carbs,
+  fat: snapshot.metrics.total.fat,
+},
 });
 
   /* ---------------- RETURN ---------------- */
