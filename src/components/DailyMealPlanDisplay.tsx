@@ -31,25 +31,25 @@ interface DailyMealPlanDisplayProps {
 
 const MEAL_CONFIG = {
   breakfast: {
-    label: 'Petit-déjeuner',
+    label: 'Breakfast',
     icon: Coffee,
     colorClass: 'text-warning',
     bgClass: 'bg-warning/10 border-warning/20',
   },
   lunch: {
-    label: 'Déjeuner',
+    label: 'Lunch',
     icon: Sun,
     colorClass: 'text-info',
     bgClass: 'bg-info/10 border-info/20',
   },
   dinner: {
-    label: 'Dîner',
+    label: 'Dinner',
     icon: Moon,
     colorClass: 'text-primary',
     bgClass: 'bg-primary/10 border-primary/20',
   },
   snack: {
-    label: 'Collation',
+    label: 'Snack',
     icon: Cookie,
     colorClass: 'text-success',
     bgClass: 'bg-success/10 border-success/20',
@@ -119,7 +119,7 @@ function MealSection({
         <span className="text-info font-medium">C: {mealData.macros.carbs}g</span>
         <span className="text-warning font-medium">L: {mealData.macros.fat}g</span>
         {mealData.macros.fiber !== undefined && (
-          <span>Fibres: {mealData.macros.fiber}g</span>
+          <span>Fiber: {mealData.macros.fiber}g</span>
         )}
       </div>
     </div>
@@ -158,7 +158,7 @@ export function DailyMealPlanDisplay({
       <CardHeader className="border-b border-border">
         <CardTitle className="flex items-center gap-2 text-foreground">
           <Utensils className="h-5 w-5 text-primary" />
-          Plan Repas Journalier
+          Daily Meal Plan
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6 space-y-6">
@@ -177,7 +177,7 @@ export function DailyMealPlanDisplay({
           <div className="p-3 rounded-lg bg-success/10 border border-success/20">
             <p className="text-sm text-success flex items-center gap-2">
               <span>✓</span>
-              Macros optimisés après {convergenceInfo.iterations} itération(s)
+              Macros optimized after {convergenceInfo.iterations} iteration(s)
             </p>
           </div>
         )}
@@ -192,21 +192,21 @@ export function DailyMealPlanDisplay({
             </p>
           </div>
           <div className="p-3 rounded-lg bg-success/10 border border-success/20 text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Protéines</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Protein</p>
             <p className="text-xl font-bold text-success">{totalMacros.protein}g</p>
             <p className={`text-xs font-medium ${getVarianceColor(percentVariance.protein)}`}>
               {formatVariance(percentVariance.protein)}
             </p>
           </div>
           <div className="p-3 rounded-lg bg-info/10 border border-info/20 text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Glucides</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Carbs</p>
             <p className="text-xl font-bold text-info">{totalMacros.carbs}g</p>
             <p className={`text-xs font-medium ${getVarianceColor(percentVariance.carbs)}`}>
               {formatVariance(percentVariance.carbs)}
             </p>
           </div>
           <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Lipides</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Fat</p>
             <p className="text-xl font-bold text-warning">{totalMacros.fat}g</p>
             <p className={`text-xs font-medium ${getVarianceColor(percentVariance.fat)}`}>
               {formatVariance(percentVariance.fat)}
