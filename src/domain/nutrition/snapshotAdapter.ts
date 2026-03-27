@@ -6,7 +6,6 @@
  */
 
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { MealData, MealTimeType, IngredientData } from '@/data/ingredientDatabase';
 import type { MealPlan, Meal, Recipe, Ingredient, RecipeServing, Macros, GroceryItem } from '@/types';
 
 const MEAL_ORDER: MealTimeType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -197,39 +196,60 @@ type ReconstructedMeal = {
   };
   recipeText: string;
 };
+function reconstructDailyPlan(meals: Meal[]) {
+  const emptyMeal = {
+    ingredients: [],
+    macros: {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      fiber: 0,
+    },
+    recipeText: '',
+  };
 
-function reconstructDailyPlan(
-  meals: Meal[]
-): Partial<Record<MealTimeType, ReconstructedMeal>> {
-  const dailyPlan: Partial<Record<MealTimeType, ReconstructedMeal>> = {};
+  const dailyPlan: Record<MealTimeType, typeof emptyMeal> = {
+    breakfast: { ...emptyMeal },
+    lunch: { ...emptyMeal },
+    dinner: { ...emptyMeal },
+    snack: { ...emptyMeal },
+  };
 
   for (const meal of meals) {
     const recipe = meal.recipes[0]?.recipe;
 
     dailyPlan[meal.mealType] = {
       ingredients:
-  recipe?.ingredients.map((ing) => ({
-    id: ing.id,
-    name: ing.name,
-    category: ing.category,
-    typical_serving_size_g: ing.amount,
-    macros: {
-      calories: ing.macrosPer100g.calories,
-      protein: ing.macrosPer100g.protein,
-      carbs: ing.macrosPer100g.carbs,
-      fat: ing.macrosPer100g.fat,
-      fiber: ing.macrosPer100g.fiber ?? 0,
-    },
-    allowedMeals: [],
-    tags: [],
-  })) ?? [],
-      macros: meal.totalMacros,
+        recipe?.ingredients.map((ing) => ({
+          id: ing.id,
+          name: ing.name,
+          category: ing.category,
+          typical_serving_size_g: ing.amount,
+          macros: {
+            calories: ing.macrosPer100g.calories,
+            protein: ing.macrosPer100g.protein,
+            carbs: ing.macrosPer100g.carbs,
+            fat: ing.macrosPer100g.fat,
+            fiber: ing.macrosPer100g.fiber ?? 0,
+          },
+          allowedMeals: [],
+          tags: [],
+        })) ?? [],
+      macros: {
+        calories: meal.totalMacros.calories,
+        protein: meal.totalMacros.protein,
+        carbs: meal.totalMacros.carbs,
+        fat: meal.totalMacros.fat,
+        fiber: meal.totalMacros.fiber,
+      },
       recipeText: recipe?.name ?? '',
     };
   }
 
   return dailyPlan;
 }
+
 /**
  * Build a grocery list from the full weekly plan.
  * Aggregates all ingredients across all days and meals.
