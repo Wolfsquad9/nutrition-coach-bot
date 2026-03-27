@@ -412,7 +412,7 @@ const resolvedWeeklyPlan = snapshot
         fat: snapshot.metrics.fatGrams,
       },
     })
-  : null;
+  : weeklyPlan;
 
   /* ---------------- RETURN ---------------- */
 
