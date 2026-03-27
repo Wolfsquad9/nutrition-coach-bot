@@ -454,13 +454,13 @@ export default function EnhancedIngredientManager({
         <CardHeader className="border-b border-border">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-2xl font-bold text-foreground">Gestionnaire d'Ingrédients</CardTitle>
+              <CardTitle className="text-2xl font-bold text-foreground">Ingredient Manager</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
                 Client: <span className="font-medium text-foreground">{getClientLabel(activeClient)}</span>
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={exportRestrictions} title="Exporter">
+              <Button variant="outline" size="icon" onClick={exportRestrictions} title="Export">
                 <Download className="h-4 w-4" />
               </Button>
               <Label htmlFor="import-file" className="cursor-pointer">
@@ -483,15 +483,15 @@ export default function EnhancedIngredientManager({
           {/* Client Summary */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-gradient-card p-4 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Poids</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Weight</p>
               <p className="text-2xl font-bold text-primary">{activeClient.weight}kg</p>
             </div>
             <div className="bg-gradient-card p-4 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Objectif</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Goal</p>
               <p className="text-sm font-semibold text-accent">{activeClient.primaryGoal}</p>
             </div>
             <div className="bg-gradient-card p-4 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Activité</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Activity</p>
               <p className="text-sm font-semibold text-info">{activeClient.activityLevel}</p>
             </div>
           </div>
@@ -501,7 +501,7 @@ export default function EnhancedIngredientManager({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="Rechercher un ingrédient..."
+                placeholder="Search ingredient..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-background border-border text-foreground"
@@ -512,7 +512,7 @@ export default function EnhancedIngredientManager({
               <TabsList className="grid grid-cols-7 w-full bg-muted">
                 {categories.map(cat => (
                   <TabsTrigger key={cat} value={cat} className="text-xs">
-                    {cat === 'all' ? 'Tous' : cat}
+                    {cat === 'all' ? 'All' : cat}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -523,7 +523,7 @@ export default function EnhancedIngredientManager({
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-accent" />
                 <Label htmlFor="auto-sub" className="text-foreground font-medium cursor-pointer">
-                  Substitutions Automatiques
+                  Auto Substitutions
                 </Label>
               </div>
               <Switch
@@ -540,12 +540,12 @@ export default function EnhancedIngredientManager({
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <Badge variant="destructive">Bloqué</Badge>
-                <span className="text-muted-foreground">Exclu des recettes</span>
+                <Badge variant="destructive">Blocked</Badge>
+                <span className="text-muted-foreground">Excluded from recipes</span>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className="bg-success text-success-foreground">Préféré</Badge>
-                <span className="text-muted-foreground">Prioritaire</span>
+                <Badge className="bg-success text-success-foreground">Preferred</Badge>
+                <span className="text-muted-foreground">Priority</span>
               </div>
             </div>
           </div>
@@ -553,23 +553,23 @@ export default function EnhancedIngredientManager({
           {/* Macro Summary Donut */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="bg-gradient-card border-border p-6">
-              <h3 className="text-lg font-bold text-foreground mb-4">Macros Totales (Ingrédients Sélectionnés)</h3>
+              <h3 className="text-lg font-bold text-foreground mb-4">Total Macros (Selected Ingredients)</h3>
               <MacroDonutChart macros={calculateTotalMacros} />
             </Card>
 
             <Card className="bg-gradient-card border-border p-6">
-              <h3 className="text-lg font-bold text-foreground mb-4">Résumé</h3>
+              <h3 className="text-lg font-bold text-foreground mb-4">Summary</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Ingrédients bloqués</span>
+                  <span className="text-muted-foreground">Blocked ingredients</span>
                   <Badge variant="destructive">{currentRestriction.blockedIngredients.length}</Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Ingrédients préférés</span>
+                  <span className="text-muted-foreground">Preferred ingredients</span>
                   <Badge className="bg-success text-success-foreground">{currentRestriction.preferredIngredients.length}</Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total disponibles</span>
+                  <span className="text-muted-foreground">Total available</span>
                   <Badge variant="secondary">
                     {coreIngredients.length - currentRestriction.blockedIngredients.length}
                   </Badge>
@@ -631,7 +631,7 @@ export default function EnhancedIngredientManager({
                     {/* Substitution Suggestions */}
                     {substitutes && substitutes.length > 0 && (
                       <div className="ml-6 p-3 bg-muted/50 rounded-lg border border-border">
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Substitutions suggérées:</p>
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Suggested substitutions:</p>
                         {substitutes.map((sub, idx) => {
                           const subIngredient = coreIngredients.find(i => i.id === sub.substituteId);
                           return subIngredient ? (
@@ -654,7 +654,7 @@ export default function EnhancedIngredientManager({
           {/* Recipe Generation */}
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <Label className="text-foreground whitespace-nowrap">Type de repas:</Label>
+              <Label className="text-foreground whitespace-nowrap">Meal type:</Label>
               <Select value={selectedMealType} onValueChange={(v) => setSelectedMealType(v as MealType)}>
                 <SelectTrigger className="w-40 bg-background">
                   <SelectValue />
