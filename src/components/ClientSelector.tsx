@@ -27,8 +27,8 @@ export function ClientSelector({
   clients,
   activeClientId,
   onClientChange,
-  label = 'Sélectionner un client',
-  placeholder = 'Choisir un client',
+  label = 'Select a client',
+  placeholder = 'Choose a client',
   disabled = false,
   className = '',
 }: ClientSelectorProps) {

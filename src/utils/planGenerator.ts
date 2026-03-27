@@ -1,6 +1,6 @@
 /**
  * Plan Generation Engine
- * Génère automatiquement des plans nutrition et entraînement personnalisés
+ * Automatically generates personalized nutrition and training plans
  */
 
 import { Client, NutritionPlan, TrainingPlan, CompletePlan, MealPlan, Meal, Recipe, WorkoutSession, Exercise, GroceryItem, RecipeServing } from '@/types';
@@ -68,11 +68,11 @@ interface AITrainingPlanPayload {
 }
 
 /**
- * Filtre les recettes selon les préférences et intolérances du client
+ * Filters recipes according to client preferences and intolerances
  */
 function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
   return recipes.filter(recipe => {
-    // Exclure si contient des allergènes
+    // Exclude if contains allergens
     if (client.allergies.some(allergy => 
       recipe.allergens.some(allergen => 
         allergen.toLowerCase().includes(allergy.toLowerCase())
@@ -81,7 +81,7 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
       return false;
     }
     
-    // Exclure si contient des intolérances
+    // Exclude if contains intolerances
     if (client.intolerances.some(intolerance => 
       recipe.allergens.some(allergen => 
         allergen.toLowerCase().includes(intolerance.toLowerCase())
@@ -90,7 +90,7 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
       return false;
     }
     
-    // Exclure si contient des aliments non aimés
+    // Exclude if contains disliked foods
     if (client.dislikedFoods.some(disliked => 
       recipe.ingredients.some(ing => 
         ing.name.toLowerCase().includes(disliked.toLowerCase())
@@ -99,7 +99,7 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
       return false;
     }
     
-    // Vérifier compatibilité avec le régime
+    // Check diet compatibility
     if (client.dietType === 'vegan' && !recipe.dietTypes.includes('vegan')) {
       return false;
     }
@@ -115,31 +115,31 @@ function filterRecipesForClient(recipes: Recipe[], client: Client): Recipe[] {
 }
 
 /**
- * Sélectionne les meilleures recettes pour matcher les macros cibles
+ * Selects the best recipes to match target macros
  */
 function selectRecipesForMeal(
   availableRecipes: Recipe[],
   targetMacros: { calories: number; protein: number; carbs: number; fat: number },
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack'
 ): RecipeServing[] {
-  // Filtrer par type de repas
+  // Filter by meal type
   const mealRecipes = availableRecipes.filter(r => r.category === mealType);
   
   if (mealRecipes.length === 0) {
-    // Fallback: utiliser n'importe quelle recette si pas de recette pour ce type
+    // Fallback: use any recipe if none match this type
     mealRecipes.push(...availableRecipes);
   }
   
-  // Sélectionner la recette la plus proche des macros cibles
+  // Select the recipe closest to target macros
   let bestRecipe = mealRecipes[0];
   let bestScore = Infinity;
   let bestServings = 1;
   
   for (const recipe of mealRecipes) {
-    // Calculer le nombre de portions optimal
+    // Calculate optimal servings
     const servings = Math.max(0.5, Math.min(3, targetMacros.calories / recipe.macrosPerServing.calories));
     
-    // Calculer les macros ajustés
+    // Calculate adjusted macros
     const adjustedMacros = {
       calories: recipe.macrosPerServing.calories * servings,
       protein: recipe.macrosPerServing.protein * servings,
@@ -147,7 +147,7 @@ function selectRecipesForMeal(
       fat: recipe.macrosPerServing.fat * servings
     };
     
-    // Calculer le score (différence avec les cibles)
+    // Calculate score (difference from targets)
     const score = 
       Math.abs(adjustedMacros.calories - targetMacros.calories) * 0.3 +
       Math.abs(adjustedMacros.protein - targetMacros.protein) * 2 +
@@ -163,7 +163,7 @@ function selectRecipesForMeal(
   
   return [{
     recipe: bestRecipe,
-    servings: Math.round(bestServings * 10) / 10, // Arrondir à 0.1
+    servings: Math.round(bestServings * 10) / 10, // Round to 0.1
     adjustedMacros: {
       calories: Math.round(bestRecipe.macrosPerServing.calories * bestServings),
       protein: Math.round(bestRecipe.macrosPerServing.protein * bestServings),
@@ -175,7 +175,7 @@ function selectRecipesForMeal(
 }
 
 /**
- * Génère un plan de repas pour une journée
+ * Generates a meal plan for a single day
  */
 function generateDailyMealPlan(
   client: Client,
@@ -237,7 +237,7 @@ function generateDailyMealPlan(
 }
 
 /**
- * Génère une liste de courses consolidée
+ * Generates a consolidated grocery list
  */
 function generateGroceryList(weeklyMealPlan: MealPlan[]): GroceryItem[] {
   const groceryMap = new Map<string, GroceryItem>();
@@ -258,7 +258,7 @@ function generateGroceryList(weeklyMealPlan: MealPlan[]): GroceryItem[] {
               totalAmount: amount,
               unit: ingredient.unit,
               category: ingredient.category,
-              estimatedCost: amount * 0.05 // Estimation simple
+              estimatedCost: amount * 0.05 // Simple estimate
             });
           }
         });
@@ -266,14 +266,14 @@ function generateGroceryList(weeklyMealPlan: MealPlan[]): GroceryItem[] {
     });
   });
   
-  // Convertir en array et trier par catégorie
+  // Convert to array and sort by category
   return Array.from(groceryMap.values()).sort((a, b) => 
     a.category.localeCompare(b.category)
   );
 }
 
 /**
- * Sélectionne un template d'entraînement approprié
+ * Selects an appropriate training template
  */
 function selectTrainingTemplate(client: Client): 'upper_lower' | 'push_pull_legs' | 'full_body' {
   if (client.trainingDaysPerWeek <= 3) {
@@ -286,7 +286,7 @@ function selectTrainingTemplate(client: Client): 'upper_lower' | 'push_pull_legs
 }
 
 /**
- * Génère une session d'entraînement
+ * Generates a workout session
  */
 function generateWorkoutSession(
   sessionType: 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body',
@@ -294,7 +294,7 @@ function generateWorkoutSession(
   dayNumber: number,
   client: Client
 ): WorkoutSession {
-  // Sélectionner les exercices selon le type de session
+  // Select exercises by session type
   let selectedExercises: Exercise[] = [];
   
   switch (sessionType) {
@@ -324,7 +324,7 @@ function generateWorkoutSession(
       );
       break;
     case 'full_body': {
-      // Prendre un peu de chaque catégorie
+      // Take some from each category
       const categories = ['chest', 'back', 'legs', 'shoulders'];
       selectedExercises = [];
       categories.forEach(cat => {
@@ -337,7 +337,7 @@ function generateWorkoutSession(
     }
   }
   
-  // Limiter le nombre d'exercices selon la durée de session
+  // Limit exercise count based on session duration
   const exerciseCount = Math.min(
     selectedExercises.length,
     Math.floor(client.sessionDuration / 10) // ~10 min par exercice
@@ -345,14 +345,14 @@ function generateWorkoutSession(
   
   selectedExercises = selectedExercises.slice(0, exerciseCount);
   
-  // Créer les exercices de la session
+  // Create session exercises
   const workoutExercises = selectedExercises.map(exercise => {
     let sets: number;
     let reps: string;
     let rest: number;
     let intensity: string;
     
-    // Adapter selon l'objectif
+    // Adapt based on goal
     switch (client.primaryGoal) {
       case 'muscle_gain':
         sets = 4;
@@ -373,7 +373,7 @@ function generateWorkoutSession(
         intensity = 'RPE 7';
     }
     
-    // Ajuster pour les exercices composés
+    // Adjust for compound exercises
     if (['Deadlift', 'Squat', 'Bench Press'].some(name => exercise.name.includes(name))) {
       reps = client.primaryGoal === 'muscle_gain' ? '5-8' : '6-10';
       rest = 120;
@@ -403,19 +403,19 @@ function generateWorkoutSession(
 }
 
 /**
- * Génère un plan d'entraînement complet
+ * Generates a complete training plan
  */
 export function generateTrainingPlan(client: Client): TrainingPlan {
   const template = selectTrainingTemplate(client);
   const workouts: WorkoutSession[] = [];
   
-  // Générer les sessions selon le template
+  // Generate sessions based on template
   if (template === 'full_body') {
     for (let i = 0; i < client.trainingDaysPerWeek; i++) {
       workouts.push(generateWorkoutSession('full_body', sampleExercises, i + 1, client));
     }
   } else if (template === 'upper_lower') {
-    // Alterner Upper/Lower
+    // Alternate Upper/Lower
     for (let i = 0; i < client.trainingDaysPerWeek; i++) {
       const sessionType = i % 2 === 0 ? 'upper' : 'lower';
       workouts.push(generateWorkoutSession(sessionType, sampleExercises, i + 1, client));
@@ -428,7 +428,7 @@ export function generateTrainingPlan(client: Client): TrainingPlan {
     }
   }
   
-  // Déterminer la phase selon l'objectif
+  // Determine phase based on goal
   let phase: 'strength' | 'hypertrophy' | 'power' | 'endurance';
   switch (client.primaryGoal) {
     case 'muscle_gain':
@@ -445,7 +445,7 @@ export function generateTrainingPlan(client: Client): TrainingPlan {
     id: `training-${Date.now()}`,
     clientId: client.id,
     name: `${client.primaryGoal.replace('_', ' ')} Training Program`,
-    duration: 4, // 4 semaines par défaut
+    duration: 4, // 4 weeks default
     frequency: client.trainingDaysPerWeek,
     split: template,
     phase,
@@ -456,23 +456,23 @@ export function generateTrainingPlan(client: Client): TrainingPlan {
 }
 
 /**
- * Génère un plan nutritionnel complet
+ * Generates a complete nutrition plan
  */
 export function generateNutritionPlan(client: Client): NutritionPlan {
-  // Filtrer les recettes selon le client
+  // Filter recipes for client
   const availableRecipes = filterRecipesForClient(sampleRecipes, client);
   
   if (availableRecipes.length < 3) {
     throw new Error('Not enough compatible recipes for this client. Please adjust preferences.');
   }
   
-  // Générer un plan pour 7 jours
+  // Generate a 7-day plan
   const weeklyMealPlan: MealPlan[] = [];
   for (let day = 1; day <= 7; day++) {
     weeklyMealPlan.push(generateDailyMealPlan(client, day, availableRecipes));
   }
   
-  // Générer la liste de courses
+  // Generate grocery list
   const groceryList = generateGroceryList(weeklyMealPlan);
   
   return {
@@ -490,13 +490,13 @@ export function generateNutritionPlan(client: Client): NutritionPlan {
 }
 
 /**
- * Génère un plan complet (nutrition + entraînement) avec IA
+ * Generates a complete plan (nutrition + training) with AI
  */
 export async function generateCompletePlan(client: Client): Promise<CompletePlan> {
-  // Vérifier les red flags
+  // Check for red flags
   const redFlags = checkForRedFlags(client);
   if (redFlags.length > 0) {
-    throw new Error(`⚠️ Red flags détectés: ${redFlags.join(', ')}. Révision manuelle requise.`);
+    throw new Error(`⚠️ Red flags detected: ${redFlags.join(', ')}. Manual review required.`);
   }
   
   try {
@@ -507,11 +507,11 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
 
     if (error) {
       console.error('Edge function error:', error);
-      throw new Error('Service IA temporairement indisponible');
+      throw new Error('AI service temporarily unavailable');
     }
     
     if (data?.success && data?.plan) {
-      // Transformer la réponse AI en format attendu par l'application
+      // Transform AI response to app format
       const nutritionPlan = transformAINutritionPlan(data.plan.nutrition_plan, client);
       const trainingPlan = transformAITrainingPlan(data.plan.training_plan, client);
       
@@ -525,11 +525,11 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
         aiRecommendations: data.plan.recommendations
       };
     } else {
-      throw new Error('Format de réponse invalide');
+      throw new Error('Invalid response format');
     }
   } catch (error: unknown) {
-    console.error('Erreur génération IA, utilisation du générateur local:', error);
-    // Fallback automatique vers la génération locale si l'IA échoue
+    console.error('AI generation error, using local generator:', error);
+    // Automatic fallback to local generation if AI fails
     const nutritionPlan = generateNutritionPlan(client);
     const trainingPlan = generateTrainingPlan(client);
     
@@ -541,16 +541,16 @@ export async function generateCompletePlan(client: Client): Promise<CompletePlan
       validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       status: 'active',
       aiRecommendations: {
-        nutrition_tips: ["Plan généré localement (service IA temporairement indisponible)"],
-        training_tips: ["Suivez le programme avec progression régulière"],
-        adherence_strategies: ["Restez constant et patient pour voir les résultats"]
+        nutrition_tips: ["Plan generated locally (AI service temporarily unavailable)"],
+        training_tips: ["Follow the program with regular progression"],
+        adherence_strategies: ["Stay consistent and patient to see results"]
       }
     };
   }
 }
 
 /**
- * Transforme le plan nutrition AI en format de l'app
+ * Transforms AI nutrition plan to app format
  */
 function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client): NutritionPlan {
   const weeklyMealPlan: MealPlan[] = [];
@@ -621,7 +621,7 @@ function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client
     });
   });
   
-  // Transformer la liste de courses
+  // Transform grocery list
   const groceryList: GroceryItem[] = [];
   aiPlan.grocery_list?.forEach((category) => {
     category.items.forEach((item) => {
@@ -643,7 +643,7 @@ function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client
     endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     metrics: {
       tdee: aiPlan.daily_calories,
-      bmr: Math.round(aiPlan.daily_calories / 1.5), // Estimation du BMR
+      bmr: Math.round(aiPlan.daily_calories / 1.5), // BMR estimate
       targetCalories: aiPlan.daily_calories,
       proteinGrams: aiPlan.daily_macros.protein,
       carbsGrams: aiPlan.daily_macros.carbs,
@@ -659,7 +659,7 @@ function transformAINutritionPlan(aiPlan: AINutritionPlanPayload, client: Client
 }
 
 /**
- * Transforme le plan training AI en format de l'app
+ * Transforms AI training plan to app format
  */
 function transformAITrainingPlan(aiPlan: AITrainingPlanPayload, client: Client): TrainingPlan {
   const workouts: WorkoutSession[] = aiPlan.workouts.map((workout) => ({
@@ -705,7 +705,7 @@ function transformAITrainingPlan(aiPlan: AITrainingPlanPayload, client: Client):
 }
 
 /**
- * Vérifie les red flags médicaux
+ * Checks for medical red flags
  */
 function checkForRedFlags(client: Client): string[] {
   const redFlags: string[] = [];
@@ -722,12 +722,12 @@ function checkForRedFlags(client: Client): string[] {
     }
   });
   
-  // Vérifier les objectifs extrêmes
+  // Check for extreme goals
   if (client.weeklyWeightChange && Math.abs(client.weeklyWeightChange) > 1) {
     redFlags.push('Extreme weekly weight change goal');
   }
   
-  // Vérifier le BMI
+  // Check BMI
   const bmi = client.weight / Math.pow(client.height / 100, 2);
   if (bmi < 17 || bmi > 40) {
     redFlags.push(`Extreme BMI: ${bmi.toFixed(1)}`);

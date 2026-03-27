@@ -20,10 +20,10 @@ const mealIcons: Record<MealTimeType, React.ReactNode> = {
 };
 
 const mealLabels: Record<MealTimeType, string> = {
-  breakfast: 'Petit-déjeuner',
-  lunch: 'Déjeuner',
-  dinner: 'Dîner',
-  snack: 'Collation',
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
 };
 
 function MealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealData }) {
@@ -35,7 +35,7 @@ function MealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealDat
         <div className="flex items-center gap-2 text-muted-foreground">
           {mealIcons[mealType]}
           <span className="font-medium">{mealLabels[mealType]}</span>
-          <span className="text-sm">- Aucun ingrédient disponible</span>
+          <span className="text-sm">- No ingredients available</span>
         </div>
       </div>
     );
@@ -71,7 +71,7 @@ function MealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealDat
       <CollapsibleContent>
         <div className="mt-2 p-4 bg-muted/30 rounded-lg space-y-3">
           <div>
-            <h5 className="text-sm font-medium mb-2">Ingrédients:</h5>
+            <h5 className="text-sm font-medium mb-2">Ingredients:</h5>
             <div className="flex flex-wrap gap-2">
               {meal.ingredients.map((ing, idx) => (
                 <Badge key={idx} variant="outline" className="text-xs">
@@ -82,7 +82,7 @@ function MealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealDat
           </div>
           {meal.recipeText && (
             <div>
-              <h5 className="text-sm font-medium mb-2">Recette:</h5>
+              <h5 className="text-sm font-medium mb-2">Recipe:</h5>
               <div className="text-sm text-muted-foreground whitespace-pre-line">
                 {meal.recipeText}
               </div>
@@ -172,7 +172,7 @@ export function WeeklyMealPlanDisplay({ weeklyPlan }: WeeklyMealPlanDisplayProps
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Utensils className="h-6 w-6 text-primary" />
-            <h2 className="text-2xl font-bold text-primary">Plan Repas Hebdomadaire</h2>
+            <h2 className="text-2xl font-bold text-primary">Weekly Meal Plan</h2>
           </div>
           <Button 
             variant="outline" 
@@ -181,38 +181,38 @@ export function WeeklyMealPlanDisplay({ weeklyPlan }: WeeklyMealPlanDisplayProps
             className="print-button-container"
           >
             <Printer className="h-4 w-4 mr-2" />
-            Imprimer le plan
+            Print Plan
           </Button>
         </div>
 
         {/* Weekly Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="bg-gradient-card p-3 rounded-lg text-center">
-            <p className="text-xs text-muted-foreground">Calories/semaine</p>
+            <p className="text-xs text-muted-foreground">Calories/week</p>
             <p className="text-lg font-bold text-primary">{weeklyPlan.weeklyTotalMacros.calories}</p>
             <p className="text-xs text-muted-foreground">
-              Cible: {weeklyPlan.weeklyTargetMacros.calories}
+              Target: {weeklyPlan.weeklyTargetMacros.calories}
             </p>
           </div>
           <div className="bg-gradient-card p-3 rounded-lg text-center">
-            <p className="text-xs text-muted-foreground">Protéines</p>
+            <p className="text-xs text-muted-foreground">Protein</p>
             <p className="text-lg font-bold text-success">{weeklyPlan.weeklyTotalMacros.protein}g</p>
             <p className="text-xs text-muted-foreground">
-              Cible: {weeklyPlan.weeklyTargetMacros.protein}g
+              Target: {weeklyPlan.weeklyTargetMacros.protein}g
             </p>
           </div>
           <div className="bg-gradient-card p-3 rounded-lg text-center">
-            <p className="text-xs text-muted-foreground">Glucides</p>
+            <p className="text-xs text-muted-foreground">Carbs</p>
             <p className="text-lg font-bold text-info">{weeklyPlan.weeklyTotalMacros.carbs}g</p>
             <p className="text-xs text-muted-foreground">
-              Cible: {weeklyPlan.weeklyTargetMacros.carbs}g
+              Target: {weeklyPlan.weeklyTargetMacros.carbs}g
             </p>
           </div>
           <div className="bg-gradient-card p-3 rounded-lg text-center">
-            <p className="text-xs text-muted-foreground">Lipides</p>
+            <p className="text-xs text-muted-foreground">Fat</p>
             <p className="text-lg font-bold text-warning">{weeklyPlan.weeklyTotalMacros.fat}g</p>
             <p className="text-xs text-muted-foreground">
-              Cible: {weeklyPlan.weeklyTargetMacros.fat}g
+              Target: {weeklyPlan.weeklyTargetMacros.fat}g
             </p>
           </div>
         </div>
@@ -233,7 +233,7 @@ export function WeeklyMealPlanDisplay({ weeklyPlan }: WeeklyMealPlanDisplayProps
       {/* Print-only fully expanded view */}
       <PrintableMealPlan 
         weeklyPlan={weeklyPlan}
-        generatedDate={new Date().toLocaleDateString('fr-FR')}
+        generatedDate={new Date().toLocaleDateString('en-US')}
       />
     </>
   );

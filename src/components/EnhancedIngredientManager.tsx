@@ -190,8 +190,8 @@ export default function EnhancedIngredientManager({
     linkElement.click();
     
     toast({
-      title: "Export réussi",
-      description: "Les restrictions ont été exportées en JSON",
+      title: "Export successful",
+      description: "Restrictions have been exported as JSON",
     });
   };
 
@@ -205,13 +205,13 @@ export default function EnhancedIngredientManager({
           setClientRestrictions(imported);
           onRestrictionsUpdate(imported);
           toast({
-            title: "Import réussi",
-            description: "Les restrictions ont été importées",
+            title: "Import successful",
+            description: "Restrictions have been imported",
           });
         } catch (error) {
           toast({
-            title: "Erreur d'import",
-            description: "Fichier JSON invalide",
+            title: "Import error",
+            description: "Invalid JSON file",
             variant: "destructive",
           });
         }
@@ -223,8 +223,8 @@ export default function EnhancedIngredientManager({
   const handleGenerateRecipe = async () => {
     if (!activeClientId || !activeClient) {
       toast({
-        title: "Aucun client sélectionné",
-        description: "Le client doit être sélectionné dans l'onglet Client",
+        title: "No client selected",
+        description: "A client must be selected in the Client tab",
         variant: "destructive",
       });
       return;
@@ -235,8 +235,8 @@ export default function EnhancedIngredientManager({
 
     if (preferredIngredients.length === 0) {
       toast({
-        title: "Aucun ingrédient sélectionné",
-        description: "Marquez d'abord des ingrédients comme 'aimés' (étoile verte)",
+        title: "No ingredients selected",
+        description: "First mark ingredients as 'liked' (green star)",
         variant: "destructive",
       });
       return;
@@ -252,14 +252,14 @@ export default function EnhancedIngredientManager({
       setGeneratedRecipe(recipe);
 
       toast({
-        title: "Recette générée !",
-        description: `${recipe.name} créée avec succès`,
+        title: "Recipe generated!",
+        description: `${recipe.name} created successfully`,
       });
     } catch (error) {
       console.error('Recipe generation error:', error);
       toast({
-        title: "Erreur de génération",
-        description: error instanceof Error ? error.message : "Impossible de générer la recette",
+        title: "Generation error",
+        description: error instanceof Error ? error.message : "Unable to generate recipe",
         variant: "destructive",
       });
     } finally {
@@ -270,8 +270,8 @@ export default function EnhancedIngredientManager({
   const generateAIPlan = async (planType: 'full') => {
     if (!activeClientId || !activeClient) {
       toast({
-        title: "Aucun client sélectionné",
-        description: "Le client doit être sélectionné dans l'onglet Client",
+        title: "No client selected",
+        description: "A client must be selected in the Client tab",
         variant: "destructive",
       });
       return;
@@ -327,15 +327,15 @@ export default function EnhancedIngredientManager({
       setGeneratedTrainingPlan(mockResponse.trainingPlan);
 
       toast({
-        title: "Plan généré !",
-        description: "Plan complet généré avec succès",
+        title: "Plan generated!",
+        description: "Complete plan generated successfully",
       });
 
     } catch (error) {
       console.error('AI generation error:', error);
       toast({
-        title: "Erreur de génération",
-        description: "Impossible de générer le plan",
+        title: "Generation error",
+        description: "Unable to generate plan",
         variant: "destructive",
       });
     } finally {
@@ -346,16 +346,16 @@ export default function EnhancedIngredientManager({
   const handlePrintPlan = () => {
     window.print();
     toast({
-      title: "Impression lancée",
-      description: "Le plan est prêt à imprimer",
+      title: "Print started",
+      description: "The plan is ready to print",
     });
   };
 
   const handleExportPDF = async () => {
     if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
       toast({
-        title: "Données manquantes",
-        description: "Générez d'abord un plan complet",
+        title: "Missing data",
+        description: "Generate a complete plan first",
         variant: "destructive",
       });
       return;
@@ -386,14 +386,14 @@ export default function EnhancedIngredientManager({
       downloadPDF(pdf, `${clientLabel.replace(/\s+/g, '_')}_plan.pdf`);
 
       toast({
-        title: "PDF exporté",
-        description: "Le plan a été téléchargé avec succès",
+        title: "PDF exported",
+        description: "The plan has been downloaded successfully",
       });
     } catch (error) {
       console.error('PDF export error:', error);
       toast({
-        title: "Erreur d'export",
-        description: "Impossible de générer le PDF",
+        title: "Export error",
+        description: "Unable to generate PDF",
         variant: "destructive",
       });
     }
@@ -402,8 +402,8 @@ export default function EnhancedIngredientManager({
   const handleSendWhatsApp = async () => {
     if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
       toast({
-        title: "Données manquantes",
-        description: "Générez d'abord un plan complet",
+        title: "Missing data",
+        description: "Generate a complete plan first",
         variant: "destructive",
       });
       return;
@@ -421,14 +421,14 @@ export default function EnhancedIngredientManager({
       if (error) throw error;
 
       toast({
-        title: "WhatsApp - Prêt",
-        description: data.note || "Intégration Twilio/Make.com requise",
+        title: "WhatsApp - Ready",
+        description: data.note || "Twilio/Make.com integration required",
       });
     } catch (error) {
       console.error('WhatsApp send error:', error);
       toast({
-        title: "Erreur WhatsApp",
-        description: "Impossible d'envoyer le plan",
+        title: "WhatsApp error",
+        description: "Unable to send the plan",
         variant: "destructive",
       });
     }
@@ -439,8 +439,8 @@ export default function EnhancedIngredientManager({
     return (
       <Card className="p-8 shadow-card">
         <div className="text-center py-12 text-muted-foreground">
-          <p className="text-lg">Aucun client sélectionné</p>
-          <p className="text-sm mt-2">Sélectionnez un client dans l'onglet Client pour gérer ses ingrédients</p>
+          <p className="text-lg">No client selected</p>
+          <p className="text-sm mt-2">Select a client in the Client tab to manage their ingredients</p>
         </div>
       </Card>
     );
@@ -454,13 +454,13 @@ export default function EnhancedIngredientManager({
         <CardHeader className="border-b border-border">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-2xl font-bold text-foreground">Gestionnaire d'Ingrédients</CardTitle>
+              <CardTitle className="text-2xl font-bold text-foreground">Ingredient Manager</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
                 Client: <span className="font-medium text-foreground">{getClientLabel(activeClient)}</span>
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={exportRestrictions} title="Exporter">
+              <Button variant="outline" size="icon" onClick={exportRestrictions} title="Export">
                 <Download className="h-4 w-4" />
               </Button>
               <Label htmlFor="import-file" className="cursor-pointer">
@@ -483,15 +483,15 @@ export default function EnhancedIngredientManager({
           {/* Client Summary */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-gradient-card p-4 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Poids</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Weight</p>
               <p className="text-2xl font-bold text-primary">{activeClient.weight}kg</p>
             </div>
             <div className="bg-gradient-card p-4 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Objectif</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Goal</p>
               <p className="text-sm font-semibold text-accent">{activeClient.primaryGoal}</p>
             </div>
             <div className="bg-gradient-card p-4 rounded-lg border border-border">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Activité</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Activity</p>
               <p className="text-sm font-semibold text-info">{activeClient.activityLevel}</p>
             </div>
           </div>
@@ -501,7 +501,7 @@ export default function EnhancedIngredientManager({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="Rechercher un ingrédient..."
+                placeholder="Search ingredient..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-background border-border text-foreground"
@@ -512,7 +512,7 @@ export default function EnhancedIngredientManager({
               <TabsList className="grid grid-cols-7 w-full bg-muted">
                 {categories.map(cat => (
                   <TabsTrigger key={cat} value={cat} className="text-xs">
-                    {cat === 'all' ? 'Tous' : cat}
+                    {cat === 'all' ? 'All' : cat}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -523,7 +523,7 @@ export default function EnhancedIngredientManager({
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-accent" />
                 <Label htmlFor="auto-sub" className="text-foreground font-medium cursor-pointer">
-                  Substitutions Automatiques
+                  Auto Substitutions
                 </Label>
               </div>
               <Switch
@@ -540,12 +540,12 @@ export default function EnhancedIngredientManager({
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <Badge variant="destructive">Bloqué</Badge>
-                <span className="text-muted-foreground">Exclu des recettes</span>
+                <Badge variant="destructive">Blocked</Badge>
+                <span className="text-muted-foreground">Excluded from recipes</span>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className="bg-success text-success-foreground">Préféré</Badge>
-                <span className="text-muted-foreground">Prioritaire</span>
+                <Badge className="bg-success text-success-foreground">Preferred</Badge>
+                <span className="text-muted-foreground">Priority</span>
               </div>
             </div>
           </div>
@@ -553,23 +553,23 @@ export default function EnhancedIngredientManager({
           {/* Macro Summary Donut */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="bg-gradient-card border-border p-6">
-              <h3 className="text-lg font-bold text-foreground mb-4">Macros Totales (Ingrédients Sélectionnés)</h3>
+              <h3 className="text-lg font-bold text-foreground mb-4">Total Macros (Selected Ingredients)</h3>
               <MacroDonutChart macros={calculateTotalMacros} />
             </Card>
 
             <Card className="bg-gradient-card border-border p-6">
-              <h3 className="text-lg font-bold text-foreground mb-4">Résumé</h3>
+              <h3 className="text-lg font-bold text-foreground mb-4">Summary</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Ingrédients bloqués</span>
+                  <span className="text-muted-foreground">Blocked ingredients</span>
                   <Badge variant="destructive">{currentRestriction.blockedIngredients.length}</Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Ingrédients préférés</span>
+                  <span className="text-muted-foreground">Preferred ingredients</span>
                   <Badge className="bg-success text-success-foreground">{currentRestriction.preferredIngredients.length}</Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total disponibles</span>
+                  <span className="text-muted-foreground">Total available</span>
                   <Badge variant="secondary">
                     {coreIngredients.length - currentRestriction.blockedIngredients.length}
                   </Badge>
@@ -631,7 +631,7 @@ export default function EnhancedIngredientManager({
                     {/* Substitution Suggestions */}
                     {substitutes && substitutes.length > 0 && (
                       <div className="ml-6 p-3 bg-muted/50 rounded-lg border border-border">
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Substitutions suggérées:</p>
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Suggested substitutions:</p>
                         {substitutes.map((sub, idx) => {
                           const subIngredient = coreIngredients.find(i => i.id === sub.substituteId);
                           return subIngredient ? (
@@ -654,16 +654,16 @@ export default function EnhancedIngredientManager({
           {/* Recipe Generation */}
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <Label className="text-foreground whitespace-nowrap">Type de repas:</Label>
+              <Label className="text-foreground whitespace-nowrap">Meal type:</Label>
               <Select value={selectedMealType} onValueChange={(v) => setSelectedMealType(v as MealType)}>
                 <SelectTrigger className="w-40 bg-background">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-background border border-border z-50">
-                  <SelectItem value="breakfast">Petit-déjeuner</SelectItem>
-                  <SelectItem value="lunch">Déjeuner</SelectItem>
-                  <SelectItem value="dinner">Dîner</SelectItem>
-                  <SelectItem value="snack">Collation</SelectItem>
+                  <SelectItem value="breakfast">Breakfast</SelectItem>
+                  <SelectItem value="lunch">Lunch</SelectItem>
+                  <SelectItem value="dinner">Dinner</SelectItem>
+                  <SelectItem value="snack">Snack</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -676,7 +676,7 @@ export default function EnhancedIngredientManager({
                 className="flex-1 bg-gradient-primary text-white shadow-glow"
               >
                 {isGeneratingRecipe ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Générer une Recette
+                Generate Recipe
               </Button>
               <Button
                 onClick={() => generateAIPlan('full')}
@@ -684,7 +684,7 @@ export default function EnhancedIngredientManager({
                 className="flex-1 bg-gradient-accent text-white shadow-glow"
               >
                 {isGeneratingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Générer Plan Complet
+                Generate Full Plan
               </Button>
             </div>
           </div>
@@ -699,19 +699,19 @@ export default function EnhancedIngredientManager({
                     {generatedRecipe.name}
                   </CardTitle>
                   <Badge variant="secondary" className="capitalize">
-                    {selectedMealType === 'breakfast' ? 'Petit-déjeuner' : 
-                     selectedMealType === 'lunch' ? 'Déjeuner' : 
-                     selectedMealType === 'dinner' ? 'Dîner' : 'Collation'}
+                    {selectedMealType === 'breakfast' ? 'Breakfast' : 
+                     selectedMealType === 'lunch' ? 'Lunch' : 
+                     selectedMealType === 'dinner' ? 'Dinner' : 'Snack'}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
                   <span className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    Préparation: {generatedRecipe.prepTime}min
+                    Prep: {generatedRecipe.prepTime}min
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    Cuisson: {generatedRecipe.cookTime}min
+                    Cook: {generatedRecipe.cookTime}min
                   </span>
                   <Badge variant="outline" className="capitalize">{generatedRecipe.difficulty}</Badge>
                 </div>
@@ -726,15 +726,15 @@ export default function EnhancedIngredientManager({
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
                     <p className="text-lg font-bold text-primary">{generatedRecipe.macrosPerServing.protein}g</p>
-                    <p className="text-xs text-muted-foreground">Protéines</p>
+                    <p className="text-xs text-muted-foreground">Protein</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
                     <p className="text-lg font-bold text-amber-500">{generatedRecipe.macrosPerServing.carbs}g</p>
-                    <p className="text-xs text-muted-foreground">Glucides</p>
+                    <p className="text-xs text-muted-foreground">Carbs</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
                     <p className="text-lg font-bold text-emerald-500">{generatedRecipe.macrosPerServing.fat}g</p>
-                    <p className="text-xs text-muted-foreground">Lipides</p>
+                    <p className="text-xs text-muted-foreground">Fat</p>
                   </div>
                 </div>
 
@@ -742,7 +742,7 @@ export default function EnhancedIngredientManager({
 
                 {/* Ingredients */}
                 <div>
-                  <h4 className="font-semibold text-foreground mb-2">Ingrédients</h4>
+                  <h4 className="font-semibold text-foreground mb-2">Ingredients</h4>
                   <ul className="space-y-1">
                     {generatedRecipe.ingredients.map((ing, idx) => (
                       <li key={idx} className="flex items-center justify-between text-sm">
@@ -780,7 +780,7 @@ export default function EnhancedIngredientManager({
                     ))}
                     {generatedRecipe.allergens.length > 0 && (
                       <Badge variant="destructive" className="text-xs">
-                        Allergènes: {generatedRecipe.allergens.join(', ')}
+                        Allergens: {generatedRecipe.allergens.join(', ')}
                       </Badge>
                     )}
                   </div>
@@ -797,11 +797,11 @@ export default function EnhancedIngredientManager({
           <Card className="bg-card shadow-card border-border">
             <CardHeader className="border-b border-border">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xl font-bold text-foreground">Plans Générés</CardTitle>
+                <CardTitle className="text-xl font-bold text-foreground">Generated Plans</CardTitle>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handlePrintPlan}>
                     <Printer className="mr-2 h-4 w-4" />
-                    Imprimer
+                    Print
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleExportPDF}>
                     <Download className="mr-2 h-4 w-4" />

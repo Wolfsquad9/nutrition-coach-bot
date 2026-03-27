@@ -142,18 +142,18 @@ export async function createClient(client: Client): Promise<{ client: Client | n
   try {
     // Validate required fields
     if (!client.firstName?.trim() || !client.lastName?.trim()) {
-      return { client: null, error: 'Le prénom et le nom sont requis' };
+      return { client: null, error: 'First name and last name are required' };
     }
 
     if (!client.birthDate) {
-      return { client: null, error: 'La date de naissance est requise' };
+      return { client: null, error: 'Birth date is required' };
     }
 
     const insertData = await clientToSupabaseRow(client);
     
     // Verify we have a created_by value
     if (!insertData.created_by) {
-      return { client: null, error: 'Non authentifié. Veuillez rafraîchir la page.' };
+      return { client: null, error: 'Not authenticated. Please refresh the page.' };
     }
     
     const { data, error } = await supabase
