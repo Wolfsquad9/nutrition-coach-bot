@@ -224,6 +224,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
             </Button>
             {planState.isDraft && <DiscardDraftButton onDiscard={handleDiscardDraft} disabled={planState.isSaving} />}
             <LockPlanButton canLock={planState.canLock} isLocking={planState.isSaving} onLock={handleLockPlan} disabled={!ingredientValidation.canGenerateWeekly || planState.isBlocked} />
+            <SharePlanButton versionId={planState.versionId} isShareable={planState.isShareable} />
           </div>
         </div>
       </Card>
