@@ -1,6 +1,6 @@
 /**
- * Minimal authentication hook for Supabase
- * Handles anonymous auth to ensure auth.uid() is always available
+ * Authentication hook for Supabase — email/password auth.
+ * Provides session state and sign-in/sign-up/sign-out helpers.
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -33,8 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Set up auth state listener BEFORE checking session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
-        console.log('[Auth] State changed:', event, currentSession?.user?.id);
+      (_event, currentSession) => {
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         setIsLoading(false);
@@ -42,42 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     // Check for existing session
-    const initializeAuth = async () => {
-      try {
-        const { data: { session: existingSession }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('[Auth] Error getting session:', error);
-        }
-
-        if (existingSession) {
-          console.log('[Auth] Existing session found:', existingSession.user.id);
-          setSession(existingSession);
-          setUser(existingSession.user);
-          setIsLoading(false);
-          return;
-        }
-
-        // No session exists, create anonymous session
-        console.log('[Auth] No session, creating anonymous user...');
-        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
-        
-        if (anonError) {
-          console.error('[Auth] Anonymous sign-in failed:', anonError);
-          // Still set loading to false even if anon fails
-          setIsLoading(false);
-          return;
-        }
-
-        console.log('[Auth] Anonymous user created:', anonData.user?.id);
-        // State will be set by onAuthStateChange
-      } catch (err) {
-        console.error('[Auth] Initialization error:', err);
-        setIsLoading(false);
-      }
-    };
-
-    initializeAuth();
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
+      setIsLoading(false);
+    });
 
     return () => {
       subscription.unsubscribe();
@@ -95,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     userId: user?.id ?? null,
     isLoading,
-    isAuthenticated: !!user,
+    isAuthenticated: !!session,
     signOut,
   };
 
@@ -115,8 +83,8 @@ export function useAuth() {
 }
 
 /**
- * Helper to get current user ID synchronously from a resolved auth state
- * Use this in services when you need the UID for database writes
+ * Helper to get current user ID from a resolved auth state.
+ * Use this in services when you need the UID for database writes.
  */
 export async function getCurrentUserId(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
