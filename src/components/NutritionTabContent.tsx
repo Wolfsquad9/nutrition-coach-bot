@@ -27,6 +27,7 @@ import { generateWeeklyMealPlan, generateFullDayMealPlan, type FullDayMealPlanRe
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
+import { SharePlanButton } from '@/components/SharePlanButton';
 import { getClientLabel } from '@/utils/clientHelpers';
 import type { Client } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
@@ -223,6 +224,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
             </Button>
             {planState.isDraft && <DiscardDraftButton onDiscard={handleDiscardDraft} disabled={planState.isSaving} />}
             <LockPlanButton canLock={planState.canLock} isLocking={planState.isSaving} onLock={handleLockPlan} disabled={!ingredientValidation.canGenerateWeekly || planState.isBlocked} />
+            <SharePlanButton versionId={planState.versionId} isShareable={planState.isShareable} />
           </div>
         </div>
       </Card>
