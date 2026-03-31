@@ -149,7 +149,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   };
 
   const handleDiscardDraft = async () => {
-    await planState.discardDraft();
+    await planState.discardDraft(activeClientId);
     toast({ title: 'Draft discarded', description: 'The draft has been removed.' });
   };
 

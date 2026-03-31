@@ -243,8 +243,9 @@ export function useNutritionPlanState() {
 
       setPlanId(planResult.planId);
       setVersionId(planResult.versionId);
+      setVersionNumber(planResult.versionNumber ?? null);
       setPlanCreatedAt(planResult.createdAt);
-      setPayloadHash((payload as { payloadHash?: string }).payloadHash ?? null);
+      setPayloadHash(planResult.payloadHash ?? null);
 
       const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
 
@@ -303,7 +304,7 @@ export function useNutritionPlanState() {
     [lifecycleState]
   );
 
-  const discardDraft = useCallback((_?: unknown) => {
+  const discardDraft = useCallback(async (clientId?: string) => {
     if (!isDraft) return;
 
     setWeeklyPlan(null);
@@ -317,7 +318,12 @@ export function useNutritionPlanState() {
     setLockedAt(null);
     setLockedUntil(null);
     setSnapshot(null);
-  }, [isDraft]);
+
+    // Reload previously locked plan from DB if clientId provided
+    if (clientId) {
+      await loadPlanForClient(clientId);
+    }
+  }, [isDraft, loadPlanForClient]);
 
   /* ---------------- LOCK ---------------- */
 
