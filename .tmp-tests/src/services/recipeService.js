@@ -465,36 +465,36 @@ function generateDeterministicRecipeName(ingredients, mealType) {
     switch (mealType) {
         case 'breakfast':
             if (proteinName && carbName)
-                return `${proteinName} Power Bowl avec ${carbName}`;
+                return `${proteinName} Power Bowl with ${carbName}`;
             if (proteinName && fruitName)
-                return `${proteinName} & ${fruitName} Énergisant`;
+                return `${proteinName} & ${fruitName} Energizer`;
             if (proteinName)
-                return `Petit-déjeuner Protéiné au ${proteinName}`;
-            return 'Petit-déjeuner Équilibré';
+                return `High-Protein ${proteinName} Breakfast`;
+            return 'Balanced Breakfast';
         case 'lunch':
             if (proteinName && vegName)
-                return `${proteinName} Grillé aux ${vegName}`;
+                return `Grilled ${proteinName} with ${vegName}`;
             if (proteinName && carbName)
-                return `Assiette ${proteinName} & ${carbName}`;
+                return `${proteinName} & ${carbName} Plate`;
             if (proteinName)
-                return `Déjeuner au ${proteinName}`;
-            return 'Déjeuner Nutritif';
+                return `${proteinName} Lunch`;
+            return 'Nutritious Lunch';
         case 'dinner':
             if (proteinName && vegName)
-                return `${proteinName} Rôti avec ${vegName}`;
+                return `Roasted ${proteinName} with ${vegName}`;
             if (proteinName && carbName)
-                return `${proteinName} Savoureux et ${carbName}`;
+                return `Savory ${proteinName} and ${carbName}`;
             if (proteinName)
-                return `Dîner au ${proteinName}`;
-            return 'Dîner Complet';
+                return `${proteinName} Dinner`;
+            return 'Complete Dinner';
         case 'snack':
             if (proteinName && fruitName)
-                return `Snack ${proteinName} & ${fruitName}`;
+                return `${proteinName} & ${fruitName} Snack`;
             if (proteinName)
-                return `Collation Protéinée`;
-            return 'Snack Énergétique';
+                return `High-Protein Snack`;
+            return 'Energy Snack';
         default:
-            return 'Repas Équilibré';
+            return 'Balanced Meal';
     }
 }
 /**
@@ -508,84 +508,84 @@ function generateDeterministicInstructions(ingredients, mealType) {
     const fruits = ingredients.filter(i => i.category === 'fruit');
     const instructions = [];
     if (mealType === 'breakfast') {
-        instructions.push('Rassembler et peser tous les ingrédients selon les quantités indiquées.');
+        instructions.push('Gather and weigh all ingredients according to the specified quantities.');
         if (carb) {
             const carbName = carb.name.toLowerCase();
             if (carbName.includes('oat') || carbName.includes('avoine')) {
-                instructions.push(`Cuire ${carb.typical_serving_size_g}g de ${carbName} dans de l'eau ou du lait pendant 5 minutes.`);
+                instructions.push(`Cook ${carb.typical_serving_size_g}g of ${carbName} in water or milk for 5 minutes.`);
             }
             else {
-                instructions.push(`Préparer ${carb.typical_serving_size_g}g de ${carbName} selon les indications.`);
+                instructions.push(`Prepare ${carb.typical_serving_size_g}g of ${carbName} according to package directions.`);
             }
         }
         if (protein) {
             const proteinName = protein.name.toLowerCase();
             if (proteinName.includes('egg') || proteinName.includes('œuf')) {
-                instructions.push(`Cuire ${protein.typical_serving_size_g}g d'œufs (brouillés ou pochés) à feu moyen.`);
+                instructions.push(`Cook ${protein.typical_serving_size_g}g of eggs (scrambled or poached) over medium heat.`);
             }
             else if (proteinName.includes('yogurt') || proteinName.includes('yaourt')) {
-                instructions.push(`Ajouter ${protein.typical_serving_size_g}g de ${proteinName} dans un bol.`);
+                instructions.push(`Add ${protein.typical_serving_size_g}g of ${proteinName} to a bowl.`);
             }
             else {
-                instructions.push(`Préparer ${protein.typical_serving_size_g}g de ${proteinName}.`);
+                instructions.push(`Prepare ${protein.typical_serving_size_g}g of ${proteinName}.`);
             }
         }
         if (fruits.length > 0) {
-            const fruitList = fruits.map(f => `${f.typical_serving_size_g}g de ${f.name.toLowerCase()}`).join(', ');
-            instructions.push(`Laver et couper les fruits: ${fruitList}.`);
+            const fruitList = fruits.map(f => `${f.typical_serving_size_g}g of ${f.name.toLowerCase()}`).join(', ');
+            instructions.push(`Wash and cut the fruits: ${fruitList}.`);
         }
         if (fats.length > 0) {
-            const fatList = fats.map(f => `${f.typical_serving_size_g}g de ${f.name.toLowerCase()}`).join(', ');
-            instructions.push(`Ajouter les matières grasses: ${fatList}.`);
+            const fatList = fats.map(f => `${f.typical_serving_size_g}g of ${f.name.toLowerCase()}`).join(', ');
+            instructions.push(`Add the fats: ${fatList}.`);
         }
-        instructions.push('Assembler tous les éléments dans un bol et servir immédiatement.');
+        instructions.push('Assemble all elements in a bowl and serve immediately.');
     }
     else if (mealType === 'snack') {
-        instructions.push('Peser les ingrédients selon les quantités spécifiées.');
+        instructions.push('Weigh ingredients according to the specified quantities.');
         if (protein) {
-            instructions.push(`Préparer ${protein.typical_serving_size_g}g de ${protein.name.toLowerCase()}.`);
+            instructions.push(`Prepare ${protein.typical_serving_size_g}g of ${protein.name.toLowerCase()}.`);
         }
         if (fruits.length > 0 || fats.length > 0) {
-            const items = [...fruits, ...fats].map(i => `${i.typical_serving_size_g}g de ${i.name.toLowerCase()}`);
-            instructions.push(`Ajouter: ${items.join(', ')}.`);
+            const items = [...fruits, ...fats].map(i => `${i.typical_serving_size_g}g of ${i.name.toLowerCase()}`);
+            instructions.push(`Add: ${items.join(', ')}.`);
         }
-        instructions.push('Mélanger et consommer frais ou réfrigérer pour plus tard.');
+        instructions.push('Mix and consume fresh or refrigerate for later.');
     }
     else {
         // Lunch or Dinner
-        instructions.push('Peser et préparer tous les ingrédients avant de commencer la cuisson.');
+        instructions.push('Weigh and prepare all ingredients before starting to cook.');
         if (vegetables.length > 0) {
             const vegList = vegetables.map(v => v.name.toLowerCase()).join(', ');
-            instructions.push(`Laver et découper les légumes (${vegList}) en morceaux de taille uniforme.`);
+            instructions.push(`Wash and cut the vegetables (${vegList}) into uniform-sized pieces.`);
         }
         if (protein) {
             const proteinName = protein.name.toLowerCase();
-            instructions.push(`Assaisonner ${protein.typical_serving_size_g}g de ${proteinName} avec sel, poivre et épices au choix.`);
+            instructions.push(`Season ${protein.typical_serving_size_g}g of ${proteinName} with salt, pepper and spices of choice.`);
             if (proteinName.includes('chicken') || proteinName.includes('poulet') ||
                 proteinName.includes('turkey') || proteinName.includes('dinde')) {
-                instructions.push(`Cuire le ${proteinName} dans une poêle à feu moyen-vif, 6-8 minutes de chaque côté jusqu'à cuisson complète.`);
+                instructions.push(`Cook the ${proteinName} in a pan over medium-high heat, 6-8 minutes per side until fully cooked.`);
             }
             else if (proteinName.includes('salmon') || proteinName.includes('saumon') ||
                 proteinName.includes('fish') || proteinName.includes('poisson')) {
-                instructions.push(`Cuire le ${proteinName} à la poêle ou au four, 4-5 minutes de chaque côté.`);
+                instructions.push(`Cook the ${proteinName} in a pan or oven, 4-5 minutes per side.`);
             }
             else {
-                instructions.push(`Cuire le ${proteinName} à feu moyen jusqu'à la température désirée.`);
+                instructions.push(`Cook the ${proteinName} over medium heat to desired temperature.`);
             }
         }
         if (carb) {
             const carbName = carb.name.toLowerCase();
-            instructions.push(`Pendant ce temps, cuire ${carb.typical_serving_size_g}g de ${carbName} selon les instructions du paquet.`);
+            instructions.push(`Meanwhile, cook ${carb.typical_serving_size_g}g of ${carbName} according to package directions.`);
         }
         if (vegetables.length > 0) {
             const totalVegGrams = vegetables.reduce((sum, v) => sum + v.typical_serving_size_g, 0);
-            instructions.push(`Faire sauter les légumes (${totalVegGrams}g au total) dans un peu d'huile pendant 5-7 minutes jusqu'à tendreté.`);
+            instructions.push(`Sauté the vegetables (${totalVegGrams}g total) in a little oil for 5-7 minutes until tender.`);
         }
         if (fats.length > 0) {
             const fatItem = fats[0];
-            instructions.push(`Finaliser avec ${fatItem.typical_serving_size_g}g de ${fatItem.name.toLowerCase()} pour l'assaisonnement.`);
+            instructions.push(`Finish with ${fatItem.typical_serving_size_g}g of ${fatItem.name.toLowerCase()} for seasoning.`);
         }
-        instructions.push('Dresser la protéine avec les accompagnements dans une assiette et servir chaud.');
+        instructions.push('Plate the protein with sides and serve hot.');
     }
     // Limit to 3-6 steps
     return instructions.slice(0, 6);
@@ -596,7 +596,7 @@ function generateDeterministicInstructions(ingredients, mealType) {
  */
 function generateFinalRecipeText(ingredients, mealType) {
     if (ingredients.length === 0) {
-        return `Aucun ingrédient disponible pour ce repas. Veuillez sélectionner plus d'aliments adaptés.`;
+        return `No ingredients available for this meal. Please select more suitable foods.`;
     }
     // Generate deterministic recipe name
     const recipeName = generateDeterministicRecipeName(ingredients, mealType);
@@ -619,8 +619,8 @@ function generateFinalRecipeText(ingredients, mealType) {
             fat: acc.fat + Math.round(ing.macros.fat * factor),
         };
     }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-    const macroSummary = `Macros: ${mealMacros.calories} kcal | P: ${mealMacros.protein}g | G: ${mealMacros.carbs}g | L: ${mealMacros.fat}g`;
-    return `**${recipeName}**\n\n${macroSummary}\n\n**Ingrédients:**\n${ingredientList}\n\n**Préparation:**\n${instructionList}`;
+    const macroSummary = `Macros: ${mealMacros.calories} kcal | P: ${mealMacros.protein}g | C: ${mealMacros.carbs}g | F: ${mealMacros.fat}g`;
+    return `**${recipeName}**\n\n${macroSummary}\n\n**Ingredients:**\n${ingredientList}\n\n**Preparation:**\n${instructionList}`;
 }
 /**
  * Generates a complete daily meal plan with breakfast, lunch, dinner, and snack.

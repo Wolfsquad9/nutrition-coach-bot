@@ -19,7 +19,7 @@ async function createOverride(params) {
         // Get current user ID for FK ownership
         const userId = await (0, useAuth_1.getCurrentUserId)();
         if (!userId) {
-            return { override: null, error: 'Non authentifié. Veuillez rafraîchir la page.' };
+            return { override: null, error: 'Not authenticated. Please refresh the page.' };
         }
         const { data, error } = await client_1.supabase
             .from('plan_overrides')

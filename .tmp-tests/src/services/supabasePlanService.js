@@ -96,19 +96,19 @@ async function fetchCurrentPlan(clientId) {
             .maybeSingle();
         if (planError) {
             console.error('Error fetching plan:', planError);
-            return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: planError.message };
+            return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: planError.message };
         }
         if (!planData || !planData.current_version_id) {
-            return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null };
+            return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: null };
         }
-        // Get the current version payload
+        // Get the current version payload, hash, and version number
         const { data: versionData, error: versionError } = await client_1.supabase
             .from('plan_versions')
-            .select('plan_payload, created_at')
+            .select('plan_payload, created_at, payload_hash, version_number')
             .eq('id', planData.current_version_id)
             .maybeSingle();
         if (versionError || !versionData) {
-            return { plan: null, planId: planData.id, versionId: null, createdAt: null, snapshot: null, error: versionError?.message || 'Version not found' };
+            return { plan: null, planId: planData.id, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: versionError?.message || 'Version not found' };
         }
         return {
             plan: versionData.plan_payload,
@@ -116,12 +116,14 @@ async function fetchCurrentPlan(clientId) {
             versionId: planData.current_version_id,
             createdAt: versionData.created_at,
             snapshot: (versionData.plan_payload.locked_snapshot_json ?? null),
+            payloadHash: versionData.payload_hash,
+            versionNumber: versionData.version_number,
             error: null,
         };
     }
     catch (error) {
         console.error('Failed to fetch current plan:', error);
-        return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: getErrorMessage(error, 'Failed to fetch current plan') };
+        return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: getErrorMessage(error, 'Failed to fetch current plan') };
     }
 }
 /**
