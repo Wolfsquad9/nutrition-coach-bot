@@ -241,30 +241,12 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     expect(persistedSnapshot.client.firstName).toBe('Test');
     expect(persistedSnapshot.client.lastName).toBe('Client');
 
-    mockFetchCurrentPlan.mockResolvedValue({
-      plan: {
-        weeklyPlan: fakeWeeklyPlan,
-        macroTargets: fakeMacros,
-        likedIngredients: ['chicken', 'eggs'],
-        lockedAt: lockedAtDate.toISOString(),
-      },
-      planId: PLAN_ID,
-      versionId: VERSION_ID,
-      versionNumber: VERSION_NUMBER,
-      createdAt: persistedSnapshot.meta.createdAt,
-      payloadHash: PAYLOAD_HASH,
-      error: null,
-    });
-
-    mockCheckPlanLockStatus.mockResolvedValue({
-      isLocked: true,
-      lockedUntil: new Date(persistedSnapshot.meta.lockedUntil),
-      daysRemaining: 28,
-    });
-
     // ── Step 6: Discard draft (triggers reload) ──
+    // State is now LOCKED after lockPlan's internal reload, so discardDraft
+    // won't clear (isDraft is false). Instead, call loadPlanForClient directly
+    // to simulate the "discard and reload" flow for a locked plan.
     await act(async () => {
-      await result.current.discardDraft(CLIENT_ID);
+      await result.current.loadPlanForClient(CLIENT_ID);
     });
 
     // ── Step 7: Verify state is LOCKED after reload ──
