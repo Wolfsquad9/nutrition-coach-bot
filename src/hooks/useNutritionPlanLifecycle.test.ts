@@ -197,7 +197,32 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     expect(result.current.isDraft).toBe(true);
     expect(result.current.weeklyPlan).not.toBeNull();
 
-    // ── Step 3: Lock the plan ──
+    // ── Step 3: Pre-configure reload mock (lockPlan calls loadPlanForClient internally) ──
+    // We need a stable lockedAt for the mock; use a fixed date.
+    const lockedAtDate = new Date();
+
+    mockFetchCurrentPlan.mockResolvedValue({
+      plan: {
+        weeklyPlan: fakeWeeklyPlan,
+        macroTargets: fakeMacros,
+        likedIngredients: ['chicken', 'eggs'],
+        lockedAt: lockedAtDate.toISOString(),
+      },
+      planId: PLAN_ID,
+      versionId: VERSION_ID,
+      versionNumber: VERSION_NUMBER,
+      createdAt: lockedAtDate.toISOString(),
+      payloadHash: PAYLOAD_HASH,
+      error: null,
+    });
+
+    mockCheckPlanLockStatus.mockResolvedValue({
+      isLocked: true,
+      lockedUntil: new Date(lockedAtDate.getTime() + 28 * 24 * 60 * 60 * 1000),
+      daysRemaining: 28,
+    });
+
+    // ── Step 4: Lock the plan ──
     let lockResult: { success: boolean; error: string | null } = { success: false, error: 'init' };
     await act(async () => {
       lockResult = await result.current.lockPlan(CLIENT_ID, clientInfo);
@@ -210,14 +235,11 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     // Verify snapshot was stored
     expect(snapshotStore.has(VERSION_ID)).toBe(true);
 
-    // ── Step 4: Capture the persisted snapshot ──
+    // ── Step 5: Capture the persisted snapshot ──
     const persistedSnapshot = structuredClone(snapshotStore.get(VERSION_ID)!) as PlanSnapshot;
     expect(persistedSnapshot.meta.versionNumber).toBe(1);
     expect(persistedSnapshot.client.firstName).toBe('Test');
     expect(persistedSnapshot.client.lastName).toBe('Client');
-
-    // ── Step 5: Set up mock to return locked plan on reload ──
-    const lockedAtDate = new Date(persistedSnapshot.meta.lockedAt);
 
     mockFetchCurrentPlan.mockResolvedValue({
       plan: {
