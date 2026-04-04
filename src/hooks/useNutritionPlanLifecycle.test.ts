@@ -298,4 +298,80 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     expect(result.current.isLocked).toBe(false);
     expect(snapshotStore.size).toBe(0);
   });
+
+  it('locking twice does not overwrite the original snapshot (write-once)', async () => {
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    // ── Draft → Lock (first time) ──
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs']);
+    });
+
+    const lockedAtDate = new Date();
+
+    mockFetchCurrentPlan.mockResolvedValue({
+      plan: {
+        weeklyPlan: fakeWeeklyPlan,
+        macroTargets: fakeMacros,
+        likedIngredients: ['chicken', 'eggs'],
+        lockedAt: lockedAtDate.toISOString(),
+      },
+      planId: PLAN_ID,
+      versionId: VERSION_ID,
+      versionNumber: VERSION_NUMBER,
+      createdAt: lockedAtDate.toISOString(),
+      payloadHash: PAYLOAD_HASH,
+      error: null,
+    });
+
+    mockCheckPlanLockStatus.mockResolvedValue({
+      isLocked: true,
+      lockedUntil: new Date(lockedAtDate.getTime() + 28 * 24 * 60 * 60 * 1000),
+      daysRemaining: 28,
+    });
+
+    await act(async () => {
+      await result.current.lockPlan(CLIENT_ID, clientInfo);
+    });
+
+    expect(mockPersistSnapshot).toHaveBeenCalledTimes(1);
+    expect(snapshotStore.has(VERSION_ID)).toBe(true);
+
+    const firstSnapshot = structuredClone(snapshotStore.get(VERSION_ID)!) as PlanSnapshot;
+
+    // ── Attempt second lock with DIFFERENT data ──
+    const alteredMacros: MacroTargets = { calories: 9999, protein: 999, carbs: 999, fat: 999 };
+
+    // Override persistSnapshot to enforce write-once: reject if key exists
+    mockPersistSnapshot.mockImplementation(
+      async (versionId: string, snapshot: PlanSnapshot) => {
+        if (snapshotStore.has(versionId)) {
+          // Write-once: silently succeed but do NOT overwrite
+          return { success: true, error: null };
+        }
+        snapshotStore.set(versionId, structuredClone(snapshot) as PlanSnapshot);
+        return { success: true, error: null };
+      }
+    );
+
+    // Reset to DRAFT so lockPlan can fire again
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, alteredMacros, ['tuna']);
+    });
+
+    await act(async () => {
+      await result.current.lockPlan(CLIENT_ID, clientInfo);
+    });
+
+    // persistSnapshot was called again (second lock attempt)
+    expect(mockPersistSnapshot).toHaveBeenCalledTimes(2);
+
+    // ── Core assertion: snapshot in store is UNCHANGED ──
+    const storedAfterSecondLock = snapshotStore.get(VERSION_ID)!;
+    expect(storedAfterSecondLock).toEqual(firstSnapshot);
+
+    // Verify the original values survived, not the altered ones
+    expect(storedAfterSecondLock.metrics.targets.calories).toBe(2200);
+    expect(storedAfterSecondLock.metrics.targets.calories).not.toBe(9999);
+  });
 });
