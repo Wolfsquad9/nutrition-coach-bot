@@ -371,7 +371,7 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     expect(storedAfterSecondLock).toEqual(firstSnapshot);
 
     // Verify the original values survived, not the altered ones
-    expect(storedAfterSecondLock.metrics.targets.calories).toBe(2200);
-    expect(storedAfterSecondLock.metrics.targets.calories).not.toBe(9999);
+    expect(storedAfterSecondLock.metrics.targetCalories).toBe(2200);
+    expect(storedAfterSecondLock.metrics.targetCalories).not.toBe(9999);
   });
 });
