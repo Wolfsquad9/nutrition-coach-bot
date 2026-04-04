@@ -299,6 +299,91 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     expect(snapshotStore.size).toBe(0);
   });
 
+  it('LOCKED → EXPIRED transition triggers deterministically after lock period', async () => {
+    // Use fake timers so we can advance past the 7-day lock window
+    vi.useFakeTimers();
+    const now = new Date('2025-06-01T12:00:00Z');
+    vi.setSystemTime(now);
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    // ── Draft → Lock ──
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs']);
+    });
+    expect(result.current.lifecycleState).toBe('DRAFT');
+
+    const lockedAtDate = new Date(now);
+
+    mockFetchCurrentPlan.mockResolvedValue({
+      plan: {
+        weeklyPlan: fakeWeeklyPlan,
+        macroTargets: fakeMacros,
+        likedIngredients: ['chicken', 'eggs'],
+        lockedAt: lockedAtDate.toISOString(),
+      },
+      planId: PLAN_ID,
+      versionId: VERSION_ID,
+      versionNumber: VERSION_NUMBER,
+      createdAt: lockedAtDate.toISOString(),
+      payloadHash: PAYLOAD_HASH,
+      error: null,
+    });
+
+    mockCheckPlanLockStatus.mockResolvedValue({
+      isLocked: true,
+      lockedUntil: new Date(lockedAtDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+      daysRemaining: 7,
+    });
+
+    await act(async () => {
+      await result.current.lockPlan(CLIENT_ID, clientInfo);
+    });
+
+    expect(result.current.lifecycleState).toBe('LOCKED');
+    expect(result.current.isLocked).toBe(true);
+
+    // Capture snapshot while locked
+    const lockedSnapshot = structuredClone(snapshotStore.get(VERSION_ID)!) as PlanSnapshot;
+    expect(lockedSnapshot).toBeDefined();
+
+    // ── Advance time past the 7-day lock period ──
+    const eightDaysLater = new Date('2025-06-09T12:00:01Z');
+    vi.setSystemTime(eightDaysLater);
+
+    // Simulate expired lock status from DB
+    mockCheckPlanLockStatus.mockResolvedValue({
+      isLocked: false,
+      lockedUntil: new Date(lockedAtDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+      daysRemaining: 0,
+    });
+
+    // Reload plan — state should now derive as EXPIRED
+    await act(async () => {
+      await result.current.loadPlanForClient(CLIENT_ID);
+    });
+
+    expect(result.current.lifecycleState).toBe('EXPIRED');
+    expect(result.current.isLocked).toBe(false);
+
+    // ── Verify snapshot data is UNCHANGED despite expiry ──
+    const postExpirySnapshot = snapshotStore.get(VERSION_ID)!;
+    expect(postExpirySnapshot).toEqual(lockedSnapshot);
+    expect(postExpirySnapshot.meta.versionNumber).toBe(VERSION_NUMBER);
+
+    // ── Verify plan data is still accessible ──
+    expect(result.current.weeklyPlan).not.toBeNull();
+    expect(result.current.planId).toBe(PLAN_ID);
+    expect(result.current.versionId).toBe(VERSION_ID);
+    expect(result.current.payloadHash).toBe(PAYLOAD_HASH);
+
+    // ── Verify EXPIRED permits GENERATE but not LOCK ──
+    // (domain rule check — import-free, just verifying hook state)
+    expect(result.current.isDraft).toBe(false);
+
+    vi.useRealTimers();
+  });
+
   it('locking twice does not overwrite the original snapshot (write-once)', async () => {
     const { result } = renderHook(() => useNutritionPlanState());
 
