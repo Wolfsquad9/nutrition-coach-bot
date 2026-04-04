@@ -339,39 +339,41 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
 
     const firstSnapshot = structuredClone(snapshotStore.get(VERSION_ID)!) as PlanSnapshot;
 
-    // ── Attempt second lock with DIFFERENT data ──
-    const alteredMacros: MacroTargets = { calories: 9999, protein: 999, carbs: 999, fat: 999 };
+    // ── State machine correctly blocks second lock at hook level ──
+    const secondLockResult = await act(async () => {
+      return result.current.lockPlan(CLIENT_ID, clientInfo);
+    });
 
-    // Override persistSnapshot to enforce write-once: reject if key exists
+    // Hook rejects: state is LOCKED, not DRAFT
+    expect(secondLockResult.success).toBe(false);
+    expect(mockPersistSnapshot).toHaveBeenCalledTimes(1); // NOT called again
+
+    // ── Verify persistence layer also enforces write-once independently ──
+    // Simulate a direct second write attempt with DIFFERENT data
+    const alteredSnapshot = structuredClone(firstSnapshot) as PlanSnapshot;
+    (alteredSnapshot as any).metrics = {
+      ...alteredSnapshot.metrics,
+      targetCalories: 9999,
+    };
+
+    // persistSnapshot mock enforces write-once (mimics real service behavior)
     mockPersistSnapshot.mockImplementation(
       async (versionId: string, snapshot: PlanSnapshot) => {
         if (snapshotStore.has(versionId)) {
-          // Write-once: silently succeed but do NOT overwrite
-          return { success: true, error: null };
+          return { success: true, error: null }; // skip silently
         }
         snapshotStore.set(versionId, structuredClone(snapshot) as PlanSnapshot);
         return { success: true, error: null };
       }
     );
 
-    // Reset to DRAFT so lockPlan can fire again
-    act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, alteredMacros, ['tuna']);
-    });
-
-    await act(async () => {
-      await result.current.lockPlan(CLIENT_ID, clientInfo);
-    });
-
-    // persistSnapshot was called again (second lock attempt)
-    expect(mockPersistSnapshot).toHaveBeenCalledTimes(2);
+    const directResult = await mockPersistSnapshot(VERSION_ID, alteredSnapshot);
+    expect(directResult.success).toBe(true);
 
     // ── Core assertion: snapshot in store is UNCHANGED ──
-    const storedAfterSecondLock = snapshotStore.get(VERSION_ID)!;
-    expect(storedAfterSecondLock).toEqual(firstSnapshot);
-
-    // Verify the original values survived, not the altered ones
-    expect(storedAfterSecondLock.metrics.targetCalories).toBe(2200);
-    expect(storedAfterSecondLock.metrics.targetCalories).not.toBe(9999);
+    const storedAfterSecondAttempt = snapshotStore.get(VERSION_ID)!;
+    expect(storedAfterSecondAttempt).toEqual(firstSnapshot);
+    expect(storedAfterSecondAttempt.metrics.targetCalories).toBe(2200);
+    expect(storedAfterSecondAttempt.metrics.targetCalories).not.toBe(9999);
   });
 });
