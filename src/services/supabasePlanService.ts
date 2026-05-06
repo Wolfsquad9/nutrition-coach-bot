@@ -170,7 +170,7 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
     // Get the current version payload, hash, and version number
     const { data: versionData, error: versionError } = await supabase
       .from('plan_versions')
-      .select('plan_payload, created_at, payload_hash, version_number')
+      .select('plan_payload, locked_snapshot_json, created_at, payload_hash, version_number')
       .eq('id', planData.current_version_id)
       .maybeSingle();
 
@@ -183,7 +183,7 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       planId: planData.id,
       versionId: planData.current_version_id,
       createdAt: versionData.created_at,
-      snapshot: ((versionData.plan_payload as unknown as PlanPayload).locked_snapshot_json ?? null) as PlanSnapshot | null,
+      snapshot: (versionData.locked_snapshot_json ?? null) as unknown as PlanSnapshot | null,
       payloadHash: versionData.payload_hash,
       versionNumber: versionData.version_number,
       error: null,
