@@ -164,4 +164,64 @@ describe('lockPlan snapshot atomicity', () => {
     expect(result.current.isError).toBe(true);
     expect(result.current.isLocked).toBe(false);
   });
+  it('deduplicates concurrent lock attempts while a lock is in flight', async () => {
+    let resolveLock: (value: { success: boolean; planId: string; versionId: string; error: null }) => void;
+    const lockPromise = new Promise<{ success: boolean; planId: string; versionId: string; error: null }>((resolve) => {
+      resolveLock = resolve;
+    });
+
+    mockLockNutritionPlan.mockReturnValue(lockPromise);
+    mockPersistSnapshot.mockResolvedValue({ success: true, error: null });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+    });
+
+    let firstLock: Promise<{ success: boolean; error: string | null }>;
+    let secondLock: Promise<{ success: boolean; error: string | null }>;
+
+    await act(async () => {
+      firstLock = result.current.lockPlan('client-1', fakeClientInfo);
+      secondLock = result.current.lockPlan('client-1', fakeClientInfo);
+    });
+
+    expect(mockLockNutritionPlan).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveLock!({ success: true, planId: 'p1', versionId: 'v1', error: null });
+      await Promise.all([firstLock!, secondLock!]);
+    });
+  });
+
+  it('exposes a retry action after snapshot persistence fails', async () => {
+    mockLockNutritionPlan.mockResolvedValue({ success: true, planId: 'p1', versionId: 'v1', error: null });
+    mockPersistSnapshot
+      .mockResolvedValueOnce({ success: false, error: 'Transient write failed' })
+      .mockResolvedValueOnce({ success: true, error: null });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+    });
+
+    await act(async () => {
+      await result.current.lockPlan('client-1', fakeClientInfo);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(result.current.isRetryable).toBe(true);
+
+    let retryResult: { success: boolean; error: string | null } = { success: false, error: 'init' };
+    await act(async () => {
+      retryResult = await result.current.retryLastAction();
+    });
+
+    expect(retryResult.success).toBe(true);
+    expect(retryResult.error).toBeNull();
+    expect(mockLockNutritionPlan).toHaveBeenCalledTimes(2);
+    expect(mockPersistSnapshot).toHaveBeenCalledTimes(2);
+  });
+
 });
