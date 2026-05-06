@@ -435,10 +435,13 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
 
     // ── Verify persistence layer also enforces write-once independently ──
     // Simulate a direct second write attempt with DIFFERENT data
-    const alteredSnapshot = structuredClone(firstSnapshot) as PlanSnapshot;
-    alteredSnapshot.metrics = {
-      ...alteredSnapshot.metrics,
-      targetCalories: 9999,
+    const clonedSnapshot = structuredClone(firstSnapshot) as PlanSnapshot;
+    const alteredSnapshot: PlanSnapshot = {
+      ...clonedSnapshot,
+      metrics: {
+        ...clonedSnapshot.metrics,
+        targetCalories: 9999,
+      },
     };
 
     // persistSnapshot mock enforces write-once (mimics real service behavior)
