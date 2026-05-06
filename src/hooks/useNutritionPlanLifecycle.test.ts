@@ -21,7 +21,7 @@ function resetStore() {
   snapshotStore.clear();
 }
 
-// ─── Mocks ───────────────────────────────────────────────────────────────────
+// ─── Mocks ───────────────────────────────────────────────────────────[...]
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -64,7 +64,7 @@ vi.mock('@/services/supabaseOverrideService', () => ({
   fetchPendingOverrides: vi.fn().mockResolvedValue({ overrides: [], error: null }),
 }));
 
-// ─── Test data ───────────────────────────────────────────────────────────────
+// ─── Test data ───────────────────────────────────────────────────────────[...]
 
 const CLIENT_ID = 'client-lifecycle-1';
 const PLAN_ID = 'plan-lc-1';
@@ -131,7 +131,7 @@ const clientInfo = {
   activityLevel: 'High',
 };
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
+// ─── Tests ────────────────────────────────────────────────────────────[...]
 
 describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload', () => {
   beforeEach(() => {
@@ -436,7 +436,7 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     // ── Verify persistence layer also enforces write-once independently ──
     // Simulate a direct second write attempt with DIFFERENT data
     const alteredSnapshot = structuredClone(firstSnapshot) as PlanSnapshot;
-    (alteredSnapshot as any).metrics = {
+    alteredSnapshot.metrics = {
       ...alteredSnapshot.metrics,
       targetCalories: 9999,
     };
