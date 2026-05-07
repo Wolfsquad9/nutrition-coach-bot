@@ -343,6 +343,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          idempotency_key: string | null
           locked_snapshot_json: Json | null
           note: string | null
           payload_hash: string
@@ -355,6 +356,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          idempotency_key?: string | null
           locked_snapshot_json?: Json | null
           note?: string | null
           payload_hash: string
@@ -367,6 +369,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          idempotency_key?: string | null
           locked_snapshot_json?: Json | null
           note?: string | null
           payload_hash?: string
@@ -619,6 +622,23 @@ export type Database = {
       }
     }
     Functions: {
+      lock_nutrition_plan: {
+        Args: {
+          p_client_id: string
+          p_idempotency_key: string
+          p_locked_snapshot_json: Json
+          p_payload_hash: string
+          p_plan_payload: Json
+          p_version_id: string
+        }
+        Returns: {
+          error: string | null
+          plan_id: string
+          success: boolean
+          version_id: string
+          version_number: number
+        }[]
+      }
       get_next_plan_version_number: {
         Args: { p_plan_id: string }
         Returns: number
