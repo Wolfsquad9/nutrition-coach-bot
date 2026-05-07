@@ -9,8 +9,10 @@ import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter"
 import type { NutritionMetrics, MacroTargets } from "@/types";
 
 import {
+  buildLockedPlanPayload,
   checkPlanLockStatus,
   fetchCurrentPlan,
+  hashPlanPayload,
   lockNutritionPlan,
 } from "@/services/supabasePlanService";
 
@@ -21,7 +23,6 @@ import {
 
 import {
   fetchPersistedSnapshot,
-  persistSnapshot,
 } from "@/services/snapshotPersistence";
 
 import {
@@ -68,10 +69,35 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;
 };
 
+interface LockAttempt {
+  versionId: string;
+  idempotencyKey: string;
+  lockedAt: Date;
+}
+
 type RetryAction =
   | { type: "load"; clientId: string }
-  | { type: "lock"; clientId: string; clientInfo: LockClientInfo }
+  | { type: "lock"; clientId: string; clientInfo: LockClientInfo; attempt: LockAttempt }
   | null;
+
+const createUuid = (): string => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+    (
+      Number(char) ^
+      (Math.random() * 16) >> (Number(char) / 4)
+    ).toString(16)
+  );
+};
+
+const createLockAttempt = (): LockAttempt => ({
+  versionId: createUuid(),
+  idempotencyKey: createUuid(),
+  lockedAt: new Date(),
+});
 
 export function useNutritionPlanState() {
   /* ---------------- UI STATE ---------------- */
@@ -344,7 +370,7 @@ export function useNutritionPlanState() {
   /* ---------------- LOCK ---------------- */
 
   const lockPlan = useCallback(
-    async (clientId: string, clientInfo: LockClientInfo) => {
+    async (clientId: string, clientInfo: LockClientInfo, retryAttempt?: LockAttempt) => {
       if (lockInFlightRef.current) {
         return lockInFlightRef.current;
       }
@@ -353,28 +379,20 @@ export function useNutritionPlanState() {
         return { success: false, error: "No draft to lock" };
       }
 
+      const attempt = retryAttempt ?? createLockAttempt();
       const lockRequest = (async () => {
         setUiState("SAVING");
         setError(null);
 
         try {
-          const result = await lockNutritionPlan(
-            clientId,
-            weeklyPlan,
-            macroTargets,
-            likedIngredients
-          );
-
-          if (!result.success || !result.versionId) {
-            const message = result.error ?? "Failed to lock plan";
-            setError(message);
-            lastFailedActionRef.current = { type: "lock", clientId, clientInfo };
-            setUiState("ERROR");
-            return { success: false, error: message };
-          }
-
           try {
-            const now = new Date();
+            const planPayload = buildLockedPlanPayload({
+              lockedAt: attempt.lockedAt,
+              weeklyPlan,
+              macroTargets,
+              likedIngredients,
+            });
+            const payloadHash = hashPlanPayload(planPayload);
 
             // Map MacroTargets → NutritionMetrics for snapshot
             const metrics: NutritionMetrics = {
@@ -390,10 +408,10 @@ export function useNutritionPlanState() {
 
             const snapshotInput: SnapshotBuildInput = {
               identifier: {
-                versionId: result.versionId,
-                lockedAt: now,
-                lockedUntil: calculateLockExpiry(now),
-                payloadHash: payloadHash ?? "",
+                versionId: attempt.versionId,
+                lockedAt: attempt.lockedAt,
+                lockedUntil: calculateLockExpiry(attempt.lockedAt),
+                payloadHash,
               },
               client: clientInfo,
               metrics,
@@ -401,28 +419,37 @@ export function useNutritionPlanState() {
               groceryList: buildGroceryListFromPlan(weeklyPlan),
               planName: `Plan – ${clientInfo.firstName} ${clientInfo.lastName}`,
               versionNumber: versionNumber ?? 1,
-              createdAt: now.toISOString(),
+              createdAt: attempt.lockedAt.toISOString(),
               generatedBy: "coach",
             };
 
             const builtSnapshot = buildPlanSnapshot(snapshotInput);
-            const persistResult = await persistSnapshot(result.versionId, builtSnapshot);
+            const result = await lockNutritionPlan(
+              clientId,
+              planPayload,
+              builtSnapshot,
+              {
+                versionId: attempt.versionId,
+                idempotencyKey: attempt.idempotencyKey,
+              }
+            );
 
-            if (!persistResult.success) {
-              const message = persistResult.error ?? "Snapshot persistence failed";
+            if (!result.success || !result.versionId) {
+              const message = result.error ?? "Failed to lock plan";
               setLastPersistenceFailed(true);
               setError(message);
-              lastFailedActionRef.current = { type: "lock", clientId, clientInfo };
+              lastFailedActionRef.current = { type: "lock", clientId, clientInfo, attempt };
               setUiState("ERROR");
               return { success: false, error: message };
             }
 
+            setVersionNumber(result.versionNumber ?? versionNumber);
             setLastPersistenceFailed(false);
           } catch (err) {
-            const message = getErrorMessage(err, "Snapshot persistence failed");
+            const message = getErrorMessage(err, "Atomic lock failed");
             setLastPersistenceFailed(true);
             setError(message);
-            lastFailedActionRef.current = { type: "lock", clientId, clientInfo };
+            lastFailedActionRef.current = { type: "lock", clientId, clientInfo, attempt };
             setUiState("ERROR");
             return { success: false, error: message };
           }
@@ -433,7 +460,7 @@ export function useNutritionPlanState() {
         } catch (err) {
           const message = getErrorMessage(err, "Lock failed");
           setError(message);
-          lastFailedActionRef.current = { type: "lock", clientId, clientInfo };
+          lastFailedActionRef.current = { type: "lock", clientId, clientInfo, attempt };
           setUiState("ERROR");
           return { success: false, error: message };
         } finally {
@@ -444,7 +471,7 @@ export function useNutritionPlanState() {
       lockInFlightRef.current = lockRequest;
       return lockRequest;
     },
-    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, payloadHash, loadPlanForClient]
+    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient]
   );
 
   /* ---------------- RETRY ---------------- */
@@ -461,7 +488,7 @@ export function useNutritionPlanState() {
       return { success: true, error: null };
     }
 
-    return lockPlan(action.clientId, action.clientInfo);
+    return lockPlan(action.clientId, action.clientInfo, action.attempt);
   }, [loadPlanForClient, lockPlan]);
 
   /* ---------------- RESOLVED PLAN ---------------- */

@@ -21,14 +21,21 @@ vi.mock('@/integrations/supabase/client', () => ({
 
 const mockLockNutritionPlan = vi.fn();
 vi.mock('@/services/supabasePlanService', () => ({
+  buildLockedPlanPayload: vi.fn((input) => ({
+    type: 'nutrition',
+    generatedAt: input.lockedAt.toISOString(),
+    lockedAt: input.lockedAt.toISOString(),
+    macroTargets: input.macroTargets,
+    weeklyPlan: input.weeklyPlan,
+    likedIngredients: input.likedIngredients,
+  })),
+  hashPlanPayload: vi.fn(() => 'hash_test'),
   lockNutritionPlan: (...args: Parameters<typeof mockLockNutritionPlan>) => mockLockNutritionPlan(...args),
   checkPlanLockStatus: vi.fn().mockResolvedValue({ isLocked: false, lockedUntil: null, daysRemaining: 0 }),
   fetchCurrentPlan: vi.fn().mockResolvedValue({ plan: null, planId: null, versionId: null, createdAt: null, error: null }),
 }));
 
-const mockPersistSnapshot = vi.fn();
 vi.mock('@/services/snapshotPersistence', () => ({
-  persistSnapshot: (...args: Parameters<typeof mockPersistSnapshot>) => mockPersistSnapshot(...args),
   fetchPersistedSnapshot: vi.fn().mockResolvedValue({ snapshot: null, error: null }),
   buildAndPersistSnapshot: vi.fn(),
 }));
@@ -100,9 +107,8 @@ describe('lockPlan snapshot atomicity', () => {
     vi.clearAllMocks();
   });
 
-  it('returns failure when persistSnapshot fails', async () => {
-    mockLockNutritionPlan.mockResolvedValue({ success: true, planId: 'p1', versionId: 'v1', error: null });
-    mockPersistSnapshot.mockResolvedValue({ success: false, error: 'DB write failed' });
+  it('returns failure when atomic lock RPC fails', async () => {
+    mockLockNutritionPlan.mockResolvedValue({ success: false, planId: null, versionId: null, versionNumber: null, error: 'DB write failed' });
 
     const { result } = renderHook(() => useNutritionPlanState());
 
@@ -124,9 +130,8 @@ describe('lockPlan snapshot atomicity', () => {
     expect(result.current.isLocked).toBe(false);
   });
 
-  it('returns success when both lock and snapshot succeed', async () => {
-    mockLockNutritionPlan.mockResolvedValue({ success: true, planId: 'p1', versionId: 'v1', error: null });
-    mockPersistSnapshot.mockResolvedValue({ success: true, error: null });
+  it('returns success when atomic lock RPC succeeds', async () => {
+    mockLockNutritionPlan.mockResolvedValue({ success: true, planId: 'p1', versionId: 'v1', versionNumber: 1, error: null });
 
     const { result } = renderHook(() => useNutritionPlanState());
 
@@ -144,9 +149,8 @@ describe('lockPlan snapshot atomicity', () => {
     expect(result.current.lastPersistenceFailed).toBe(false);
   });
 
-  it('returns failure when persistSnapshot throws', async () => {
-    mockLockNutritionPlan.mockResolvedValue({ success: true, planId: 'p1', versionId: 'v1', error: null });
-    mockPersistSnapshot.mockRejectedValue(new Error('Network error'));
+  it('returns failure when atomic lock RPC throws', async () => {
+    mockLockNutritionPlan.mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useNutritionPlanState());
 
@@ -164,14 +168,14 @@ describe('lockPlan snapshot atomicity', () => {
     expect(result.current.isError).toBe(true);
     expect(result.current.isLocked).toBe(false);
   });
+
   it('deduplicates concurrent lock attempts while a lock is in flight', async () => {
-    let resolveLock: (value: { success: boolean; planId: string; versionId: string; error: null }) => void;
-    const lockPromise = new Promise<{ success: boolean; planId: string; versionId: string; error: null }>((resolve) => {
+    let resolveLock: (value: { success: boolean; planId: string; versionId: string; versionNumber: number; error: null }) => void;
+    const lockPromise = new Promise<{ success: boolean; planId: string; versionId: string; versionNumber: number; error: null }>((resolve) => {
       resolveLock = resolve;
     });
 
     mockLockNutritionPlan.mockReturnValue(lockPromise);
-    mockPersistSnapshot.mockResolvedValue({ success: true, error: null });
 
     const { result } = renderHook(() => useNutritionPlanState());
 
@@ -189,16 +193,15 @@ describe('lockPlan snapshot atomicity', () => {
 
     expect(mockLockNutritionPlan).toHaveBeenCalledTimes(1);
     await act(async () => {
-      resolveLock!({ success: true, planId: 'p1', versionId: 'v1', error: null });
+      resolveLock!({ success: true, planId: 'p1', versionId: 'v1', versionNumber: 1, error: null });
       await Promise.all([firstLock!, secondLock!]);
     });
   });
 
-  it('exposes a retry action after snapshot persistence fails', async () => {
-    mockLockNutritionPlan.mockResolvedValue({ success: true, planId: 'p1', versionId: 'v1', error: null });
-    mockPersistSnapshot
-      .mockResolvedValueOnce({ success: false, error: 'Transient write failed' })
-      .mockResolvedValueOnce({ success: true, error: null });
+  it('retries failed atomic lock with the same idempotency key', async () => {
+    mockLockNutritionPlan
+      .mockResolvedValueOnce({ success: false, planId: null, versionId: null, versionNumber: null, error: 'Transient write failed' })
+      .mockResolvedValueOnce({ success: true, planId: 'p1', versionId: 'v1', versionNumber: 1, error: null });
 
     const { result } = renderHook(() => useNutritionPlanState());
 
@@ -221,7 +224,7 @@ describe('lockPlan snapshot atomicity', () => {
     expect(retryResult.success).toBe(true);
     expect(retryResult.error).toBeNull();
     expect(mockLockNutritionPlan).toHaveBeenCalledTimes(2);
-    expect(mockPersistSnapshot).toHaveBeenCalledTimes(2);
+    expect(mockLockNutritionPlan.mock.calls[1][3]).toEqual(mockLockNutritionPlan.mock.calls[0][3]);
   });
 
 });

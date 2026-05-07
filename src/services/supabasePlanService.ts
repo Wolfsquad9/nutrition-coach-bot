@@ -9,10 +9,10 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { getCurrentUserId } from '@/hooks/useAuth';
 import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
+import type { Json } from '@/integrations/supabase/types';
 import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
 
 // Plan version payload structure
@@ -53,6 +53,7 @@ export interface PlanVersionRow {
   plan_payload: PlanPayload;
   note: string | null;
   payload_hash: string;
+  idempotency_key: string | null;
   archived: boolean;
 }
 
@@ -66,8 +67,45 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;
 };
 
+export interface BuildLockedPlanPayloadInput {
+  lockedAt: Date;
+  weeklyPlan: WeeklyMealPlanResult;
+  macroTargets: { calories: number; protein: number; carbs: number; fat: number };
+  likedIngredients: string[];
+  realismConstraintHit?: boolean;
+  constraintsHitDetails?: string[];
+}
+
+export interface LockNutritionPlanOptions {
+  versionId: string;
+  idempotencyKey: string;
+}
+
+export interface LockNutritionPlanResult {
+  success: boolean;
+  planId: string | null;
+  versionId: string | null;
+  versionNumber: number | null;
+  error: string | null;
+}
+
+export function buildLockedPlanPayload(input: BuildLockedPlanPayloadInput): PlanPayload {
+  const lockedAt = input.lockedAt.toISOString();
+
+  return {
+    type: 'nutrition',
+    generatedAt: lockedAt,
+    lockedAt,
+    macroTargets: input.macroTargets,
+    weeklyPlan: input.weeklyPlan,
+    realismConstraintHit: input.realismConstraintHit,
+    constraintsHitDetails: input.constraintsHitDetails,
+    likedIngredients: input.likedIngredients,
+  };
+}
+
 // Simple hash function for payload deduplication
-function hashPayload(payload: PlanPayload): string {
+export function hashPlanPayload(payload: PlanPayload): string {
   const str = JSON.stringify(payload);
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -195,17 +233,15 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
 }
 
 /**
- * Lock a nutrition plan - saves to DB and starts 7-day lock period
- * This is the ONLY way to persist a plan (drafts are NOT saved)
+ * Lock a nutrition plan through the atomic Supabase RPC.
+ * This is the ONLY client write path for locked plan versions.
  */
 export async function lockNutritionPlan(
   clientId: string,
-  weeklyPlan: WeeklyMealPlanResult,
-  macroTargets: { calories: number; protein: number; carbs: number; fat: number },
-  likedIngredients: string[],
-  realismConstraintHit?: boolean,
-  constraintsHitDetails?: string[]
-): Promise<{ success: boolean; planId: string | null; versionId: string | null; error: string | null }> {
+  payload: PlanPayload,
+  lockedSnapshot: PlanSnapshot,
+  options: LockNutritionPlanOptions
+): Promise<LockNutritionPlanResult> {
   try {
     // Ensure profile exists for FK constraint (critical for anonymous auth)
     const profileId = await ensureProfileExists();
@@ -214,108 +250,63 @@ export async function lockNutritionPlan(
         success: false,
         planId: null,
         versionId: null,
+        versionNumber: null,
         error: 'Not authenticated. Please refresh the page.',
       };
     }
 
-    const userId = profileId;
-    const now = new Date().toISOString();
+    const planPayloadJson = JSON.parse(JSON.stringify(payload)) as Json;
+    const snapshotJson = JSON.parse(JSON.stringify(lockedSnapshot)) as Json;
+    const payloadHash = hashPlanPayload(payload);
 
-    // Create the payload with lock timestamp
-    const payload: PlanPayload = {
-      type: 'nutrition',
-      generatedAt: now,
-      lockedAt: now, // Mark when plan was locked
-      macroTargets,
-      weeklyPlan,
-      realismConstraintHit,
-      constraintsHitDetails,
-      likedIngredients,
-    };
-
-    const payloadHash = hashPayload(payload);
-
-    // Check if a nutrition_plans record already exists for this client
-    const { data: existingPlan, error: existingError } = await supabase
-      .from('nutrition_plans')
-      .select('id')
-      .eq('client_id', clientId)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    let planId: string;
-
-    if (existingPlan) {
-      // Use existing plan
-      planId = existingPlan.id;
-    } else {
-      // Create new nutrition_plans record
-      const { data: newPlan, error: planError } = await supabase
-        .from('nutrition_plans')
-        .insert({
-          client_id: clientId,
-          created_by: userId,
-          plan_data: { type: 'nutrition', version: 1 },
-          status: 'active',
-        })
-        .select('id')
-        .single();
-
-      if (planError || !newPlan) {
-        console.error('Error creating nutrition plan:', planError);
-        return { success: false, planId: null, versionId: null, error: planError?.message || 'Failed to create plan' };
-      }
-
-      planId = newPlan.id;
-    }
-
-    // Get the next version number
-    const { data: versionCount } = await supabase
-      .from('plan_versions')
-      .select('version_number')
-      .eq('plan_id', planId)
-      .order('version_number', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const nextVersionNumber = (versionCount?.version_number || 0) + 1;
-
-    // Create the plan version
-    const planPayloadJson = JSON.parse(JSON.stringify(payload));
-    
-    const { data: newVersion, error: versionError } = await supabase
-      .from('plan_versions')
-      .insert({
-        plan_id: planId,
-        version_number: nextVersionNumber,
-        created_by: userId,
-        plan_payload: planPayloadJson,
-        payload_hash: payloadHash,
-        note: `Plan locked - v${nextVersionNumber}`,
+    const { data, error } = await supabase
+      .rpc('lock_nutrition_plan', {
+        p_client_id: clientId,
+        p_version_id: options.versionId,
+        p_plan_payload: planPayloadJson,
+        p_locked_snapshot_json: snapshotJson,
+        p_payload_hash: payloadHash,
+        p_idempotency_key: options.idempotencyKey,
       })
-      .select('id')
       .single();
 
-    if (versionError || !newVersion) {
-      console.error('Error creating plan version:', versionError);
-      return { success: false, planId, versionId: null, error: versionError?.message || 'Failed to create version' };
+    if (error || !data) {
+      console.error('Error locking nutrition plan atomically:', error);
+      return {
+        success: false,
+        planId: null,
+        versionId: null,
+        versionNumber: null,
+        error: error?.message || 'Failed to lock nutrition plan',
+      };
     }
 
-    // Update the nutrition_plans to point to this version
-    const { error: updateError } = await supabase
-      .from('nutrition_plans')
-      .update({ current_version_id: newVersion.id })
-      .eq('id', planId);
-
-    if (updateError) {
-      console.error('Error updating current version:', updateError);
-      // Non-fatal - the version was still created
+    if (!data.success || !data.version_id) {
+      return {
+        success: false,
+        planId: data.plan_id ?? null,
+        versionId: data.version_id ?? null,
+        versionNumber: data.version_number ?? null,
+        error: data.error ?? 'Failed to lock nutrition plan',
+      };
     }
 
-    return { success: true, planId, versionId: newVersion.id, error: null };
+    return {
+      success: true,
+      planId: data.plan_id,
+      versionId: data.version_id,
+      versionNumber: data.version_number,
+      error: null,
+    };
   } catch (error: unknown) {
     console.error('Failed to lock nutrition plan:', error);
-    return { success: false, planId: null, versionId: null, error: getErrorMessage(error, 'Failed to lock nutrition plan') };
+    return {
+      success: false,
+      planId: null,
+      versionId: null,
+      versionNumber: null,
+      error: getErrorMessage(error, 'Failed to lock nutrition plan'),
+    };
   }
 }
 
