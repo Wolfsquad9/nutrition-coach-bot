@@ -9,8 +9,10 @@ import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter"
 import type { NutritionMetrics, MacroTargets } from "@/types";
 
 import {
+  buildLockedPlanPayload,
   checkPlanLockStatus,
   fetchCurrentPlan,
+  hashPlanPayload,
   lockNutritionPlan,
 } from "@/services/supabasePlanService";
 
@@ -21,7 +23,6 @@ import {
 
 import {
   fetchPersistedSnapshot,
-  persistSnapshot,
 } from "@/services/snapshotPersistence";
 
 import {
@@ -64,9 +65,41 @@ export interface LockClientInfo {
 
 // MacroTargets is imported from @/types
 
+const LOCKED_SNAPSHOT_MISSING_ERROR = "Locked plan is missing immutable snapshot.";
+
 const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;
 };
+
+interface LockAttempt {
+  versionId: string;
+  idempotencyKey: string;
+  lockedAt: Date;
+}
+
+type RetryAction =
+  | { type: "load"; clientId: string }
+  | { type: "lock"; clientId: string; clientInfo: LockClientInfo; attempt: LockAttempt }
+  | null;
+
+const createUuid = (): string => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+    (
+      Number(char) ^
+      (Math.random() * 16) >> (Number(char) / 4)
+    ).toString(16)
+  );
+};
+
+const createLockAttempt = (): LockAttempt => ({
+  versionId: createUuid(),
+  idempotencyKey: createUuid(),
+  lockedAt: new Date(),
+});
 
 export function useNutritionPlanState() {
   /* ---------------- UI STATE ---------------- */
@@ -105,6 +138,8 @@ export function useNutritionPlanState() {
   /* ---------------- ASYNC GUARD ---------------- */
 
   const loadRequestIdRef = useRef(0);
+  const lockInFlightRef = useRef<Promise<{ success: boolean; error: string | null }> | null>(null);
+  const lastFailedActionRef = useRef<RetryAction>(null);
 
   /* ---------------- LIFECYCLE ---------------- */
 
@@ -134,6 +169,7 @@ export function useNutritionPlanState() {
   const isSaving = uiState === "SAVING";
   const isBlocked = uiState === "ERROR";
   const isError = uiState === "ERROR";
+  const isRetryable = isError && lastFailedActionRef.current !== null;
 
   const isDraft = lifecycleState === "DRAFT";
   const isLocked = lifecycleState === "LOCKED";
@@ -208,6 +244,7 @@ export function useNutritionPlanState() {
     setPendingOverrides([]);
     setError(null);
     setLastPersistenceFailed(false);
+    lastFailedActionRef.current = null;
     setUiState("IDLE");
   }, []);
 
@@ -232,51 +269,79 @@ export function useNutritionPlanState() {
       if (!planResult.plan) {
         clearState();
         setUiState("IDLE");
+        lastFailedActionRef.current = null;
         return;
       }
 
       const payload = planResult.plan;
+      const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
+      let nextSnapshot = planResult.snapshot;
+      let nextPendingOverrides: PlanOverride[] = [];
+
+      if (planResult.versionId) {
+        const snapshotPromise = nextSnapshot
+          ? Promise.resolve({ snapshot: nextSnapshot, error: null })
+          : fetchPersistedSnapshot(planResult.versionId);
+
+        const [snapshotResult, overridesResult] = await Promise.all([
+          snapshotPromise,
+          fetchPendingOverrides(planResult.versionId),
+        ]);
+
+        if (currentRequestId !== loadRequestIdRef.current) return;
+
+        nextSnapshot = snapshotResult.snapshot;
+
+        if (snapshotResult.error) {
+          throw new Error(snapshotResult.error);
+        }
+
+        if (planLockedAt && !nextSnapshot) {
+          throw new Error(LOCKED_SNAPSHOT_MISSING_ERROR);
+        }
+
+        if (!overridesResult.error) {
+          nextPendingOverrides = overridesResult.overrides;
+        }
+      }
 
       setWeeklyPlan(payload.weeklyPlan);
       setMacroTargets(payload.macroTargets as MacroTargets);
       setLikedIngredients(payload.likedIngredients || []);
-
       setPlanId(planResult.planId);
       setVersionId(planResult.versionId);
       setVersionNumber(planResult.versionNumber ?? null);
       setPlanCreatedAt(planResult.createdAt);
       setPayloadHash(planResult.payloadHash ?? null);
-
-      const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
-
       setLockedAt(planLockedAt);
-
-      if (planLockedAt) {
-        setLockedUntil(calculateLockExpiry(planLockedAt));
-      } else {
-        setLockedUntil(lockResult.lockedUntil);
-      }
-
-      if (planResult.versionId) {
-        const [overridesResult, snapshotResult] = await Promise.all([
-          fetchPendingOverrides(planResult.versionId),
-          fetchPersistedSnapshot(planResult.versionId),
-        ]);
-
-        if (currentRequestId !== loadRequestIdRef.current) return;
-
-        if (!overridesResult.error) {
-          setPendingOverrides(overridesResult.overrides);
-        }
-
-        setSnapshot(snapshotResult.snapshot);
-      }
-
+      setLockedUntil(planLockedAt ? calculateLockExpiry(planLockedAt) : lockResult.lockedUntil);
+      setPendingOverrides(nextPendingOverrides);
+      setSnapshot(nextSnapshot);
+      setLastPersistenceFailed(false);
+      lastFailedActionRef.current = null;
       setUiState("IDLE");
     } catch (err) {
       if (currentRequestId !== loadRequestIdRef.current) return;
       console.error(err);
-      setError(getErrorMessage(err, "Failed to load plan"));
+      const message = getErrorMessage(err, "Failed to load plan");
+
+      if (message === LOCKED_SNAPSHOT_MISSING_ERROR) {
+        setWeeklyPlan(null);
+        setMacroTargets(null);
+        setLikedIngredients([]);
+        setSnapshot(null);
+        setPlanId(null);
+        setVersionId(null);
+        setVersionNumber(null);
+        setPlanCreatedAt(null);
+        setPayloadHash(null);
+        setLockedAt(null);
+        setLockedUntil(null);
+        setPendingOverrides([]);
+      }
+
+      setError(message);
+      lastFailedActionRef.current = { type: "load", clientId };
       setUiState("ERROR");
     }
   }, [clearState]);
@@ -328,97 +393,142 @@ export function useNutritionPlanState() {
   /* ---------------- LOCK ---------------- */
 
   const lockPlan = useCallback(
-    async (clientId: string, clientInfo: LockClientInfo) => {
+    async (clientId: string, clientInfo: LockClientInfo, retryAttempt?: LockAttempt) => {
+      if (lockInFlightRef.current) {
+        return lockInFlightRef.current;
+      }
+
       if (!domainCanLock(lifecycleState) || !weeklyPlan || !macroTargets) {
         return { success: false, error: "No draft to lock" };
       }
 
-      setUiState("SAVING");
-
-      try {
-        const result = await lockNutritionPlan(
-          clientId,
-          weeklyPlan,
-          macroTargets,
-          likedIngredients
-        );
-
-        if (!result.success || !result.versionId) {
-          setUiState("ERROR");
-          return { success: false, error: result.error };
-        }
+      const attempt = retryAttempt ?? createLockAttempt();
+      const lockRequest = (async () => {
+        setUiState("SAVING");
+        setError(null);
 
         try {
-          const now = new Date();
+          try {
+            const planPayload = buildLockedPlanPayload({
+              lockedAt: attempt.lockedAt,
+              weeklyPlan,
+              macroTargets,
+              likedIngredients,
+            });
+            const payloadHash = hashPlanPayload(planPayload);
 
-          // Map MacroTargets → NutritionMetrics for snapshot
-          const metrics: NutritionMetrics = {
-            tdee: 0,
-            bmr: 0,
-            targetCalories: macroTargets.calories,
-            proteinGrams: macroTargets.protein,
-            carbsGrams: macroTargets.carbs,
-            fatGrams: macroTargets.fat,
-            fiberGrams: 0,
-            waterLiters: 0,
-          };
+            // Map MacroTargets → NutritionMetrics for snapshot
+            const metrics: NutritionMetrics = {
+              tdee: 0,
+              bmr: 0,
+              targetCalories: macroTargets.calories,
+              proteinGrams: macroTargets.protein,
+              carbsGrams: macroTargets.carbs,
+              fatGrams: macroTargets.fat,
+              fiberGrams: 0,
+              waterLiters: 0,
+            };
 
-          const snapshotInput: SnapshotBuildInput = {
-            identifier: {
-              versionId: result.versionId,
-              lockedAt: now,
-              lockedUntil: calculateLockExpiry(now),
-              payloadHash: payloadHash ?? "",
-            },
-            client: clientInfo,
-            metrics,
-            weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
-            groceryList: buildGroceryListFromPlan(weeklyPlan),
-            planName: `Plan – ${clientInfo.firstName} ${clientInfo.lastName}`,
-            versionNumber: versionNumber ?? 1,
-            createdAt: now.toISOString(),
-            generatedBy: "coach",
-          };
+            const snapshotInput: SnapshotBuildInput = {
+              identifier: {
+                versionId: attempt.versionId,
+                lockedAt: attempt.lockedAt,
+                lockedUntil: calculateLockExpiry(attempt.lockedAt),
+                payloadHash,
+              },
+              client: clientInfo,
+              metrics,
+              weeklyPlan: mapWeeklyMealPlanToSnapshot(weeklyPlan),
+              groceryList: buildGroceryListFromPlan(weeklyPlan),
+              planName: `Plan – ${clientInfo.firstName} ${clientInfo.lastName}`,
+              versionNumber: versionNumber ?? 1,
+              createdAt: attempt.lockedAt.toISOString(),
+              generatedBy: "coach",
+            };
 
-          const builtSnapshot = buildPlanSnapshot(snapshotInput);
-          const persistResult = await persistSnapshot(result.versionId, builtSnapshot);
+            const builtSnapshot = buildPlanSnapshot(snapshotInput);
+            const result = await lockNutritionPlan(
+              clientId,
+              planPayload,
+              builtSnapshot,
+              {
+                versionId: attempt.versionId,
+                idempotencyKey: attempt.idempotencyKey,
+              }
+            );
 
-          if (!persistResult.success) {
+            if (!result.success || !result.versionId) {
+              const message = result.error ?? "Failed to lock plan";
+              setLastPersistenceFailed(true);
+              setError(message);
+              lastFailedActionRef.current = { type: "lock", clientId, clientInfo, attempt };
+              setUiState("ERROR");
+              return { success: false, error: message };
+            }
+
+            setVersionNumber(result.versionNumber ?? versionNumber);
+            setLastPersistenceFailed(false);
+          } catch (err) {
+            const message = getErrorMessage(err, "Atomic lock failed");
             setLastPersistenceFailed(true);
+            setError(message);
+            lastFailedActionRef.current = { type: "lock", clientId, clientInfo, attempt };
             setUiState("ERROR");
-            return { success: false, error: persistResult.error };
+            return { success: false, error: message };
           }
 
-          setLastPersistenceFailed(false);
+          await loadPlanForClient(clientId);
+          lastFailedActionRef.current = null;
+          return { success: true, error: null };
         } catch (err) {
-          setLastPersistenceFailed(true);
+          const message = getErrorMessage(err, "Lock failed");
+          setError(message);
+          lastFailedActionRef.current = { type: "lock", clientId, clientInfo, attempt };
           setUiState("ERROR");
-          return { success: false, error: getErrorMessage(err, "Snapshot persistence failed") };
+          return { success: false, error: message };
+        } finally {
+          lockInFlightRef.current = null;
         }
+      })();
 
-        await loadPlanForClient(clientId);
-        return { success: true, error: null };
-      } catch (err) {
-        setUiState("ERROR");
-        return { success: false, error: getErrorMessage(err, "Lock failed") };
-      }
+      lockInFlightRef.current = lockRequest;
+      return lockRequest;
     },
-    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, payloadHash, loadPlanForClient]
+    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient]
   );
+
+  /* ---------------- RETRY ---------------- */
+
+  const retryLastAction = useCallback(async () => {
+    const action = lastFailedActionRef.current;
+
+    if (!action) {
+      return { success: false, error: "No failed action to retry" };
+    }
+
+    if (action.type === "load") {
+      await loadPlanForClient(action.clientId);
+      return { success: true, error: null };
+    }
+
+    return lockPlan(action.clientId, action.clientInfo, action.attempt);
+  }, [loadPlanForClient, lockPlan]);
 
   /* ---------------- RESOLVED PLAN ---------------- */
 
-const resolvedWeeklyPlan = snapshot
-  ? mapSnapshotToWeeklyPlan({
-      weeklyPlan: snapshot.weeklyPlan,
-      metrics: {
-        calories: snapshot.metrics.targetCalories,
-        protein: snapshot.metrics.proteinGrams,
-        carbs: snapshot.metrics.carbsGrams,
-        fat: snapshot.metrics.fatGrams,
-      },
-    })
-  : weeklyPlan;
+  const resolvedWeeklyPlan = snapshot
+    ? mapSnapshotToWeeklyPlan({
+        weeklyPlan: snapshot.weeklyPlan,
+        metrics: {
+          calories: snapshot.metrics.targetCalories,
+          protein: snapshot.metrics.proteinGrams,
+          carbs: snapshot.metrics.carbsGrams,
+          fat: snapshot.metrics.fatGrams,
+        },
+      })
+    : lockedAt && versionId
+      ? null
+      : weeklyPlan;
 
   /* ---------------- RETURN ---------------- */
 
@@ -434,6 +544,7 @@ const resolvedWeeklyPlan = snapshot
     isSaving,
     isBlocked,
     isError,
+    isRetryable,
 
     weeklyPlan,
     resolvedWeeklyPlan,
@@ -469,6 +580,7 @@ const resolvedWeeklyPlan = snapshot
     setDraftPlan,
     discardDraft,
     lockPlan,
+    retryLastAction,
     clearState,
   };
 }
