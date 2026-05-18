@@ -403,8 +403,31 @@ describe('lockPlan snapshot atomicity', () => {
     expect(result.current.isError).toBe(false);
     expect(result.current.error).toBeNull();
     expect(result.current.snapshot).toBe(fakeSnapshot);
+    expect(Object.isFrozen(result.current.snapshot)).toBe(true);
+    expect(Object.isFrozen(result.current.snapshot?.metrics)).toBe(true);
+    expect(Object.isFrozen(result.current.snapshot?.weeklyPlan)).toBe(true);
+    expect(Object.isFrozen(result.current.snapshot?.meta)).toBe(true);
     expect(result.current.resolvedWeeklyPlan).not.toBe(fakeWeeklyPlan);
     expect(result.current.resolvedWeeklyPlan).not.toBeNull();
+  });
+
+
+  it('keeps draft weeklyPlan data mutable', () => {
+    const draftPlan = JSON.parse(JSON.stringify(fakeWeeklyPlan)) as WeeklyMealPlanResult;
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    act(() => {
+      result.current.setDraftPlan(draftPlan, fakeMacros, ['poulet']);
+    });
+
+    expect(Object.isFrozen(result.current.weeklyPlan)).toBe(false);
+    expect(Object.isFrozen(result.current.weeklyPlan?.days)).toBe(false);
+
+    expect(() => {
+      result.current.weeklyPlan!.days[0].dayName = 'Changed draft day';
+    }).not.toThrow();
+
+    expect(result.current.weeklyPlan!.days[0].dayName).toBe('Changed draft day');
   });
 
 });

@@ -27,6 +27,7 @@ import {
 
 import {
   buildPlanSnapshot,
+  deepFreeze,
   type SnapshotBuildInput,
 } from "@/domain/nutrition/snapshot";
 
@@ -290,7 +291,9 @@ export function useNutritionPlanState() {
 
         if (currentRequestId !== loadRequestIdRef.current) return;
 
-        nextSnapshot = snapshotResult.snapshot;
+        nextSnapshot = snapshotResult.snapshot
+          ? deepFreeze(snapshotResult.snapshot)
+          : null;
 
         if (snapshotResult.error) {
           throw new Error(snapshotResult.error);

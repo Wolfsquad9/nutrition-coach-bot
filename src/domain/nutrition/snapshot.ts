@@ -53,6 +53,35 @@ export interface SnapshotMeta {
   readonly generatedBy: string; // "coach" | system identifier
 }
 
+
+// ============================================================================
+// DEEP IMMUTABILITY
+// ============================================================================
+
+/**
+ * Recursively freeze JSON-compatible snapshot structures.
+ * Uses WeakSet cycle protection so accidental object cycles cannot recurse forever.
+ */
+export function deepFreeze<T>(value: T, seen: WeakSet<object> = new WeakSet()): T {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return value;
+  }
+
+  const objectValue = value as object;
+
+  if (seen.has(objectValue)) {
+    return value;
+  }
+
+  seen.add(objectValue);
+
+  for (const nestedValue of Object.values(objectValue)) {
+    deepFreeze(nestedValue, seen);
+  }
+
+  return Object.freeze(value);
+}
+
 // ============================================================================
 // SNAPSHOT BUILDER (deterministic, pure)
 // ============================================================================
@@ -74,19 +103,19 @@ export interface SnapshotBuildInput {
  * Pure function — no side effects, no I/O.
  */
 export function buildPlanSnapshot(input: SnapshotBuildInput): PlanSnapshot {
-  return Object.freeze<PlanSnapshot>({
-    identifier: Object.freeze({ ...input.identifier }),
-    client: Object.freeze({ ...input.client }),
-    metrics: Object.freeze({ ...input.metrics }),
-    weeklyPlan: Object.freeze(input.weeklyPlan.map(day => Object.freeze({ ...day }))),
-    groceryList: Object.freeze(input.groceryList.map(item => Object.freeze({ ...item }))),
-    meta: Object.freeze({
+  return deepFreeze<PlanSnapshot>({
+    identifier: { ...input.identifier },
+    client: { ...input.client },
+    metrics: { ...input.metrics },
+    weeklyPlan: input.weeklyPlan.map(day => ({ ...day })),
+    groceryList: input.groceryList.map(item => ({ ...item })),
+    meta: {
       planName: input.planName,
       versionNumber: input.versionNumber,
       createdAt: input.createdAt,
       lockedAt: input.identifier.lockedAt.toISOString(),
       lockedUntil: input.identifier.lockedUntil.toISOString(),
       generatedBy: input.generatedBy,
-    }),
+    },
   });
 }
