@@ -28,6 +28,7 @@ import {
 import {
   buildPlanSnapshot,
   deepFreeze,
+  validateSnapshotStructure,
   type SnapshotBuildInput,
 } from "@/domain/nutrition/snapshot";
 
@@ -70,6 +71,21 @@ const LOCKED_SNAPSHOT_MISSING_ERROR = "Locked plan is missing immutable snapshot
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   return error instanceof Error ? error.message : fallback;
+};
+
+const formatSnapshotValidationError = (source: string, errors: string[]): string => {
+  const reason = errors.join('; ');
+  return `Snapshot validation failed (${source}): ${reason}`;
+};
+
+const ensureValidSnapshot = (snapshot: unknown, source: string): PlanSnapshot => {
+  const validation = validateSnapshotStructure(snapshot);
+
+  if (!validation.valid) {
+    throw new Error(formatSnapshotValidationError(source, validation.errors));
+  }
+
+  return snapshot as PlanSnapshot;
 };
 
 interface LockAttempt {
@@ -230,7 +246,7 @@ export function useNutritionPlanState() {
   /* ---------------- CLEAR ---------------- */
   // Defined before loadPlanForClient so it is in scope
 
-  const clearState = useCallback(() => {
+  const resetHydratedPlanState = useCallback(() => {
     setWeeklyPlan(null);
     setMacroTargets(null);
     setLikedIngredients([]);
@@ -243,11 +259,15 @@ export function useNutritionPlanState() {
     setLockedAt(null);
     setLockedUntil(null);
     setPendingOverrides([]);
+  }, []);
+
+  const clearState = useCallback(() => {
+    resetHydratedPlanState();
     setError(null);
     setLastPersistenceFailed(false);
     lastFailedActionRef.current = null;
     setUiState("IDLE");
-  }, []);
+  }, [resetHydratedPlanState]);
 
   /* ---------------- LOAD PLAN ---------------- */
 
@@ -276,7 +296,9 @@ export function useNutritionPlanState() {
 
       const payload = planResult.plan;
       const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
-      let nextSnapshot = planResult.snapshot;
+      let nextSnapshot = planResult.snapshot
+        ? ensureValidSnapshot(planResult.snapshot, "fetchCurrentPlan.snapshot")
+        : null;
       let nextPendingOverrides: PlanOverride[] = [];
 
       if (planResult.versionId) {
@@ -292,7 +314,7 @@ export function useNutritionPlanState() {
         if (currentRequestId !== loadRequestIdRef.current) return;
 
         nextSnapshot = snapshotResult.snapshot
-          ? deepFreeze(snapshotResult.snapshot)
+          ? ensureValidSnapshot(snapshotResult.snapshot, nextSnapshot ? "fetchCurrentPlan.snapshot" : "fetchPersistedSnapshot")
           : null;
 
         if (snapshotResult.error) {
@@ -319,7 +341,7 @@ export function useNutritionPlanState() {
       setLockedAt(planLockedAt);
       setLockedUntil(planLockedAt ? calculateLockExpiry(planLockedAt) : lockResult.lockedUntil);
       setPendingOverrides(nextPendingOverrides);
-      setSnapshot(nextSnapshot);
+      setSnapshot(nextSnapshot ? deepFreeze(nextSnapshot) : null);
       setLastPersistenceFailed(false);
       lastFailedActionRef.current = null;
       setUiState("IDLE");
@@ -328,26 +350,16 @@ export function useNutritionPlanState() {
       console.error(err);
       const message = getErrorMessage(err, "Failed to load plan");
 
-      if (message === LOCKED_SNAPSHOT_MISSING_ERROR) {
-        setWeeklyPlan(null);
-        setMacroTargets(null);
-        setLikedIngredients([]);
-        setSnapshot(null);
-        setPlanId(null);
-        setVersionId(null);
-        setVersionNumber(null);
-        setPlanCreatedAt(null);
-        setPayloadHash(null);
-        setLockedAt(null);
-        setLockedUntil(null);
-        setPendingOverrides([]);
+      if (message === LOCKED_SNAPSHOT_MISSING_ERROR || message.startsWith("Snapshot validation failed")) {
+        resetHydratedPlanState();
+        setLastPersistenceFailed(true);
       }
 
       setError(message);
       lastFailedActionRef.current = { type: "load", clientId };
       setUiState("ERROR");
     }
-  }, [clearState]);
+  }, [clearState, resetHydratedPlanState]);
 
   /* ---------------- DRAFT ---------------- */
 

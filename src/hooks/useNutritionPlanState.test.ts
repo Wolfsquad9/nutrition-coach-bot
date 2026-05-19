@@ -153,6 +153,9 @@ const fakeSnapshot: PlanSnapshot = {
   },
 };
 
+
+const cloneSnapshot = (): PlanSnapshot => structuredClone(fakeSnapshot) as PlanSnapshot;
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('lockPlan snapshot atomicity', () => {
@@ -408,6 +411,96 @@ describe('lockPlan snapshot atomicity', () => {
     expect(Object.isFrozen(result.current.snapshot?.weeklyPlan)).toBe(true);
     expect(Object.isFrozen(result.current.snapshot?.meta)).toBe(true);
     expect(result.current.resolvedWeeklyPlan).not.toBe(fakeWeeklyPlan);
+    expect(result.current.resolvedWeeklyPlan).not.toBeNull();
+  });
+
+
+  it('rejects invalid fetchCurrentPlan snapshot before state commit', async () => {
+    const invalidSnapshot = { ...cloneSnapshot(), metrics: { ...cloneSnapshot().metrics, targetCalories: Number.NaN } };
+    mockFetchCurrentPlan.mockResolvedValue({
+      plan: fakeLockedPlanPayload,
+      planId: 'p1',
+      versionId: 'v1',
+      createdAt: lockedAtIso,
+      snapshot: invalidSnapshot,
+      payloadHash: 'hash_test',
+      versionNumber: 1,
+      error: null,
+    });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+    });
+
+    await act(async () => {
+      await result.current.loadPlanForClient('client-1');
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(result.current.error).toContain('Snapshot validation failed (fetchCurrentPlan.snapshot): metrics.targetCalories must be a finite number');
+    expect(result.current.snapshot).toBeNull();
+    expect(result.current.resolvedWeeklyPlan).toBeNull();
+    expect(result.current.weeklyPlan).toBeNull();
+  });
+
+  it('rejects invalid fetchPersistedSnapshot snapshot before state commit', async () => {
+    const invalidSnapshot = { ...cloneSnapshot(), groceryList: [{ ingredient: '', totalAmount: 1, unit: 'g', category: 'carb' }] };
+    mockFetchCurrentPlan.mockResolvedValue({
+      plan: fakeLockedPlanPayload,
+      planId: 'p1',
+      versionId: 'v1',
+      createdAt: lockedAtIso,
+      snapshot: null,
+      payloadHash: 'hash_test',
+      versionNumber: 1,
+      error: null,
+    });
+    mockFetchPersistedSnapshot.mockResolvedValue({ snapshot: invalidSnapshot, error: null });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    await act(async () => {
+      await result.current.loadPlanForClient('client-1');
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(result.current.error).toContain('Snapshot validation failed (fetchPersistedSnapshot): groceryList[0].ingredient must be a non-empty string');
+    expect(result.current.snapshot).toBeNull();
+  });
+
+  it('rejects malformed nested ingredient during load', async () => {
+    const baseSnapshot = cloneSnapshot();
+    const malformedMeals = [{ id: 'm1', mealNumber: 1, mealType: 'breakfast', time: '07:00', totalMacros: { calories: 1, protein: 1, carbs: 1, fat: 1 }, recipes: [{ servings: 1, adjustedMacros: { calories: 1, protein: 1, carbs: 1, fat: 1 }, recipe: { id: 'r1', name: 'R', category: 'breakfast', prepTime: 1, cookTime: 1, servings: 1, ingredients: [{ id: 'i1', name: '', amount: 1, unit: 'g', category: 'carb', macrosPer100g: { calories: 1, protein: 1, carbs: 1, fat: 1 } }], instructions: [], macrosPerServing: { calories: 1, protein: 1, carbs: 1, fat: 1 }, tags: [], dietTypes: [], allergens: [], equipment: [], difficulty: 'easy' } }] }];
+    const invalid = {
+      ...baseSnapshot,
+      weeklyPlan: [{ ...baseSnapshot.weeklyPlan[0], meals: malformedMeals }],
+    };
+
+    mockFetchCurrentPlan.mockResolvedValue({ plan: fakeLockedPlanPayload, planId: 'p1', versionId: 'v1', createdAt: lockedAtIso, snapshot: invalid, payloadHash: 'hash_test', versionNumber: 1, error: null });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+    await act(async () => {
+      await result.current.loadPlanForClient('client-1');
+    });
+
+    expect(result.current.error).toContain('weeklyPlan[0].meals[0].recipes[0].recipe.ingredients[0].name must be a non-empty string');
+    expect(result.current.snapshot).toBeNull();
+  });
+
+  it('retries successfully after invalid snapshot becomes valid', async () => {
+    const invalidSnapshot = { ...cloneSnapshot(), metrics: { ...cloneSnapshot().metrics, targetCalories: Number.NaN } };
+    mockFetchCurrentPlan
+      .mockResolvedValueOnce({ plan: fakeLockedPlanPayload, planId: 'p1', versionId: 'v1', createdAt: lockedAtIso, snapshot: invalidSnapshot, payloadHash: 'hash_test', versionNumber: 1, error: null })
+      .mockResolvedValueOnce({ plan: fakeLockedPlanPayload, planId: 'p1', versionId: 'v1', createdAt: lockedAtIso, snapshot: cloneSnapshot(), payloadHash: 'hash_test', versionNumber: 1, error: null });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+    await act(async () => { await result.current.loadPlanForClient('client-1'); });
+    expect(result.current.isRetryable).toBe(true);
+
+    await act(async () => { await result.current.retryLastAction(); });
+    expect(result.current.error).toBeNull();
+    expect(result.current.snapshot).not.toBeNull();
     expect(result.current.resolvedWeeklyPlan).not.toBeNull();
   });
 
