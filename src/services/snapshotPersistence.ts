@@ -9,7 +9,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { PlanSnapshot, SnapshotBuildInput } from '@/domain/nutrition/snapshot';
-import { buildPlanSnapshot } from '@/domain/nutrition/snapshot';
+import { buildPlanSnapshot, deepFreeze } from '@/domain/nutrition/snapshot';
 
 /**
  * Persist a pre-built snapshot JSON to a plan version.
@@ -79,7 +79,7 @@ export async function fetchPersistedSnapshot(
     }
 
     return {
-      snapshot: data.locked_snapshot_json as unknown as PlanSnapshot,
+      snapshot: deepFreeze(data.locked_snapshot_json as unknown as PlanSnapshot),
       error: null,
     };
 } catch (err: unknown) {

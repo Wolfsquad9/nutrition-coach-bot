@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
+import { deepFreeze } from '@/domain/nutrition/snapshot';
 import type { Json } from '@/integrations/supabase/types';
 import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
 
@@ -221,7 +222,9 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       planId: planData.id,
       versionId: planData.current_version_id,
       createdAt: versionData.created_at,
-      snapshot: (versionData.locked_snapshot_json ?? null) as unknown as PlanSnapshot | null,
+      snapshot: versionData.locked_snapshot_json
+        ? deepFreeze(versionData.locked_snapshot_json as unknown as PlanSnapshot)
+        : null,
       payloadHash: versionData.payload_hash,
       versionNumber: versionData.version_number,
       error: null,
