@@ -5,7 +5,7 @@
  */
 
 import * as assert from 'node:assert';
-import { buildPlanSnapshot } from "../src/domain/nutrition/snapshot";
+import { buildPlanSnapshot, validateSnapshotStructure } from "../src/domain/nutrition/snapshot";
 import type { SnapshotBuildInput } from "../src/domain/nutrition/snapshot";
 import type { MealPlan, GroceryItem, Macros, NutritionMetrics } from "../src/types";
 
@@ -118,6 +118,29 @@ function run() {
   };
 
   const snapshot = buildPlanSnapshot(input);
+  const validationResult = validateSnapshotStructure(snapshot);
+
+  assert.deepStrictEqual(validationResult, { valid: true, errors: [] });
+
+  const invalidSnapshot = {
+    ...snapshot,
+    client: {
+      ...snapshot.client,
+      firstName: "",
+    },
+    metrics: {
+      ...snapshot.metrics,
+      targetCalories: Number.NaN,
+    },
+    weeklyPlan: [],
+  };
+
+  const invalidValidationResult = validateSnapshotStructure(invalidSnapshot);
+
+  assert.strictEqual(invalidValidationResult.valid, false);
+  assert.ok(invalidValidationResult.errors.includes("client.firstName must be a non-empty string"));
+  assert.ok(invalidValidationResult.errors.includes("metrics.targetCalories must be a finite number"));
+  assert.ok(invalidValidationResult.errors.includes("weeklyPlan must contain at least one day"));
 
   /* -------------------------------------------------------
      STRUCTURE
