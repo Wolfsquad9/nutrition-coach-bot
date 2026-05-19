@@ -505,6 +505,48 @@ describe('lockPlan snapshot atomicity', () => {
   });
 
 
+  it('classifies unknown load failures safely as non-retryable', async () => {
+    mockFetchCurrentPlan.mockRejectedValue('non-error failure');
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    await act(async () => {
+      await result.current.loadPlanForClient('client-1');
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(result.current.error).toBe('Failed to load plan');
+    expect(result.current.isRetryable).toBe(false);
+  });
+
+  it('keeps transient load failures retryable', async () => {
+    mockFetchCurrentPlan.mockRejectedValueOnce(new Error('Network timeout')).mockResolvedValueOnce({
+      plan: fakeLockedPlanPayload,
+      planId: 'p1',
+      versionId: 'v1',
+      createdAt: lockedAtIso,
+      snapshot: cloneSnapshot(),
+      payloadHash: 'hash_test',
+      versionNumber: 1,
+      error: null,
+    });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    await act(async () => {
+      await result.current.loadPlanForClient('client-1');
+    });
+
+    expect(result.current.isRetryable).toBe(true);
+
+    await act(async () => {
+      await result.current.retryLastAction();
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.snapshot).not.toBeNull();
+  });
+
   it('keeps draft weeklyPlan data mutable', () => {
     const draftPlan = JSON.parse(JSON.stringify(fakeWeeklyPlan)) as WeeklyMealPlanResult;
     const { result } = renderHook(() => useNutritionPlanState());
