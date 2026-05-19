@@ -39,6 +39,11 @@ import {
   classifyLoadRuntimeError,
   normalizeRuntimeError,
 } from "@/domain/nutrition/runtimeErrors";
+import {
+  emitHydrationResetTelemetry,
+  emitRetryTelemetry,
+  emitRuntimeFailure,
+} from "@/domain/nutrition/runtimeTelemetry";
 
 import {
   buildGroceryListFromPlan,
@@ -346,9 +351,30 @@ export function useNutritionPlanState() {
       if (currentRequestId !== loadRequestIdRef.current) return;
       console.error(err);
       const runtimeError = classifyLoadRuntimeError(err, "Failed to load plan");
+      const runtimeErrorWithDetails = runtimeError as { details?: string[] };
+
+      emitRuntimeFailure({
+        code: runtimeError.code,
+        retryable: runtimeError.retryable,
+        source: "fetchCurrentPlan",
+        clientId,
+        planId,
+        versionId,
+        details: runtimeErrorWithDetails.details,
+        metadata: {
+          validationDetailCount: runtimeErrorWithDetails.details?.length ?? 0,
+        },
+      });
 
       if (runtimeError.code === "SNAPSHOT_MISSING" || runtimeError.code === "SNAPSHOT_INVALID") {
         resetHydratedPlanState();
+        emitHydrationResetTelemetry({
+          source: "fetchCurrentPlan",
+          clientId,
+          planId,
+          versionId,
+          code: runtimeError.code,
+        });
         setLastPersistenceFailed(true);
       }
 
@@ -471,6 +497,14 @@ export function useNutritionPlanState() {
 
             if (!result.success || !result.versionId) {
               const runtimeError = createLockFailureError(result.error ?? "Failed to lock plan");
+              emitRuntimeFailure({
+                code: runtimeError.code,
+                retryable: runtimeError.retryable,
+                source: "lockPlan",
+                clientId,
+                planId,
+                versionId,
+              });
               setLastPersistenceFailed(true);
               setError(runtimeError.message);
               lastFailedActionRef.current = runtimeError.retryable ? { type: "lock", clientId, clientInfo, attempt } : null;
@@ -482,6 +516,14 @@ export function useNutritionPlanState() {
             setLastPersistenceFailed(false);
           } catch (err) {
             const runtimeError = createLockFailureError(err instanceof Error ? err.message : "Atomic lock failed", err);
+            emitRuntimeFailure({
+              code: runtimeError.code,
+              retryable: runtimeError.retryable,
+              source: "lockPlan",
+              clientId,
+              planId,
+              versionId,
+            });
             setLastPersistenceFailed(true);
             setError(runtimeError.message);
             lastFailedActionRef.current = runtimeError.retryable ? { type: "lock", clientId, clientInfo, attempt } : null;
@@ -494,6 +536,14 @@ export function useNutritionPlanState() {
           return { success: true, error: null };
         } catch (err) {
           const runtimeError = normalizeRuntimeError(err, "Lock failed", "UNKNOWN_RUNTIME_FAILURE", false);
+          emitRuntimeFailure({
+            code: runtimeError.code,
+            retryable: runtimeError.retryable,
+            source: "lockPlan",
+            clientId,
+            planId,
+            versionId,
+          });
           setError(runtimeError.message);
           lastFailedActionRef.current = runtimeError.retryable ? { type: "lock", clientId, clientInfo, attempt } : null;
           setUiState("ERROR");
@@ -519,12 +569,52 @@ export function useNutritionPlanState() {
     }
 
     if (action.type === "load") {
+      emitRetryTelemetry({
+        phase: "attempted",
+        source: "retryLastAction",
+        clientId: action.clientId,
+        planId,
+        versionId,
+      });
       await loadPlanForClient(action.clientId);
-      return { success: true, error: null };
+      if (lastFailedActionRef.current === null) {
+        emitRetryTelemetry({
+          phase: "succeeded",
+          source: "retryLastAction",
+          clientId: action.clientId,
+          planId,
+          versionId,
+        });
+        return { success: true, error: null };
+      }
+
+      emitRetryTelemetry({
+        phase: "failed",
+        source: "retryLastAction",
+        clientId: action.clientId,
+        planId,
+        versionId,
+      });
+      return { success: false, error: "Retry failed" };
     }
 
-    return lockPlan(action.clientId, action.clientInfo, action.attempt);
-  }, [loadPlanForClient, lockPlan]);
+    emitRetryTelemetry({
+      phase: "attempted",
+      source: "retryLastAction",
+      clientId: action.clientId,
+      planId,
+      versionId,
+    });
+    const lockResult = await lockPlan(action.clientId, action.clientInfo, action.attempt);
+    emitRetryTelemetry({
+      phase: lockResult.success ? "succeeded" : "failed",
+      source: "retryLastAction",
+      clientId: action.clientId,
+      planId,
+      versionId,
+    });
+    return lockResult;
+  }, [loadPlanForClient, lockPlan, planId, versionId]);
 
   /* ---------------- RESOLVED PLAN ---------------- */
 

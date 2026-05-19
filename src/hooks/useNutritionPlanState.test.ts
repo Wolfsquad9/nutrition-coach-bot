@@ -24,6 +24,9 @@ const mockLockNutritionPlan = vi.fn();
 const mockFetchCurrentPlan = vi.fn();
 const mockCheckPlanLockStatus = vi.fn();
 const mockFetchPersistedSnapshot = vi.fn();
+const mockEmitRuntimeFailure = vi.fn();
+const mockEmitRetryTelemetry = vi.fn();
+const mockEmitHydrationResetTelemetry = vi.fn();
 
 vi.mock('@/services/supabasePlanService', () => ({
   buildLockedPlanPayload: vi.fn((input) => ({
@@ -43,6 +46,11 @@ vi.mock('@/services/supabasePlanService', () => ({
 vi.mock('@/services/snapshotPersistence', () => ({
   fetchPersistedSnapshot: (...args: Parameters<typeof mockFetchPersistedSnapshot>) => mockFetchPersistedSnapshot(...args),
   buildAndPersistSnapshot: vi.fn(),
+}));
+vi.mock('@/domain/nutrition/runtimeTelemetry', () => ({
+  emitRuntimeFailure: (...args: Parameters<typeof mockEmitRuntimeFailure>) => mockEmitRuntimeFailure(...args),
+  emitRetryTelemetry: (...args: Parameters<typeof mockEmitRetryTelemetry>) => mockEmitRetryTelemetry(...args),
+  emitHydrationResetTelemetry: (...args: Parameters<typeof mockEmitHydrationResetTelemetry>) => mockEmitHydrationResetTelemetry(...args),
 }));
 
 vi.mock('@/services/supabaseOverrideService', () => ({
@@ -545,6 +553,40 @@ describe('lockPlan snapshot atomicity', () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.snapshot).not.toBeNull();
+  });
+
+  it('emits runtime telemetry for snapshot validation failure', async () => {
+    const invalidSnapshot = { ...cloneSnapshot(), metrics: { ...cloneSnapshot().metrics, targetCalories: Number.NaN } };
+    mockFetchCurrentPlan.mockResolvedValueOnce({
+      plan: fakeLockedPlanPayload, planId: 'p1', versionId: 'v1', createdAt: lockedAtIso,
+      snapshot: invalidSnapshot, payloadHash: 'hash_test', versionNumber: 1, error: null,
+    });
+    const { result } = renderHook(() => useNutritionPlanState());
+    await act(async () => { await result.current.loadPlanForClient('client-1'); });
+    expect(mockEmitRuntimeFailure).toHaveBeenCalled();
+    expect(mockEmitHydrationResetTelemetry).toHaveBeenCalled();
+  });
+
+  it('emits retry attempted and succeeded telemetry', async () => {
+    mockFetchCurrentPlan
+      .mockRejectedValueOnce(new Error('Network timeout'))
+      .mockResolvedValueOnce({
+        plan: fakeLockedPlanPayload, planId: 'p1', versionId: 'v1', createdAt: lockedAtIso,
+        snapshot: cloneSnapshot(), payloadHash: 'hash_test', versionNumber: 1, error: null,
+      });
+    const { result } = renderHook(() => useNutritionPlanState());
+    await act(async () => { await result.current.loadPlanForClient('client-1'); });
+    await act(async () => { await result.current.retryLastAction(); });
+    expect(mockEmitRetryTelemetry).toHaveBeenCalledWith(expect.objectContaining({ phase: 'attempted' }));
+    expect(mockEmitRetryTelemetry).toHaveBeenCalledWith(expect.objectContaining({ phase: 'succeeded' }));
+  });
+
+  it('emits retry failed telemetry when retry does not recover', async () => {
+    mockFetchCurrentPlan.mockRejectedValue(new Error('Still down'));
+    const { result } = renderHook(() => useNutritionPlanState());
+    await act(async () => { await result.current.loadPlanForClient('client-1'); });
+    await act(async () => { await result.current.retryLastAction(); });
+    expect(mockEmitRetryTelemetry).toHaveBeenCalledWith(expect.objectContaining({ phase: 'failed' }));
   });
 
   it('keeps draft weeklyPlan data mutable', () => {
