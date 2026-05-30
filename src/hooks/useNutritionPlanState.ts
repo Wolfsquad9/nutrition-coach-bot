@@ -382,7 +382,7 @@ export function useNutritionPlanState() {
       lastFailedActionRef.current = runtimeError.retryable ? { type: "load", clientId } : null;
       setUiState("ERROR");
     }
-  }, [clearState, resetHydratedPlanState]);
+  }, [clearState, resetHydratedPlanState, planId, versionId]);
 
   /* ---------------- DRAFT ---------------- */
 
@@ -556,7 +556,7 @@ export function useNutritionPlanState() {
       lockInFlightRef.current = lockRequest;
       return lockRequest;
     },
-    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient]
+    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient, planId, versionId]
   );
 
   /* ---------------- RETRY ---------------- */

@@ -75,6 +75,68 @@ CREATE TABLE public.nutrition_plans (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
+-- Create plan_versions table (immutable nutrition plan versions)
+CREATE TABLE public.plan_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id UUID NOT NULL REFERENCES public.nutrition_plans(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  plan_payload JSONB NOT NULL,
+  payload_hash TEXT NOT NULL,
+  note TEXT,
+  archived BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.nutrition_plans
+ADD COLUMN current_version_id UUID REFERENCES public.plan_versions(id) ON DELETE SET NULL;
+
+-- Create plan_overrides table (non-mutating locked-plan change requests)
+CREATE TABLE public.plan_overrides (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_version_id UUID NOT NULL REFERENCES public.plan_versions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  meal_type TEXT NOT NULL,
+  original_ingredient TEXT NOT NULL,
+  replacement_ingredient TEXT NOT NULL,
+  macro_delta JSONB NOT NULL,
+  within_tolerance BOOLEAN NOT NULL DEFAULT true,
+  requires_recipe_regeneration BOOLEAN NOT NULL DEFAULT false,
+  suggested_by TEXT NOT NULL,
+  approved_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  archived BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- Create client_progress_snapshots table
+CREATE TABLE public.client_progress_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  plan_version_id UUID NOT NULL REFERENCES public.plan_versions(id) ON DELETE CASCADE,
+  snapshot_type TEXT NOT NULL,
+  metrics JSONB NOT NULL,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- Create macro_tolerance_rules table
+CREATE TABLE public.macro_tolerance_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope TEXT NOT NULL UNIQUE,
+  calories_pct_max NUMERIC NOT NULL,
+  protein_pct_max NUMERIC NOT NULL,
+  carbs_pct_max NUMERIC NOT NULL,
+  fats_pct_max NUMERIC NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+INSERT INTO public.macro_tolerance_rules (scope, calories_pct_max, protein_pct_max, carbs_pct_max, fats_pct_max)
+VALUES
+  ('meal', 10, 10, 15, 15),
+  ('day', 5, 5, 7, 7)
+ON CONFLICT (scope) DO NOTHING;
+
 -- Create training_plans table
 CREATE TABLE public.training_plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -103,6 +165,10 @@ ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exercises ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutrition_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.plan_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.plan_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.client_progress_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.macro_tolerance_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.training_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.plan_history ENABLE ROW LEVEL SECURITY;
 
@@ -274,6 +340,12 @@ CREATE INDEX idx_profiles_trainer_id ON public.profiles(trainer_id);
 CREATE INDEX idx_clients_user_profile_id ON public.clients(user_profile_id);
 CREATE INDEX idx_nutrition_plans_client_id ON public.nutrition_plans(client_id);
 CREATE INDEX idx_nutrition_plans_created_by ON public.nutrition_plans(created_by);
+CREATE INDEX idx_plan_versions_plan_id ON public.plan_versions(plan_id);
+CREATE INDEX idx_plan_versions_created_by ON public.plan_versions(created_by);
+CREATE INDEX idx_plan_overrides_plan_version_id ON public.plan_overrides(plan_version_id);
+CREATE INDEX idx_plan_overrides_client_id ON public.plan_overrides(client_id);
+CREATE INDEX idx_client_progress_snapshots_client_id ON public.client_progress_snapshots(client_id);
+CREATE INDEX idx_client_progress_snapshots_plan_version_id ON public.client_progress_snapshots(plan_version_id);
 CREATE INDEX idx_training_plans_client_id ON public.training_plans(client_id);
 CREATE INDEX idx_training_plans_created_by ON public.training_plans(created_by);
 CREATE INDEX idx_plan_history_plan_id ON public.plan_history(plan_id);

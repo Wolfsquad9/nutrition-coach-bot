@@ -7,6 +7,7 @@ import { Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useSupabaseClients } from '@/hooks/useSupabaseClients';
@@ -42,7 +43,7 @@ const TAB_ROUTES = [
 ] as const;
 
 export default function AppLayout() {
-  const { isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isAuthLoading, user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { clientId: routeClientId } = useParams<{ clientId: string }>();
@@ -96,6 +97,11 @@ export default function AppLayout() {
     }
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login', { replace: true });
+  };
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background to-card-hover flex items-center justify-center">
@@ -126,9 +132,17 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-card-hover">
       <header className="bg-gradient-hero text-white py-6 px-4 shadow-xl">
-        <div className="container mx-auto">
-          <h1 className="text-4xl font-bold">FitPlan Pro</h1>
-          <p className="text-white/90 mt-2">Professional Nutrition & Training Planning System</p>
+        <div className="container mx-auto flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-4xl font-bold">FitPlan Pro</h1>
+            <p className="text-white/90 mt-2">Professional Nutrition & Training Planning System</p>
+          </div>
+          <div className="flex flex-col items-start gap-2 md:items-end">
+            {user?.email && <span className="text-sm text-white/85">Signed in as {user.email}</span>}
+            <Button variant="secondary" size="sm" onClick={handleLogout}>
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 
