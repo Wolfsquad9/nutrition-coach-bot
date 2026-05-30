@@ -1,18 +1,21 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { claimClientInvitation } from '@/services/clientInvitationService';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const inviteToken = searchParams.get('invite');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +30,16 @@ export default function LoginPage() {
       return;
     }
 
+    if (inviteToken) {
+      const claimResult = await claimClientInvitation(inviteToken);
+      if (claimResult.error) {
+        toast({ title: 'Invitation link failed', description: claimResult.error, variant: 'destructive' });
+        return;
+      }
+      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/');
+      return;
+    }
+
     navigate('/');
   };
 
@@ -35,7 +48,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-foreground">FitPlan Pro</h1>
-          <p className="text-muted-foreground mt-2">Sign in to your account</p>
+          <p className="text-muted-foreground mt-2">{inviteToken ? 'Sign in to link your client plan' : 'Sign in to your account'}</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -70,7 +83,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-muted-foreground">
           Don't have an account?{' '}
-          <Link to="/signup" className="text-primary hover:underline">
+          <Link to={inviteToken ? `/signup?invite=${encodeURIComponent(inviteToken)}` : '/signup'} className="text-primary hover:underline">
             Sign up
           </Link>
         </p>
