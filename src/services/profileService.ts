@@ -44,7 +44,7 @@ export async function ensureProfileExists(): Promise<string | null> {
       .from('profiles')
       .insert({
         id: userId,
-        role: 'client',
+        role: 'trainer',
         full_name: user.email || 'Anonymous User',
         email: user.email || null,
       })

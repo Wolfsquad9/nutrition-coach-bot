@@ -44,6 +44,53 @@ export type Database = {
         }
         Relationships: []
       }
+      client_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          invite_token_hash: string
+          invited_email: string | null
+          revoked_at: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          client_id: string
+          created_at?: string
+          created_by: string
+          expires_at?: string
+          id?: string
+          invite_token_hash: string
+          invited_email?: string | null
+          revoked_at?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          invite_token_hash?: string
+          invited_email?: string | null
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_invitations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           activity_level: string
@@ -343,6 +390,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          idempotency_key: string | null
           locked_snapshot_json: Json | null
           note: string | null
           payload_hash: string
@@ -355,6 +403,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          idempotency_key?: string | null
           locked_snapshot_json?: Json | null
           note?: string | null
           payload_hash: string
@@ -367,6 +416,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          idempotency_key?: string | null
           locked_snapshot_json?: Json | null
           note?: string | null
           payload_hash?: string
@@ -546,6 +596,18 @@ export type Database = {
       }
     }
     Views: {
+      client_visible_locked_plan_versions: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          locked_snapshot_json: Json | null
+          payload_hash: string | null
+          plan_id: string | null
+          version_id: string | null
+          version_number: number | null
+        }
+        Relationships: []
+      }
       clients_trainer_view: {
         Row: {
           activity_level: string | null
@@ -619,6 +681,36 @@ export type Database = {
       }
     }
     Functions: {
+      claim_client_invitation: {
+        Args: { p_invite_token_hash: string }
+        Returns: string
+      }
+      create_client_invitation: {
+        Args: {
+          p_client_id: string
+          p_expires_at?: string | null
+          p_invite_token_hash: string
+          p_invited_email?: string | null
+        }
+        Returns: string
+      }
+      lock_nutrition_plan: {
+        Args: {
+          p_client_id: string
+          p_idempotency_key: string
+          p_locked_snapshot_json: Json
+          p_payload_hash: string
+          p_plan_payload: Json
+          p_version_id: string
+        }
+        Returns: {
+          error: string | null
+          plan_id: string
+          success: boolean
+          version_id: string
+          version_number: number
+        }[]
+      }
       get_next_plan_version_number: {
         Args: { p_plan_id: string }
         Returns: number

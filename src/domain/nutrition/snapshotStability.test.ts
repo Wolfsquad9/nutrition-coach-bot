@@ -33,7 +33,16 @@ function createTestInput(): SnapshotBuildInput {
       recipes: [{
         recipe: {
           id: 'r1', name: 'Oatmeal Bowl', category: 'breakfast',
-          prepTime: 5, cookTime: 10, servings: 1, ingredients: [],
+          prepTime: 5, cookTime: 10, servings: 1, ingredients: [{
+            id: 'oats',
+            name: 'Rolled Oats',
+            amount: 80,
+            unit: 'g',
+            category: 'carb',
+            macrosPer100g: { calories: 389, protein: 17, carbs: 66, fat: 7, fiber: 11 },
+            allergens: [],
+            substitutes: ['quinoa flakes'],
+          }],
           instructions: ['Cook oats'],
           macrosPerServing: { calories: 350, protein: 12, carbs: 55, fat: 8 },
           tags: [], dietTypes: ['omnivore'], allergens: [], equipment: [], difficulty: 'easy',
@@ -96,6 +105,63 @@ function createModifiedLivePlanData() {
     macroTargets: { calories: 3000, protein: 200, carbs: 300, fat: 100 }, // changed targets
   };
 }
+
+
+
+describe('PlanSnapshot deep immutability', () => {
+  it('deep-freezes top-level snapshot, metrics, metadata, grocery list, nested meals, and nested ingredients', () => {
+    const snapshot = buildPlanSnapshot(createTestInput());
+
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot.metrics)).toBe(true);
+    expect(Object.isFrozen(snapshot.meta)).toBe(true);
+    expect(Object.isFrozen(snapshot.groceryList)).toBe(true);
+    expect(Object.isFrozen(snapshot.groceryList[0])).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan)).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan[0])).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan[0].meals)).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan[0].meals[0])).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan[0].meals[0].recipes)).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan[0].meals[0].recipes[0].recipe)).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan[0].meals[0].recipes[0].recipe.ingredients)).toBe(true);
+    expect(Object.isFrozen(snapshot.weeklyPlan[0].meals[0].recipes[0].recipe.ingredients[0])).toBe(true);
+  });
+
+  it('throws on mutation attempts in strict mode', () => {
+    const snapshot = buildPlanSnapshot(createTestInput());
+
+    expect(() => {
+      (snapshot.metrics as { targetCalories: number }).targetCalories = 999;
+    }).toThrow(TypeError);
+
+    expect(() => {
+      (snapshot.meta as { planName: string }).planName = 'mutated';
+    }).toThrow(TypeError);
+
+    expect(() => {
+      (snapshot.groceryList as GroceryItem[]).push({ ingredient: 'Rice', totalAmount: 100, unit: 'g', category: 'carb' });
+    }).toThrow(TypeError);
+
+    expect(() => {
+      (snapshot.weeklyPlan[0].meals[0].recipes[0].recipe.ingredients[0] as { name: string }).name = 'mutated';
+    }).toThrow(TypeError);
+  });
+
+  it('does not freeze draft-like weekly plan inputs', () => {
+    const input = createTestInput();
+
+    buildPlanSnapshot(input);
+
+    expect(Object.isFrozen(input.weeklyPlan)).toBe(false);
+    expect(Object.isFrozen(input.weeklyPlan[0])).toBe(false);
+
+    expect(() => {
+      input.weeklyPlan[0].hydration = 4;
+    }).not.toThrow();
+
+    expect(input.weeklyPlan[0].hydration).toBe(4);
+  });
+});
 
 // ============================================================================
 // SNAPSHOT STABILITY TESTS
