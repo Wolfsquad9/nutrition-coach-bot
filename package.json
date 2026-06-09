@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "test:snapshot": "npx tsc -p tsconfig.tests.json && echo '{\"type\":\"commonjs\"}' > .tmp-tests/package.json && node .tmp-tests/tests/planSnapshot.test.js",
     "test": "npm run test:snapshot",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "db:verify": "node scripts/verify-production-bootstrap.mjs"
   },
   "dependencies": {
