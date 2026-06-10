@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { logger } from '@/utils/logger';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -32,9 +33,13 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Centralized error log — wire to Sentry/PostHog here when added.
-    // eslint-disable-next-line no-console
-    console.error('[ErrorBoundary]', this.props.section ?? 'unknown', error, info.componentStack);
+    // Centralized error log. Wire to Sentry/PostHog from src/utils/logger.ts
+    // when ready — no call-site change needed.
+    logger.error(
+      error.message,
+      { stack: error.stack, componentStack: info.componentStack },
+      `ErrorBoundary:${this.props.section ?? 'unknown'}`
+    );
   }
 
   private handleReset = (): void => {
