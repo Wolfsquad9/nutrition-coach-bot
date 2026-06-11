@@ -12,6 +12,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { ClientProgressEntry, ProgressEntryView, ProgressEntryId } from './types';
+export type { ProgressEntryView } from './types';
 
 // ---------------------------------------------------------------------------
 // CRUD

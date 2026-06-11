@@ -14,36 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      client_progress_snapshots: {
-        Row: {
-          client_id: string
-          created_at: string
-          created_by: string | null
-          id: string
-          metrics: Json
-          plan_version_id: string
-          snapshot_type: string
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          metrics: Json
-          plan_version_id: string
-          snapshot_type: string
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          metrics?: Json
-          plan_version_id?: string
-          snapshot_type?: string
-        }
-        Relationships: []
-      }
       client_invitations: {
         Row: {
           accepted_at: string | null
@@ -89,80 +59,171 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_invitations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      client_progress_entries: {
+        Row: {
+          body_fat_pct: number | null
+          client_id: string
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          nutrition_adherence_pct: number | null
+          recorded_on: string
+          updated_at: string
+          weight_kg: number | null
+        }
+        Insert: {
+          body_fat_pct?: number | null
+          client_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          notes?: string | null
+          nutrition_adherence_pct?: number | null
+          recorded_on: string
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Update: {
+          body_fat_pct?: number | null
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          nutrition_adherence_pct?: number | null
+          recorded_on?: string
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_progress_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_progress_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_progress_snapshots: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          metrics: Json
+          plan_version_id: string
+          snapshot_type: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metrics: Json
+          plan_version_id: string
+          snapshot_type: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metrics?: Json
+          plan_version_id?: string
+          snapshot_type?: string
+        }
+        Relationships: []
       }
       clients: {
         Row: {
-          activity_level: string
+          activity_level: string | null
           allergies: string[] | null
-          birth_date: string
+          birth_date: string | null
           created_at: string
           created_by: string | null
           diet_type: string | null
           dietary_restrictions: string[] | null
           disliked_foods: string[] | null
           email: string | null
-          first_name: string
-          gender: string
-          height: number
+          first_name: string | null
+          gender: string | null
+          height: number | null
           id: string
-          last_name: string
+          last_name: string | null
           medical_conditions: string[] | null
           phone: string | null
-          primary_goal: string
+          primary_goal: string | null
           training_experience: string | null
           training_frequency: number | null
           updated_at: string
           user_profile_id: string | null
-          weight: number
+          weight: number | null
         }
         Insert: {
-          activity_level: string
+          activity_level?: string | null
           allergies?: string[] | null
-          birth_date: string
+          birth_date?: string | null
           created_at?: string
           created_by?: string | null
           diet_type?: string | null
           dietary_restrictions?: string[] | null
           disliked_foods?: string[] | null
           email?: string | null
-          first_name?: string
-          gender: string
-          height: number
+          first_name?: string | null
+          gender?: string | null
+          height?: number | null
           id?: string
-          last_name?: string
+          last_name?: string | null
           medical_conditions?: string[] | null
           phone?: string | null
-          primary_goal: string
+          primary_goal?: string | null
           training_experience?: string | null
           training_frequency?: number | null
           updated_at?: string
           user_profile_id?: string | null
-          weight: number
+          weight?: number | null
         }
         Update: {
-          activity_level?: string
+          activity_level?: string | null
           allergies?: string[] | null
-          birth_date?: string
+          birth_date?: string | null
           created_at?: string
           created_by?: string | null
           diet_type?: string | null
           dietary_restrictions?: string[] | null
           disliked_foods?: string[] | null
           email?: string | null
-          first_name?: string
-          gender?: string
-          height?: number
+          first_name?: string | null
+          gender?: string | null
+          height?: number | null
           id?: string
-          last_name?: string
+          last_name?: string | null
           medical_conditions?: string[] | null
           phone?: string | null
-          primary_goal?: string
+          primary_goal?: string | null
           training_experience?: string | null
           training_frequency?: number | null
           updated_at?: string
           user_profile_id?: string | null
-          weight?: number
+          weight?: number | null
         }
         Relationships: [
           {
@@ -240,6 +301,75 @@ export type Database = {
           id?: string
           protein_pct_max?: number
           scope?: string
+        }
+        Relationships: []
+      }
+      notification_settings: {
+        Row: {
+          achievements: boolean
+          client_id: string
+          meal_reminders: boolean
+          progress_updates: boolean
+          reminder_time: string
+          scope: string
+          updated_at: string
+          workout_reminders: boolean
+        }
+        Insert: {
+          achievements?: boolean
+          client_id: string
+          meal_reminders?: boolean
+          progress_updates?: boolean
+          reminder_time?: string
+          scope?: string
+          updated_at?: string
+          workout_reminders?: boolean
+        }
+        Update: {
+          achievements?: boolean
+          client_id?: string
+          meal_reminders?: boolean
+          progress_updates?: boolean
+          reminder_time?: string
+          scope?: string
+          updated_at?: string
+          workout_reminders?: boolean
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          client_id: string
+          created_at: string
+          icon: string
+          id: string
+          message: string
+          read: boolean
+          read_at: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          icon?: string
+          id?: string
+          message: string
+          read?: boolean
+          read_at?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          message?: string
+          read?: boolean
+          read_at?: string | null
+          title?: string
+          type?: string
         }
         Relationships: []
       }
@@ -375,6 +505,13 @@ export type Database = {
           within_tolerance?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "plan_overrides_plan_version_fk"
+            columns: ["plan_version_id"]
+            isOneToOne: false
+            referencedRelation: "client_visible_locked_plan_versions"
+            referencedColumns: ["version_id"]
+          },
           {
             foreignKeyName: "plan_overrides_plan_version_fk"
             columns: ["plan_version_id"]
@@ -606,7 +743,22 @@ export type Database = {
           version_id: string | null
           version_number: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nutrition_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clients_trainer_view: {
         Row: {
@@ -688,28 +840,11 @@ export type Database = {
       create_client_invitation: {
         Args: {
           p_client_id: string
-          p_expires_at?: string | null
+          p_expires_at?: string
           p_invite_token_hash: string
-          p_invited_email?: string | null
+          p_invited_email: string
         }
         Returns: string
-      }
-      lock_nutrition_plan: {
-        Args: {
-          p_client_id: string
-          p_idempotency_key: string
-          p_locked_snapshot_json: Json
-          p_payload_hash: string
-          p_plan_payload: Json
-          p_version_id: string
-        }
-        Returns: {
-          error: string | null
-          plan_id: string
-          success: boolean
-          version_id: string
-          version_number: number
-        }[]
       }
       get_next_plan_version_number: {
         Args: { p_plan_id: string }
@@ -740,6 +875,23 @@ export type Database = {
         Returns: boolean
       }
       is_plan_locked: { Args: { plan_version_uuid: string }; Returns: boolean }
+      lock_nutrition_plan: {
+        Args: {
+          p_client_id: string
+          p_idempotency_key: string
+          p_locked_snapshot_json: Json
+          p_payload_hash: string
+          p_plan_payload: Json
+          p_version_id: string
+        }
+        Returns: {
+          error: string
+          plan_id: string
+          success: boolean
+          version_id: string
+          version_number: number
+        }[]
+      }
     }
     Enums: {
       app_role: "client" | "trainer" | "admin"
