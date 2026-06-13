@@ -37,6 +37,7 @@ export interface AppLayoutContext {
 const TAB_ROUTES = [
   { value: 'client', label: 'Client', path: '' },
   { value: 'ingredients', label: 'Ingredients', path: 'ingredients' },
+  { value: 'checkin', label: 'Check-in', path: 'checkin' },
   { value: 'nutrition', label: 'Nutrition', path: 'nutrition' },
   { value: 'training', label: 'Training', path: 'training' },
   { value: 'progress', label: 'Progress', path: 'progress' },
@@ -159,7 +160,7 @@ export default function AppLayout() {
         )}
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 bg-card shadow-card">
+          <TabsList className="grid w-full grid-cols-6 bg-card shadow-card">
             {TAB_ROUTES.map(tab => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}

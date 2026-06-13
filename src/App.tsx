@@ -12,6 +12,7 @@ import IngredientsPage from "@/pages/IngredientsPage";
 import NutritionPage from "@/pages/NutritionPage";
 import TrainingPage from "@/pages/TrainingPage";
 import ProgressPage from "@/pages/ProgressPage";
+import CheckinPage from "@/pages/CheckinPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import NotFound from "./pages/NotFound";
@@ -38,6 +39,7 @@ const App = () => (
                 <Route index element={<ClientPage />} />
                 <Route path="clients/:clientId" element={<ClientPage />} />
                 <Route path="clients/:clientId/ingredients" element={<IngredientsPage />} />
+                <Route path="clients/:clientId/checkin" element={<CheckinPage />} />
                 <Route path="clients/:clientId/nutrition" element={<NutritionPage />} />
                 <Route path="clients/:clientId/training" element={<TrainingPage />} />
                 <Route path="clients/:clientId/progress" element={<ProgressPage />} />
