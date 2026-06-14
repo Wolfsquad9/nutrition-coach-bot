@@ -437,6 +437,54 @@ export type Database = {
           },
         ]
       }
+      coach_messages: {
+        Row: {
+          client_id: string
+          coach_id: string
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          message: string
+          trigger_event: string | null
+          type: string
+        }
+        Insert: {
+          client_id: string
+          coach_id: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message: string
+          trigger_event?: string | null
+          type?: string
+        }
+        Update: {
+          client_id?: string
+          coach_id?: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          trigger_event?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_checkins: {
         Row: {
           checkin_date: string
