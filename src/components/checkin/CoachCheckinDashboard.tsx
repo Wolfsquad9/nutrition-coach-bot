@@ -2,39 +2,37 @@
  * CoachCheckinDashboard — coach-level overview showing alert feed,
  * client compliance roster, and aggregate data.
  */
-import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
-import { getCoachAlerts } from '@/services/checkin/alertService';
 import CoachAlertFeed from '@/components/checkin/CoachAlertFeed';
 import ClientComplianceCard from '@/components/checkin/ClientComplianceCard';
-import type { CoachAlert } from '@/types/checkin';
-
-interface ClientSummary {
-  clientId: string;
-  clientName: string;
-  complianceScore: number;
-  currentStreak: number;
-  longestStreak: number;
-  lastCheckinDate: string | null;
-  adherenceTrend: 'improving' | 'stable' | 'declining';
-}
+import { useCoachDashboardData, type ClientSummary } from '@/hooks/checkin/useCoachDashboardData';
 
 interface Props {
   trainerId: string;
-  clients: ClientSummary[];
   onNavigateToClient?: (clientId: string) => void;
 }
 
-export default function CoachCheckinDashboard({ trainerId, clients, onNavigateToClient }: Props) {
-  const [alertCount, setAlertCount] = useState<number>(0);
+export default function CoachCheckinDashboard({ trainerId, onNavigateToClient }: Props) {
+  const { clients, alerts, isLoading, error } = useCoachDashboardData(trainerId);
 
-  useEffect(() => {
-    getCoachAlerts(trainerId, { limit: 1 }).then(r => {
-      setAlertCount(r.alerts.length);
-    });
-  }, [trainerId]);
+  if (error) {
+    return (
+      <Card className="p-6 shadow-card">
+        <p className="text-red-500 text-center">Failed to load dashboard: {error}</p>
+      </Card>
+    );
+  }
 
+  if (isLoading) {
+    return (
+      <Card className="p-6 shadow-card flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </Card>
+    );
+  }
+
+  const alertCount = alerts.filter(a => !a.read).length;
   const avgCompliance = clients.length > 0
     ? Math.round(clients.reduce((s, c) => s + c.complianceScore, 0) / clients.length)
     : 0;

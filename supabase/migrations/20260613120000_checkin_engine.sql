@@ -50,15 +50,13 @@ CREATE INDEX IF NOT EXISTS idx_daily_checkins_client_date
   ON public.daily_checkins (client_id, checkin_date DESC);
 
 CREATE INDEX IF NOT EXISTS idx_daily_checkins_client_week
-  ON public.daily_checkins (client_id, checkin_date DESC)
-  WHERE checkin_date >= (CURRENT_DATE - INTERVAL '7 days');
+  ON public.daily_checkins (client_id, checkin_date DESC);
 
 COMMENT ON TABLE public.daily_checkins IS
   'Daily client check-in entries tracking adherence, energy, mood, sleep, weight, and notes. '
   'One row per client per calendar day via UNIQUE constraint.';
 
--- ============================================================================
--- TABLE: weekly_reviews
+-- ============================================================================-- TABLE: weekly_reviews
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.weekly_reviews (
   id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
