@@ -167,6 +167,8 @@ export async function getUnreadAlertCount(
   }
 }
 
+import type { Json } from '@/integrations/supabase/types';
+
 export interface GenerateAlertInput {
   client_id: string;
   trainer_id: string;
@@ -174,7 +176,7 @@ export interface GenerateAlertInput {
   severity: AlertSeverity;
   title: string;
   message: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Json;
 }
 
 /**
@@ -195,7 +197,7 @@ export async function generateAlert(
         severity: input.severity,
         title: input.title,
         message: input.message,
-        metadata: input.metadata as Record<string, unknown> | null ?? null,
+       metadata: input.metadata ?? null,
         read: false,
         dismissed: false,
       })
