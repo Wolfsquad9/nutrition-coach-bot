@@ -12,8 +12,147 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      ai_summaries: {
+        Row: {
+          adherence_score: number | null
+          client_id: string
+          created_at: string
+          created_by: string
+          highlights: Json | null
+          id: string
+          model_version: string | null
+          progress_trajectory: string | null
+          raw_llm_response: Json | null
+          recommendations: Json | null
+          risk_flags: Json | null
+          summary_text: string
+          summary_type: string
+          week_start_date: string
+        }
+        Insert: {
+          adherence_score?: number | null
+          client_id: string
+          created_at?: string
+          created_by: string
+          highlights?: Json | null
+          id?: string
+          model_version?: string | null
+          progress_trajectory?: string | null
+          raw_llm_response?: Json | null
+          recommendations?: Json | null
+          risk_flags?: Json | null
+          summary_text: string
+          summary_type?: string
+          week_start_date: string
+        }
+        Update: {
+          adherence_score?: number | null
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          highlights?: Json | null
+          id?: string
+          model_version?: string | null
+          progress_trajectory?: string | null
+          raw_llm_response?: Json | null
+          recommendations?: Json | null
+          risk_flags?: Json | null
+          summary_text?: string
+          summary_type?: string
+          week_start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_summaries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_summaries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checkin_streaks: {
+        Row: {
+          client_id: string
+          current_streak: number
+          id: string
+          last_checkin_date: string | null
+          longest_streak: number
+          streak_broken_date: string | null
+          streak_start_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          current_streak?: number
+          id?: string
+          last_checkin_date?: string | null
+          longest_streak?: number
+          streak_broken_date?: string | null
+          streak_start_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          current_streak?: number
+          id?: string
+          last_checkin_date?: string | null
+          longest_streak?: number
+          streak_broken_date?: string | null
+          streak_start_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkin_streaks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkin_streaks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_invitations: {
         Row: {
           accepted_at: string | null
@@ -164,6 +303,7 @@ export type Database = {
           disliked_foods: string[] | null
           email: string | null
           first_name: string | null
+          follow_up_enabled: boolean
           gender: string | null
           height: number | null
           id: string
@@ -188,6 +328,7 @@ export type Database = {
           disliked_foods?: string[] | null
           email?: string | null
           first_name?: string | null
+          follow_up_enabled?: boolean
           gender?: string | null
           height?: number | null
           id?: string
@@ -212,6 +353,7 @@ export type Database = {
           disliked_foods?: string[] | null
           email?: string | null
           first_name?: string | null
+          follow_up_enabled?: boolean
           gender?: string | null
           height?: number | null
           id?: string
@@ -231,6 +373,180 @@ export type Database = {
             columns: ["user_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_alerts: {
+        Row: {
+          alert_type: string
+          client_id: string
+          created_at: string
+          dismissed: boolean
+          id: string
+          message: string
+          metadata: Json | null
+          read: boolean
+          read_at: string | null
+          severity: Database["public"]["Enums"]["alert_severity"]
+          title: string
+          trainer_id: string
+        }
+        Insert: {
+          alert_type: string
+          client_id: string
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          message: string
+          metadata?: Json | null
+          read?: boolean
+          read_at?: string | null
+          severity?: Database["public"]["Enums"]["alert_severity"]
+          title: string
+          trainer_id: string
+        }
+        Update: {
+          alert_type?: string
+          client_id?: string
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          message?: string
+          metadata?: Json | null
+          read?: boolean
+          read_at?: string | null
+          severity?: Database["public"]["Enums"]["alert_severity"]
+          title?: string
+          trainer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_messages: {
+        Row: {
+          client_id: string
+          coach_id: string
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          message: string
+          trigger_event: string | null
+          type: string
+        }
+        Insert: {
+          client_id: string
+          coach_id: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message: string
+          trigger_event?: string | null
+          type?: string
+        }
+        Update: {
+          client_id?: string
+          coach_id?: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          trigger_event?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_checkins: {
+        Row: {
+          checkin_date: string
+          client_id: string
+          created_at: string
+          created_by: string
+          current_weight_kg: number | null
+          energy_level: number | null
+          id: string
+          meal_adherence: number
+          mood: number | null
+          notes: string | null
+          sleep_hours: number | null
+          updated_at: string
+          water_intake_liters: number | null
+          workout_completed: boolean
+        }
+        Insert: {
+          checkin_date: string
+          client_id: string
+          created_at?: string
+          created_by: string
+          current_weight_kg?: number | null
+          energy_level?: number | null
+          id?: string
+          meal_adherence: number
+          mood?: number | null
+          notes?: string | null
+          sleep_hours?: number | null
+          updated_at?: string
+          water_intake_liters?: number | null
+          workout_completed?: boolean
+        }
+        Update: {
+          checkin_date?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          current_weight_kg?: number | null
+          energy_level?: number | null
+          id?: string
+          meal_adherence?: number
+          mood?: number | null
+          notes?: string | null
+          sleep_hours?: number | null
+          updated_at?: string
+          water_intake_liters?: number | null
+          workout_completed?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_checkins_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_checkins_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
             referencedColumns: ["id"]
           },
         ]
@@ -731,6 +1047,84 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_reviews: {
+        Row: {
+          adherence_score: number | null
+          bodyweight_kg: number | null
+          challenges: string | null
+          chest_cm: number | null
+          client_id: string
+          coach_notes: string | null
+          created_at: string
+          created_by: string
+          diet_satisfaction: number | null
+          goals_for_next_week: string | null
+          hip_cm: number | null
+          id: string
+          photo_urls: string[] | null
+          updated_at: string
+          waist_cm: number | null
+          week_start_date: string
+          wins: string | null
+          workout_consistency: number | null
+        }
+        Insert: {
+          adherence_score?: number | null
+          bodyweight_kg?: number | null
+          challenges?: string | null
+          chest_cm?: number | null
+          client_id: string
+          coach_notes?: string | null
+          created_at?: string
+          created_by: string
+          diet_satisfaction?: number | null
+          goals_for_next_week?: string | null
+          hip_cm?: number | null
+          id?: string
+          photo_urls?: string[] | null
+          updated_at?: string
+          waist_cm?: number | null
+          week_start_date: string
+          wins?: string | null
+          workout_consistency?: number | null
+        }
+        Update: {
+          adherence_score?: number | null
+          bodyweight_kg?: number | null
+          challenges?: string | null
+          chest_cm?: number | null
+          client_id?: string
+          coach_notes?: string | null
+          created_at?: string
+          created_by?: string
+          diet_satisfaction?: number | null
+          goals_for_next_week?: string | null
+          hip_cm?: number | null
+          id?: string
+          photo_urls?: string[] | null
+          updated_at?: string
+          waist_cm?: number | null
+          week_start_date?: string
+          wins?: string | null
+          workout_consistency?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_trainer_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       client_visible_locked_plan_versions: {
@@ -894,6 +1288,7 @@ export type Database = {
       }
     }
     Enums: {
+      alert_severity: "green" | "yellow" | "red"
       app_role: "client" | "trainer" | "admin"
     }
     CompositeTypes: {
@@ -1020,8 +1415,12 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
+      alert_severity: ["green", "yellow", "red"],
       app_role: ["client", "trainer", "admin"],
     },
   },

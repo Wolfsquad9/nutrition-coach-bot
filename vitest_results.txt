@@ -1,0 +1,507 @@
+
+ RUN  v3.2.4 /workspaces/nutrition-coach-bot
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > hard-fails when a locked plan resolves without a snapshot
+PlanRuntimeError: Locked plan is missing immutable snapshot.
+    at Module.createSnapshotInvariantError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:52:3[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:327:17[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:314:7 {
+  code: [32m'SNAPSHOT_MISSING'[39m,
+  retryable: [33mtrue[39m,
+  source: [90mundefined[39m,
+  details: [90mundefined[39m
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > does not commit locked plan state on missing snapshot invariant failure
+PlanRuntimeError: Locked plan is missing immutable snapshot.
+    at Module.createSnapshotInvariantError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:52:3[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:327:17[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:338:7 {
+  code: [32m'SNAPSHOT_MISSING'[39m,
+  retryable: [33mtrue[39m,
+  source: [90mundefined[39m,
+  details: [90mundefined[39m
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > never renders mutable fallback data after a locked plan missing snapshot load
+PlanRuntimeError: Locked plan is missing immutable snapshot.
+    at Module.createSnapshotInvariantError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:52:3[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:327:17[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:370:7 {
+  code: [32m'SNAPSHOT_MISSING'[39m,
+  retryable: [33mtrue[39m,
+  source: [90mundefined[39m,
+  details: [90mundefined[39m
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > retries loading successfully after locked plan snapshot invariant failure
+PlanRuntimeError: Locked plan is missing immutable snapshot.
+    at Module.createSnapshotInvariantError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:52:3[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:327:17[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:404:7 {
+  code: [32m'SNAPSHOT_MISSING'[39m,
+  retryable: [33mtrue[39m,
+  source: [90mundefined[39m,
+  details: [90mundefined[39m
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > rejects invalid fetchCurrentPlan snapshot before state commit
+PlanRuntimeError: Snapshot validation failed (fetchCurrentPlan.snapshot): metrics.targetCalories must be a finite number
+    at Module.createSnapshotValidationError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:43:3[90m)[39m
+    at ensureValidSnapshot [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:87:11[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:302:11[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:445:7 {
+  code: [32m'SNAPSHOT_INVALID'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'fetchCurrentPlan.snapshot'[39m,
+  details: [ [32m'metrics.targetCalories must be a finite number'[39m ]
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > rejects invalid fetchPersistedSnapshot snapshot before state commit
+PlanRuntimeError: Snapshot validation failed (fetchPersistedSnapshot): groceryList[0].ingredient must be a non-empty string
+    at Module.createSnapshotValidationError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:43:3[90m)[39m
+    at ensureValidSnapshot [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:87:11[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:319:13[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:472:7 {
+  code: [32m'SNAPSHOT_INVALID'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'fetchPersistedSnapshot'[39m,
+  details: [ [32m'groceryList[0].ingredient must be a non-empty string'[39m ]
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > rejects malformed nested ingredient during load
+PlanRuntimeError: Snapshot validation failed (fetchCurrentPlan.snapshot): weeklyPlan[0].meals[0].recipes[0].recipe.ingredients[0].name must be a non-empty string
+    at Module.createSnapshotValidationError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:43:3[90m)[39m
+    at ensureValidSnapshot [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:87:11[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:302:11[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:492:7 {
+  code: [32m'SNAPSHOT_INVALID'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'fetchCurrentPlan.snapshot'[39m,
+  details: [
+    [32m'weeklyPlan[0].meals[0].recipes[0].recipe.ingredients[0].name must be a non-empty string'[39m
+  ]
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > retries successfully after invalid snapshot becomes valid
+PlanRuntimeError: Snapshot validation failed (fetchCurrentPlan.snapshot): metrics.targetCalories must be a finite number
+    at Module.createSnapshotValidationError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:43:3[90m)[39m
+    at ensureValidSnapshot [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:87:11[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:302:11[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:506:29 {
+  code: [32m'SNAPSHOT_INVALID'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'fetchCurrentPlan.snapshot'[39m,
+  details: [ [32m'metrics.targetCalories must be a finite number'[39m ]
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > classifies unknown load failures safely as non-retryable
+non-error failure
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > keeps transient load failures retryable
+Error: Network timeout
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:531:48
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:155:11
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:752:26
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1897:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1863:10[90m)[39m
+    at runTest [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1574:12[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runFiles [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1787:3[90m)[39m
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > emits runtime telemetry for snapshot validation failure
+PlanRuntimeError: Snapshot validation failed (fetchCurrentPlan.snapshot): metrics.targetCalories must be a finite number
+    at Module.createSnapshotValidationError [90m(/workspaces/nutrition-coach-bot/[39msrc/domain/nutrition/runtimeErrors.ts:43:3[90m)[39m
+    at ensureValidSnapshot [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:87:11[90m)[39m
+    at Object.loadPlanForClient [90m(/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.ts:302:11[90m)[39m
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:565:29 {
+  code: [32m'SNAPSHOT_INVALID'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'fetchCurrentPlan.snapshot'[39m,
+  details: [ [32m'metrics.targetCalories must be a finite number'[39m ]
+}
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > emits retry attempted and succeeded telemetry
+Error: Network timeout
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:572:30
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:155:11
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:752:26
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1897:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1863:10[90m)[39m
+    at runTest [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1574:12[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runFiles [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1787:3[90m)[39m
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > emits retry failed telemetry when retry does not recover
+Error: Still down
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:585:44
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:155:11
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:752:26
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1897:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1863:10[90m)[39m
+    at runTest [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1574:12[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runFiles [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1787:3[90m)[39m
+
+stderr | src/hooks/useNutritionPlanState.test.ts > lockPlan snapshot atomicity > emits retry failed telemetry when retry does not recover
+Error: Still down
+    at [90m/workspaces/nutrition-coach-bot/[39msrc/hooks/useNutritionPlanState.test.ts:585:44
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:155:11
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:752:26
+    at [90mfile:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1897:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1863:10[90m)[39m
+    at runTest [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1574:12[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runSuite [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1729:8[90m)[39m
+    at runFiles [90m(file:///workspaces/nutrition-coach-bot/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-hooks.js:1787:3[90m)[39m
+
+ ✓ src/hooks/useNutritionPlanState.test.ts (19 tests) 140ms
+stdout | src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > locked plan snapshot is restored identically after discard + reload
+[nutrition-runtime-telemetry] {
+  name: [32m'lock_failed'[39m,
+  code: [32m'LOCK_FAILED'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'lockPlan'[39m,
+  clientId: [32m'client-lifecycle-1'[39m,
+  planId: [1mnull[22m,
+  versionId: [1mnull[22m,
+  details: [90mundefined[39m,
+  metadata: [90mundefined[39m,
+  timestamp: [32m'2026-06-14T19:58:20.586Z'[39m
+}
+
+stdout | src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > snapshot persistence failure prevents lock completion
+[nutrition-runtime-telemetry] {
+  name: [32m'lock_failed'[39m,
+  code: [32m'LOCK_FAILED'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'lockPlan'[39m,
+  clientId: [32m'client-lifecycle-1'[39m,
+  planId: [1mnull[22m,
+  versionId: [1mnull[22m,
+  details: [90mundefined[39m,
+  metadata: [90mundefined[39m,
+  timestamp: [32m'2026-06-14T19:58:20.608Z'[39m
+}
+
+stdout | src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > LOCKED → EXPIRED transition triggers deterministically after lock period
+[nutrition-runtime-telemetry] {
+  name: [32m'lock_failed'[39m,
+  code: [32m'LOCK_FAILED'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'lockPlan'[39m,
+  clientId: [32m'client-lifecycle-1'[39m,
+  planId: [1mnull[22m,
+  versionId: [1mnull[22m,
+  details: [90mundefined[39m,
+  metadata: [90mundefined[39m,
+  timestamp: [32m'2025-06-01T12:00:00.000Z'[39m
+}
+
+stdout | src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > locking twice does not overwrite the original snapshot (write-once)
+[nutrition-runtime-telemetry] {
+  name: [32m'lock_failed'[39m,
+  code: [32m'LOCK_FAILED'[39m,
+  retryable: [33mtrue[39m,
+  source: [32m'lockPlan'[39m,
+  clientId: [32m'client-lifecycle-1'[39m,
+  planId: [1mnull[22m,
+  versionId: [1mnull[22m,
+  details: [90mundefined[39m,
+  metadata: [90mundefined[39m,
+  timestamp: [32m'2025-06-01T12:00:00.000Z'[39m
+}
+
+ ❯ src/hooks/useNutritionPlanLifecycle.test.ts (4 tests | 4 failed) 82ms
+   × Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > locked plan snapshot is restored identically after discard + reload 40ms
+     → expected false to be true // Object.is equality
+   × Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > snapshot persistence failure prevents lock completion 7ms
+     → expected '[vitest] No "buildLockedPlanPayload" …' to contain 'Disk full'
+   × Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > LOCKED → EXPIRED transition triggers deterministically after lock period 13ms
+     → expected 'DRAFT' to be 'LOCKED' // Object.is equality
+   × Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > locking twice does not overwrite the original snapshot (write-once) 20ms
+     → expected "spy" to be called 1 times, but got 0 times
+ ✓ src/domain/nutrition/planLifecycle.test.ts (68 tests) 31ms
+ ✓ src/domain/nutrition/snapshotStability.test.ts (9 tests) 8ms
+ ✓ src/domain/nutrition/snapshotExporter.test.ts (17 tests) 29ms
+ ✓ src/domain/nutrition/snapshotAdapter.test.ts (2 tests) 9ms
+ ✓ src/__tests__/checkin/alertService.test.ts (5 tests) 6ms
+ ✓ src/__tests__/checkin/dailyCheckinService.test.ts (4 tests) 7ms
+ ✓ src/utils/random.test.ts (11 tests) 195ms
+ ✓ src/services/progress/progress.test.ts (9 tests) 6ms
+ ✓ src/__tests__/checkin/coachingIntelligenceService.test.ts (5 tests) 6ms
+stdout | src/utils/logger.test.ts > logger > appends events to the ring buffer
+[test] hello
+
+stdout | src/utils/logger.test.ts > logger > returns events newest first
+[app] first
+[app] second
+
+stdout | src/utils/logger.test.ts > logger > caps the ring buffer at 100 entries
+[app] msg-0
+[app] msg-1
+[app] msg-2
+[app] msg-3
+[app] msg-4
+[app] msg-5
+[app] msg-6
+[app] msg-7
+[app] msg-8
+[app] msg-9
+[app] msg-10
+[app] msg-11
+[app] msg-12
+[app] msg-13
+[app] msg-14
+[app] msg-15
+[app] msg-16
+[app] msg-17
+[app] msg-18
+[app] msg-19
+[app] msg-20
+[app] msg-21
+[app] msg-22
+[app] msg-23
+[app] msg-24
+[app] msg-25
+[app] msg-26
+[app] msg-27
+[app] msg-28
+[app] msg-29
+[app] msg-30
+[app] msg-31
+[app] msg-32
+[app] msg-33
+[app] msg-34
+[app] msg-35
+[app] msg-36
+[app] msg-37
+[app] msg-38
+[app] msg-39
+[app] msg-40
+[app] msg-41
+[app] msg-42
+[app] msg-43
+[app] msg-44
+[app] msg-45
+[app] msg-46
+[app] msg-47
+[app] msg-48
+[app] msg-49
+[app] msg-50
+[app] msg-51
+[app] msg-52
+[app] msg-53
+[app] msg-54
+[app] msg-55
+[app] msg-56
+[app] msg-57
+[app] msg-58
+[app] msg-59
+[app] msg-60
+[app] msg-61
+[app] msg-62
+[app] msg-63
+[app] msg-64
+[app] msg-65
+[app] msg-66
+[app] msg-67
+[app] msg-68
+[app] msg-69
+[app] msg-70
+[app] msg-71
+[app] msg-72
+[app] msg-73
+[app] msg-74
+[app] msg-75
+[app] msg-76
+[app] msg-77
+[app] msg-78
+[app] msg-79
+[app] msg-80
+[app] msg-81
+[app] msg-82
+[app] msg-83
+[app] msg-84
+[app] msg-85
+[app] msg-86
+[app] msg-87
+[app] msg-88
+[app] msg-89
+[app] msg-90
+[app] msg-91
+[app] msg-92
+[app] msg-93
+[app] msg-94
+[app] msg-95
+[app] msg-96
+[app] msg-97
+[app] msg-98
+[app] msg-99
+[app] msg-100
+[app] msg-101
+[app] msg-102
+[app] msg-103
+[app] msg-104
+[app] msg-105
+[app] msg-106
+[app] msg-107
+[app] msg-108
+[app] msg-109
+[app] msg-110
+[app] msg-111
+[app] msg-112
+[app] msg-113
+[app] msg-114
+[app] msg-115
+[app] msg-116
+[app] msg-117
+[app] msg-118
+[app] msg-119
+[app] msg-120
+[app] msg-121
+[app] msg-122
+[app] msg-123
+[app] msg-124
+[app] msg-125
+[app] msg-126
+[app] msg-127
+[app] msg-128
+[app] msg-129
+[app] msg-130
+[app] msg-131
+[app] msg-132
+[app] msg-133
+[app] msg-134
+[app] msg-135
+[app] msg-136
+[app] msg-137
+[app] msg-138
+[app] msg-139
+[app] msg-140
+[app] msg-141
+[app] msg-142
+[app] msg-143
+[app] msg-144
+[app] msg-145
+[app] msg-146
+[app] msg-147
+[app] msg-148
+[app] msg-149
+
+stdout | src/utils/logger.test.ts > logger > respects the limit argument in getRecentEvents
+[app] m0
+[app] m1
+[app] m2
+[app] m3
+[app] m4
+[app] m5
+[app] m6
+[app] m7
+[app] m8
+[app] m9
+
+stdout | src/utils/logger.test.ts > logger > logger helpers attach correct level
+[app] d
+[app] i
+
+stderr | src/utils/logger.test.ts > logger > logger helpers attach correct level
+[app] w
+[app] e
+
+stdout | src/utils/logger.test.ts > logger > clearEvents empties the buffer
+[app] x
+
+stderr | src/utils/logger.test.ts > logger > never throws, even with circular context
+[app] boom [36m<ref *1>[39m { a: [33m1[39m, self: [36m[Circular *1][39m }
+
+ ✓ src/utils/logger.test.ts (7 tests) 17ms
+ ✓ src/__tests__/checkin/weeklyReviewService.test.ts (3 tests) 4ms
+ ✓ src/__tests__/checkin/streakService.test.ts (3 tests) 6ms
+ ✓ src/services/notifications/relativeTime.test.ts (6 tests) 577ms
+   ✓ relativeTime > returns locale date string for 7+ days  571ms
+ ✓ src/domain/nutrition/runtimeTelemetry.test.ts (2 tests) 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > locked plan snapshot is restored identically after discard + reload
+AssertionError: expected false to be true // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+ ❯ src/hooks/useNutritionPlanLifecycle.test.ts:231:32
+    229|     });
+    230| 
+    231|     expect(lockResult.success).toBe(true);
+       |                                ^
+    232|     expect(lockResult.error).toBeNull();
+    233|     expect(mockPersistSnapshot).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > snapshot persistence failure prevents lock completion
+AssertionError: expected '[vitest] No "buildLockedPlanPayload" …' to contain 'Disk full'
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- Disk full[39m
+[31m+ [vitest] No "buildLockedPlanPayload" export is defined on the "@/services/supabasePlanService" mock. Did you forget to return it from "vi.mock"?[39m
+[31m+ If you need to partially mock a module, you can use "importOriginal" helper inside:[39m
+[31m+[39m
+
+ ❯ src/hooks/useNutritionPlanLifecycle.test.ts:296:30
+    294| 
+    295|     expect(lockResult.success).toBe(false);
+    296|     expect(lockResult.error).toContain('Disk full');
+       |                              ^
+    297|     expect(result.current.lastPersistenceFailed).toBe(true);
+    298|     expect(result.current.isLocked).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > LOCKED → EXPIRED transition triggers deterministically after lock period
+AssertionError: expected 'DRAFT' to be 'LOCKED' // Object.is equality
+
+Expected: [32m"LOCKED"[39m
+Received: [31m"DRAFT"[39m
+
+ ❯ src/hooks/useNutritionPlanLifecycle.test.ts:343:43
+    341|     });
+    342| 
+    343|     expect(result.current.lifecycleState).toBe('LOCKED');
+       |                                           ^
+    344|     expect(result.current.isLocked).toBe(true);
+    345| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/hooks/useNutritionPlanLifecycle.test.ts > Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → reload > locking twice does not overwrite the original snapshot (write-once)
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ src/hooks/useNutritionPlanLifecycle.test.ts:422:33
+    420|     });
+    421| 
+    422|     expect(mockPersistSnapshot).toHaveBeenCalledTimes(1);
+       |                                 ^
+    423|     expect(snapshotStore.has(VERSION_ID)).toBe(true);
+    424| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed | 15 passed (16)
+      Tests  4 failed | 170 passed (174)
+   Start at  19:58:12
+   Duration  21.69s (transform 1.58s, setup 2.05s, collect 1.83s, tests 1.13s, environment 9.96s, prepare 2.72s)
+

@@ -14,6 +14,10 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   signOut: () => Promise<void>;
+  userRole: 'coach' | 'client' | null;
+  isClient: boolean;
+  isCoach: boolean;
+  clientId: string | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -23,6 +27,10 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   isAuthenticated: false,
   signOut: async () => {},
+  userRole: null,
+  isClient: false,
+  isCoach: false,
+  clientId: null,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -58,6 +66,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   };
 
+  const userRole = user ? (user.user_metadata?.role ?? 'coach') : null;
+  const isClient = userRole === 'client';
+  const isCoach = userRole === 'coach';
+  const clientId = user ? (user.user_metadata?.client_id ?? null) : null;
+
   const value: AuthContextType = {
     user,
     session,
@@ -65,6 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     isAuthenticated: !!session,
     signOut,
+    userRole,
+    isClient,
+    isCoach,
+    clientId,
   };
 
   return (
