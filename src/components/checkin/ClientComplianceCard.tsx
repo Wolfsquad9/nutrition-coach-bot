@@ -37,42 +37,42 @@ export default function ClientComplianceCard({
 
   return (
     <Card
-      className={`p-4 shadow-card cursor-pointer hover:shadow-lg transition-all ${
-        riskLevel === 'red' ? 'border-red-300' : riskLevel === 'yellow' ? 'border-amber-300' : 'border-green-300'
+      className={`p-4 cursor-pointer transition-colors duration-150 ${
+        riskLevel === 'red' ? 'border-danger/40 hover:border-danger' : riskLevel === 'yellow' ? 'border-warning/40 hover:border-warning' : 'border-primary/40 hover:border-primary'
       }`}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="font-bold text-sm truncate">{clientName}</p>
+            <p className="font-display font-bold text-sm truncate">{clientName}</p>
             {isAtRisk && (
-              <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-danger flex-shrink-0" />
             )}
           </div>
 
           <div className="flex items-center gap-2 mt-2">
-            <span className={`text-2xl font-bold ${
-              complianceScore >= 70 ? 'text-green-600' : complianceScore >= 50 ? 'text-amber-600' : 'text-red-600'
+            <span className={`font-display text-2xl font-bold tabular-nums ${
+              complianceScore >= 70 ? 'text-primary' : complianceScore >= 50 ? 'text-warning' : 'text-danger'
             }`}>
               {complianceScore}%
             </span>
-            {adherenceTrend === 'improving' && <TrendingUp className="h-4 w-4 text-green-500" />}
-            {adherenceTrend === 'declining' && <TrendingDown className="h-4 w-4 text-red-500" />}
+            {adherenceTrend === 'improving' && <TrendingUp className="h-4 w-4 text-primary" />}
+            {adherenceTrend === 'declining' && <TrendingDown className="h-4 w-4 text-danger" />}
             {adherenceTrend === 'stable' && <Minus className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
 
         {/* Risk dot */}
-        <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
-          riskLevel === 'red' ? 'bg-red-500' : riskLevel === 'yellow' ? 'bg-amber-500' : 'bg-green-500'
+        <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${
+          riskLevel === 'red' ? 'bg-danger' : riskLevel === 'yellow' ? 'bg-warning' : 'bg-primary'
         }`} />
       </div>
 
       <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
         {currentStreak > 0 && (
           <div className="flex items-center gap-1">
-            <Flame className="h-3 w-3 text-orange-500" />
+            <Flame className="h-3 w-3 text-warning" />
             <span>{currentStreak} day{currentStreak !== 1 ? 's' : ''}</span>
           </div>
         )}

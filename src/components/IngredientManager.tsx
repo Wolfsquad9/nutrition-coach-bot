@@ -180,7 +180,7 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
                   <span className="text-muted-foreground">Will not be used in recipes</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-green-500">Preferred</Badge>
+                  <Badge>Preferred</Badge>
                   <span className="text-muted-foreground">Priority in suggestions</span>
                 </div>
               </div>
@@ -195,7 +195,7 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
                       key={ingredient.id}
                       className={`p-3 rounded-lg border ${
                         status === 'blocked' ? 'border-destructive bg-destructive/10' :
-                        status === 'preferred' ? 'border-green-500 bg-green-500/10' :
+                        status === 'preferred' ? 'border-primary bg-primary/10' :
                         'border-border'
                       }`}
                     >
@@ -224,7 +224,6 @@ export default function IngredientManager({ clients, onRestrictionsUpdate }: Ing
                           <Button
                             size="sm"
                             variant={status === 'preferred' ? 'default' : 'outline'}
-                            className={status === 'preferred' ? 'bg-green-500 hover:bg-green-600' : ''}
                             onClick={() => toggleIngredientStatus(ingredient.id, status === 'preferred' ? 'neutral' : 'preferred')}
                           >
                             <Check className="h-3 w-3" />

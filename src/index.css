@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,141 +9,150 @@ All colors MUST be HSL.
 */
 
 @layer base {
+  /*
+    TACTICAL DESIGN SYSTEM — dark ops / precision instrument
+    All shadcn semantic tokens are remapped to the tactical palette (HSL).
+    Raw token reference (hex -> HSL):
+      --bg-base     #0A0A0A -> 0 0% 4%
+      --bg-surface  #141414 -> 0 0% 8%
+      --bg-elevated #1E1E1E -> 0 0% 12%
+      --accent      #C8F135 -> 73 87% 58%   (primary signal lime)
+      --secondary   #00E5FF -> 186 100% 50% (cyan data)
+      --danger      #FF4444 -> 0 100% 63%
+      --warn        #FF8C00 -> 33 100% 50%
+      --text-primary   #F0F0F0 -> 0 0% 94%
+      --text-secondary #6B6B6B -> 0 0% 42%
+      --text-disabled  #3A3A3A -> 0 0% 23%
+      --border  rgba(255,255,255,0.06) -> 0 0% 16% (solid approximation)
+  */
   :root {
-    /* Main colors - Professional fitness theme */
-    --background: 0 0% 98%;
-    --foreground: 222 47% 11%;
-    
-    /* Primary - Energetic teal/green for health */
-    --primary: 162 84% 35%;
-    --primary-foreground: 0 0% 100%;
-    --primary-hover: 162 84% 28%;
-    --primary-glow: 162 84% 45%;
-    
-    /* Secondary - Professional blue */
-    --secondary: 210 78% 46%;
-    --secondary-foreground: 0 0% 100%;
-    
-    /* Accent - Motivating orange */
-    --accent: 25 95% 53%;
-    --accent-foreground: 0 0% 100%;
-    
-    /* Success/Info/Warning/Danger */
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
-    --info: 199 89% 48%;
-    --info-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 11%;
-    --danger: 0 84% 60%;
-    --danger-foreground: 0 0% 100%;
-    
-    /* Cards and surfaces */
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --card-hover: 210 40% 98%;
-    
-    /* Popover and dialog */
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    
-    /* Muted elements */
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    
-    /* Destructive actions */
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    
-    /* Form elements */
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 162 84% 35%;
-    
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(162 84% 35%), hsl(199 89% 48%));
-    --gradient-hero: linear-gradient(135deg, hsl(162 84% 35%), hsl(210 78% 46%));
-    --gradient-accent: linear-gradient(135deg, hsl(25 95% 53%), hsl(38 92% 50%));
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 40% 98%));
-    --gradient-dark: linear-gradient(135deg, hsl(222 47% 11%), hsl(222 47% 20%));
-    
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsl(222 47% 11% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(222 47% 11% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(222 47% 11% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(222 47% 11% / 0.1);
-    --shadow-glow: 0 0 20px hsl(162 84% 35% / 0.3);
-    --shadow-card: 0 4px 12px hsl(222 47% 11% / 0.08);
-    
-    /* Border radius */
-    --radius: 0.75rem;
-    --radius-sm: 0.5rem;
-    --radius-lg: 1rem;
-    --radius-xl: 1.5rem;
-    
-    /* Animations */
-    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-slow: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-    
-    /* Sidebar */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 162 84% 35%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 162 84% 35%;
+    /* Base surfaces — layered depth, no shadows */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 94%;
+
+    /* Primary — accent signal lime (#C8F135) */
+    --primary: 73 87% 58%;
+    --primary-foreground: 0 0% 4%;
+    --primary-hover: 73 87% 64%;
+    --primary-glow: 73 87% 58%;
+
+    /* Secondary — cyan data channel (#00E5FF) */
+    --secondary: 186 100% 50%;
+    --secondary-foreground: 0 0% 4%;
+
+    /* Accent — same lime signal, used for highlights */
+    --accent: 73 87% 58%;
+    --accent-foreground: 0 0% 4%;
+
+    /* Status channels */
+    --success: 73 87% 58%;
+    --success-foreground: 0 0% 4%;
+    --info: 186 100% 50%;
+    --info-foreground: 0 0% 4%;
+    --warning: 33 100% 50%;
+    --warning-foreground: 0 0% 4%;
+    --danger: 0 100% 63%;
+    --danger-foreground: 0 0% 4%;
+
+    /* Cards / surfaces — bg-surface, elevated on hover */
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 94%;
+    --card-hover: 0 0% 12%;
+
+    /* Popover / dialog — elevated layer */
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 94%;
+
+    /* Muted — elevated surface + secondary text */
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 42%;
+
+    /* Destructive */
+    --destructive: 0 100% 63%;
+    --destructive-foreground: 0 0% 4%;
+
+    /* Form elements — inputs sit on bg-elevated */
+    --border: 0 0% 16%;
+    --input: 0 0% 12%;
+    --ring: 73 87% 58%;
+
+    /* Gradients neutralized to solid tactical layers (no gradients allowed) */
+    --gradient-primary: hsl(0 0% 8%);
+    --gradient-hero: hsl(0 0% 4%);
+    --gradient-accent: hsl(0 0% 8%);
+    --gradient-card: hsl(0 0% 8%);
+    --gradient-dark: hsl(0 0% 4%);
+
+    /* Shadows removed — depth comes from background layering. Kept as no-ops. */
+    --shadow-sm: 0 0 0 0 transparent;
+    --shadow-md: 0 0 0 0 transparent;
+    --shadow-lg: 0 0 0 0 transparent;
+    --shadow-xl: 0 0 0 0 transparent;
+    --shadow-glow: 0 0 0 0 transparent;
+    --shadow-card: 0 0 0 0 transparent;
+
+    /* Geometry — interactive 4px (rounded-md), surfaces 6px (rounded-lg) */
+    --radius: 0.375rem;
+    --radius-sm: 0.125rem;
+    --radius-lg: 0.375rem;
+    --radius-xl: 0.5rem;
+
+    /* Motion — 150ms state, no spring/bounce */
+    --transition-fast: all 0.15s ease;
+    --transition-base: all 0.2s ease-out;
+    --transition-slow: all 0.2s ease-out;
+
+    /* Sidebar / navigation — bg-base */
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 42%;
+    --sidebar-primary: 73 87% 58%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 94%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 73 87% 58%;
   }
 
+  /* Dark class mirrors :root — this app is dark by default */
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
-    
-    --primary: 162 84% 35%;
-    --primary-foreground: 0 0% 100%;
-    --primary-hover: 162 84% 42%;
-    --primary-glow: 162 84% 45%;
-    
-    --secondary: 210 78% 56%;
-    --secondary-foreground: 222 47% 11%;
-    
-    --accent: 25 95% 53%;
-    --accent-foreground: 222 47% 11%;
-    
-    --success: 142 76% 46%;
-    --info: 199 89% 58%;
-    --warning: 38 92% 60%;
-    --danger: 0 84% 70%;
-    
-    --card: 222 47% 10%;
-    --card-foreground: 210 40% 98%;
-    --card-hover: 222 47% 13%;
-    
-    --popover: 222 47% 10%;
-    --popover-foreground: 210 40% 98%;
-    
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-    
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 162 84% 35%;
-    
-    --shadow-card: 0 4px 12px hsl(0 0% 0% / 0.2);
-    
-    --sidebar-background: 222 47% 10%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 162 84% 35%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 17%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 162 84% 35%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 94%;
+    --primary: 73 87% 58%;
+    --primary-foreground: 0 0% 4%;
+    --primary-hover: 73 87% 64%;
+    --primary-glow: 73 87% 58%;
+    --secondary: 186 100% 50%;
+    --secondary-foreground: 0 0% 4%;
+    --accent: 73 87% 58%;
+    --accent-foreground: 0 0% 4%;
+    --success: 73 87% 58%;
+    --success-foreground: 0 0% 4%;
+    --info: 186 100% 50%;
+    --info-foreground: 0 0% 4%;
+    --warning: 33 100% 50%;
+    --warning-foreground: 0 0% 4%;
+    --danger: 0 100% 63%;
+    --danger-foreground: 0 0% 4%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 94%;
+    --card-hover: 0 0% 12%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 94%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 42%;
+    --destructive: 0 100% 63%;
+    --destructive-foreground: 0 0% 4%;
+    --border: 0 0% 16%;
+    --input: 0 0% 12%;
+    --ring: 73 87% 58%;
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 42%;
+    --sidebar-primary: 73 87% 58%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 94%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 73 87% 58%;
   }
 }
 
@@ -150,8 +161,40 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    @apply bg-background;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss01", "cv01", "tnum";
+  }
+
+  /* Display font (Space Grotesk) for headings, metrics, scores */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+
+  /* Tabular figures for all numeric metric displays */
+  .font-display {
+    font-feature-settings: "tnum";
+  }
+}
+
+@layer components {
+  /* Section header: UPPERCASE, tracked, secondary, paired with a rule */
+  .tactical-section-header {
+    @apply font-display text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+  }
+
+  /* Tactical label: small uppercase tracked label for inputs/tags */
+  .tactical-label {
+    @apply font-body text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground;
+  }
+
+  /* Hero metric: large Space Grotesk number */
+  .tactical-metric {
+    @apply font-display text-5xl font-bold leading-none tracking-tight tabular-nums;
   }
 }
 

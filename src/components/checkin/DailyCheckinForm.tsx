@@ -109,7 +109,7 @@ export default function DailyCheckinForm({ clientId, userId }: Props) {
     return (
       <Card className="p-6 shadow-card">
         <div className="text-center py-8">
-          <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+          <CheckCircle className="h-12 w-12 text-primary mx-auto mb-4" />
           <h3 className="text-xl font-bold text-primary">Today's Check-in Complete</h3>
           <p className="text-muted-foreground mt-2">
             Meal adherence: {mealAdherence}%
@@ -130,7 +130,7 @@ export default function DailyCheckinForm({ clientId, userId }: Props) {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-primary">Daily Check-in</h2>
         {streak && streak.current_streak > 0 && (
-          <div className="flex items-center gap-2 text-sm text-orange-500">
+          <div className="flex items-center gap-2 text-sm text-warning">
             <Flame className="h-4 w-4" />
             <span className="font-bold">{streak.current_streak} day streak</span>
           </div>

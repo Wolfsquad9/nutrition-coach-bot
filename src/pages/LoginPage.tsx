@@ -44,11 +44,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-foreground">FitPlan Pro</h1>
-          <p className="text-muted-foreground mt-2">{inviteToken ? 'Sign in to link your client plan' : 'Sign in to your account'}</p>
+          <div className="mx-auto mb-4 h-1 w-12 bg-primary" aria-hidden="true" />
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">FitPlan Pro</h1>
+          <p className="tactical-label mt-2">{inviteToken ? 'Sign in to link your client plan' : 'Sign in to your account'}</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
