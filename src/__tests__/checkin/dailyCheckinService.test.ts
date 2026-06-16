@@ -44,7 +44,14 @@ describe('dailyCheckinService', () => {
 
   describe('submitDailyCheckin', () => {
     it('returns checkin on successful upsert', async () => {
-      const mockInsert = { id: 'c1', client_id: 'c1', checkin_date: '2026-06-13', meal_adherence: 80, workout_completed: false, created_by: 'u1' } as any;
+     const mockInsert = {
+  id: 'c1',
+  client_id: 'c1',
+  checkin_date: '2026-06-13',
+  meal_adherence: 80,
+  workout_completed: false,
+  created_by: 'u1'
+} as unknown;
       mockFrom.mockReturnValue({
         upsert: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({

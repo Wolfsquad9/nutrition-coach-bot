@@ -92,13 +92,16 @@ export default function ClientClaimPage() {
         });
         navigate('/checkin', { replace: true });
       }
-    } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'An unexpected error occurred during signup.',
-        variant: 'destructive',
-      });
-    } finally {
+    } catch (err: unknown) {
+  toast({
+    title: 'Error',
+    description:
+      err instanceof Error
+        ? err.message
+        : 'An unexpected error occurred during signup.',
+    variant: 'destructive',
+  });
+} finally {
       setClaiming(false);
     }
   };
