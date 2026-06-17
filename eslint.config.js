@@ -33,4 +33,19 @@ export default tseslint.config(
       "react-refresh/only-export-components": "off",
     },
   },
+  // Forbid Math.random() in services — they should be deterministic or
+  // load real data. The PRNG utility (src/utils/random.ts) exists for this.
+  {
+    files: ["src/services/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.name='Math'][property.name='random']",
+          message:
+            "Math.random() is forbidden in services. Use src/utils/random.ts (seeded PRNG) or load real data. See AUDIT_AND_ROADMAP.md C3/C4.",
+        },
+      ],
+    },
+  },
 );
