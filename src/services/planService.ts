@@ -4,18 +4,19 @@
  */
 
 import { Client, NutritionPlan, TrainingPlan, CompletePlan, MealPlan, Meal, WorkoutSession, WorkoutExercise, Exercise, GroceryItem, RecipeServing, NutritionMetrics } from '@/types';
-import { 
-  calculateBMR, 
-  calculateTDEE, 
-  calculateTargetCalories, 
-  calculateMacros, 
-  calculateWaterIntake, 
+import {
+  calculateBMR,
+  calculateTDEE,
+  calculateTargetCalories,
+  calculateMacros,
+  calculateWaterIntake,
   calculateAge,
   distributeMacrosAcrossMeals,
   checkRedFlags
 } from '@/utils/calculations';
 import { generateRecipe, MealType } from './recipeService';
 import { sampleExercises } from '@/data/sampleData';
+import { createSeededRng, type Rng } from '@/utils/random';
 
 // Exercise database organized by muscle group and difficulty
 const EXERCISE_DATABASE: Record<string, Exercise[]> = {
@@ -214,7 +215,8 @@ function generateDynamicGroceryList(weeklyMealPlan: MealPlan[]): GroceryItem[] {
 function selectExercisesForSession(
   sessionType: 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body',
   experience: string,
-  availableEquipment: string[]
+  availableEquipment: string[],
+  rng: Rng = createSeededRng(`session-${sessionType}-${experience}-${Date.now()}`)
 ): Exercise[] {
   const expConfig = EXPERIENCE_ADJUSTMENTS[experience] || EXPERIENCE_ADJUSTMENTS.intermediate;
   let muscleGroups: string[] = [];
@@ -246,8 +248,8 @@ function selectExercisesForSession(
       .filter(ex => expConfig.complexityLevel.includes(ex.difficulty));
     
     if (muscleExercises.length > 0) {
-      // Shuffle and pick
-      const shuffled = muscleExercises.sort(() => Math.random() - 0.5);
+      // Deterministic shuffle — same seed = same exercises. Replaces Math.random().
+      const shuffled = rng.shuffle(muscleExercises);
       const exercisesToAdd = sessionType === 'full_body' ? 1 : Math.min(2, shuffled.length);
       selectedExercises.push(...shuffled.slice(0, exercisesToAdd));
     }
