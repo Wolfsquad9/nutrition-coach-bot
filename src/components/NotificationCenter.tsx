@@ -1,21 +1,23 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Bell, Dumbbell, Utensils, Trophy, Calendar, Check, type LucideIcon } from 'lucide-react';
+import { Bell, Dumbbell, Utensils, Trophy, Calendar, type LucideIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface Notification {
-  id: string;
-  type: 'workout' | 'meal' | 'progress' | 'achievement';
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-  icon: LucideIcon;
-}
+import { useAuth } from '@/hooks/useAuth';
+import {
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  fetchNotificationSettings,
+  upsertNotificationSettings,
+  relativeTime,
+  type NotificationRow,
+  type NotificationIconKey,
+} from '@/services/notifications';
+import { DEFAULT_NOTIFICATION_SETTINGS } from '@/services/notifications/settings';
 
 interface NotificationSettings {
   workoutReminders: boolean;
@@ -25,147 +27,133 @@ interface NotificationSettings {
   reminderTime: string;
 }
 
+const ICON_MAP: Record<NotificationIconKey, LucideIcon> = {
+  Dumbbell,
+  Utensils,
+  Trophy,
+  Calendar,
+  Bell,
+};
+
 export const NotificationCenter = ({ clientId }: { clientId: string }) => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [settings, setSettings] = useState<NotificationSettings>({
-    workoutReminders: true,
-    mealReminders: true,
-    progressUpdates: true,
-    achievements: true,
-    reminderTime: '09:00'
+    workoutReminders: DEFAULT_NOTIFICATION_SETTINGS.workout_reminders,
+    mealReminders: DEFAULT_NOTIFICATION_SETTINGS.meal_reminders,
+    progressUpdates: DEFAULT_NOTIFICATION_SETTINGS.progress_updates,
+    achievements: DEFAULT_NOTIFICATION_SETTINGS.achievements,
+    reminderTime: DEFAULT_NOTIFICATION_SETTINGS.reminder_time,
   });
   const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
 
-  const sendNotification = useCallback((type: Notification['type'], title: string, message: string) => {
-    const iconMap = {
-      workout: Dumbbell,
-      meal: Utensils,
-      progress: Calendar,
-      achievement: Trophy
+  // Load notifications + settings from Supabase on mount + when client/auth changes
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!isAuthenticated || !clientId) return;
+      const [{ data: rows }, { data: dbSettings }] = await Promise.all([
+        fetchNotifications(clientId),
+        fetchNotificationSettings(clientId),
+      ]);
+      if (cancelled) return;
+      if (rows) setNotifications(rows);
+      if (dbSettings) {
+        setSettings({
+          workoutReminders: dbSettings.workout_reminders,
+          mealReminders: dbSettings.meal_reminders,
+          progressUpdates: dbSettings.progress_updates,
+          achievements: dbSettings.achievements,
+          reminderTime: dbSettings.reminder_time.slice(0, 5), // HH:MM:SS -> HH:MM
+        });
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
     };
+  }, [clientId, isAuthenticated]);
 
-    const newNotification: Notification = {
-      id: Date.now().toString(),
-      type,
-      title,
-      message,
-      time: 'Just now',
-      read: false,
-      icon: iconMap[type as keyof typeof iconMap]
-    };
-
-    setNotifications(prev => [newNotification, ...prev]);
-    
-    // Browser notification if permission granted
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, {
-        body: message,
-        icon: '/favicon.ico'
+  // Mark a single notification as read (DB + optimistic UI)
+  const markAsRead = async (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true, read_at: new Date().toISOString() } : n))
+    );
+    const { error } = await markNotificationRead(id);
+    if (error) {
+      toast({
+        title: 'Could not mark as read',
+        description: error,
+        variant: 'destructive',
       });
     }
-
-    toast({
-      title,
-      description: message,
-    });
-  }, [toast]);
-
-  useEffect(() => {
-    // Load settings from localStorage
-    const savedSettings = localStorage.getItem(`notifications_settings_${clientId}`);
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
-    }
-
-    // Initialize with sample notifications
-    const sampleNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'workout',
-        title: 'Time to Train!',
-        message: 'Upper Body workout scheduled for today',
-        time: '08:00',
-        read: false,
-        icon: Dumbbell
-      },
-      {
-        id: '2',
-        type: 'meal',
-        title: 'Meal Prep Reminder',
-        message: 'Don\'t forget to prepare tomorrow\'s meals',
-        time: '18:00',
-        read: false,
-        icon: Utensils
-      },
-      {
-        id: '3',
-        type: 'achievement',
-        title: 'Milestone Reached!',
-        message: 'You\'ve completed 10 workouts this month',
-        time: 'Yesterday',
-        read: true,
-        icon: Trophy
-      },
-      {
-        id: '4',
-        type: 'progress',
-        title: 'Weekly Check-in',
-        message: 'Time to log your weekly progress',
-        time: '2 days ago',
-        read: true,
-        icon: Calendar
-      }
-    ];
-    setNotifications(sampleNotifications);
-
-    // Simulate real-time notifications
-    if (settings.workoutReminders) {
-      const timer = setTimeout(() => {
-        sendNotification('workout', 'Workout Reminder', 'Time for your afternoon session!');
-      }, 10000); // Send after 10 seconds
-      return () => clearTimeout(timer);
-    }
-  }, [clientId, settings.workoutReminders, sendNotification]);
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    );
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev =>
-      prev.map(notif => ({ ...notif, read: true }))
+  // Mark all unread as read (DB + optimistic UI)
+  const markAllAsRead = async () => {
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    setNotifications((prev) =>
+      prev.map((n) => (n.read ? n : { ...n, read: true, read_at: new Date().toISOString() }))
     );
+    const { error } = await markAllNotificationsRead(clientId);
+    if (error) {
+      toast({
+        title: 'Could not mark all as read',
+        description: error,
+        variant: 'destructive',
+      });
+    }
   };
 
-  const updateSettings = <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    localStorage.setItem(`notifications_settings_${clientId}`, JSON.stringify(newSettings));
-    
+  // Persist a single setting field to Supabase
+  const updateSettings = async <K extends keyof NotificationSettings>(
+    key: K,
+    value: NotificationSettings[K]
+  ) => {
+    const next = { ...settings, [key]: value };
+    setSettings(next);
+
+    // Map local field names to DB columns
+    const patch: Record<string, unknown> = {};
+    if (key === 'workoutReminders') patch.workout_reminders = value;
+    else if (key === 'mealReminders') patch.meal_reminders = value;
+    else if (key === 'progressUpdates') patch.progress_updates = value;
+    else if (key === 'achievements') patch.achievements = value;
+    else if (key === 'reminderTime') patch.reminder_time = value;
+
+    const { error } = await upsertNotificationSettings(clientId, patch);
+    if (error) {
+      toast({
+        title: 'Could not save settings',
+        description: error,
+        variant: 'destructive',
+      });
+      return;
+    }
     toast({
-      title: "Settings Updated",
-      description: "Notification preferences have been saved.",
+      title: 'Settings Updated',
+      description: 'Notification preferences have been saved.',
     });
   };
 
-  const requestNotificationPermission = async () => {
+  const requestNotificationPermission = useCallback(async () => {
     if ('Notification' in window && Notification.permission === 'default') {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
         toast({
-          title: "Notifications Enabled",
+          title: 'Notifications Enabled',
           description: "You'll now receive browser notifications.",
         });
       }
     }
-  };
+  }, [toast]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
 
   return (
     <Card className="p-6 shadow-card">
@@ -258,15 +246,15 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
 
       {/* Notifications List */}
       <div className="space-y-3">
-        {notifications.map(notification => {
-          const Icon = notification.icon;
+        {notifications.map((notification) => {
+          const Icon = ICON_MAP[notification.icon] ?? Bell;
           return (
             <div
               key={notification.id}
               className={`p-4 border rounded-lg transition-all cursor-pointer ${
                 notification.read ? 'border-border bg-card' : 'border-primary/30 bg-primary/5'
               }`}
-              onClick={() => markAsRead(notification.id)}
+              onClick={() => !notification.read && markAsRead(notification.id)}
             >
               <div className="flex items-start gap-3">
                 <div className={`p-2 rounded-sm border ${
@@ -289,7 +277,7 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
                       </p>
                     </div>
                     <span className="text-xs text-muted-foreground">
-                      {notification.time}
+                      {relativeTime(notification.created_at)}
                     </span>
                   </div>
                 </div>
