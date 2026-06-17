@@ -17,9 +17,9 @@ interface Props {
 }
 
 const severityConfig = {
-  red: { icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200' },
-  yellow: { icon: Info, color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200' },
-  green: { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50', border: 'border-green-200' },
+  red: { icon: AlertTriangle, color: 'text-danger', bg: 'bg-danger/10', border: 'border-danger/30' },
+  yellow: { icon: Info, color: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/30' },
+  green: { icon: CheckCircle, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/30' },
 } as const;
 
 export default function CoachAlertFeed({ trainerId, onNavigateToClient }: Props) {

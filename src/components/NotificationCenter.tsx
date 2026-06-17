@@ -174,7 +174,7 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
           <Bell className="w-5 h-5 text-primary" />
           <h2 className="text-2xl font-bold text-primary">Smart Notifications</h2>
           {unreadCount > 0 && (
-            <Badge className="bg-destructive text-white">{unreadCount}</Badge>
+            <Badge variant="destructive">{unreadCount}</Badge>
           )}
         </div>
         <div className="flex gap-2">
@@ -248,7 +248,7 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
             </div>
             <Button
               onClick={requestNotificationPermission}
-              className="w-full bg-gradient-primary text-white"
+              className="w-full"
             >
               Enable Browser Notifications
             </Button>
@@ -269,8 +269,8 @@ export const NotificationCenter = ({ clientId }: { clientId: string }) => {
               onClick={() => markAsRead(notification.id)}
             >
               <div className="flex items-start gap-3">
-                <div className={`p-2 rounded-full ${
-                  notification.read ? 'bg-muted' : 'bg-primary/10'
+                <div className={`p-2 rounded-sm border ${
+                  notification.read ? 'border-border bg-transparent' : 'border-primary/40 bg-transparent'
                 }`}>
                   <Icon className={`w-4 h-4 ${
                     notification.read ? 'text-muted-foreground' : 'text-primary'

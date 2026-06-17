@@ -128,7 +128,7 @@ export default function ClientPage() {
           <p className="text-muted-foreground mb-6">
             The database contains no clients. Create your first client to get started.
           </p>
-          <Button onClick={handleStartNewClient} className="bg-gradient-primary text-white">
+          <Button onClick={handleStartNewClient}>
             <Plus className="mr-2 h-4 w-4" />
             Create new client
           </Button>
@@ -153,7 +153,7 @@ export default function ClientPage() {
               {isCreatingNewClient ? 'New Client' : `Client: ${activeClient ? getClientLabel(activeClient) : ''}`}
             </h2>
             {!isCreatingNewClient && hasActiveClient && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm border border-primary/40 text-primary text-[10px] font-semibold font-display uppercase tracking-[0.08em]">
                 <CheckCircle className="h-3 w-3" />
                 Loaded
               </span>
@@ -169,7 +169,7 @@ export default function ClientPage() {
             {isCreatingNewClient && (
               <>
                 <Button variant="outline" onClick={handleCancelNewClient}>Cancel</Button>
-                <Button onClick={handleSaveClient} className="bg-gradient-primary text-white">
+                <Button onClick={handleSaveClient}>
                   <Save className="mr-2 h-4 w-4" />
                   Save
                 </Button>
@@ -265,7 +265,7 @@ export default function ClientPage() {
 
         {hasActiveClient && !isCreatingNewClient && (
           <div className="mt-6 flex gap-2">
-            <Button onClick={handleGeneratePlan} disabled={isGenerating} className="bg-gradient-primary text-white shadow-glow hover:shadow-xl">
+            <Button onClick={handleGeneratePlan} disabled={isGenerating}>
               {isGenerating ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating plan...</>
               ) : (

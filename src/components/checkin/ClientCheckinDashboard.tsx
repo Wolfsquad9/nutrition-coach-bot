@@ -83,7 +83,7 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
 
         {/* Streak */}
         <Card className="p-4 shadow-card text-center">
-          <Flame className="h-6 w-6 mx-auto mb-1 text-orange-500" />
+          <Flame className="h-6 w-6 mx-auto mb-1 text-warning" />
           <p className="text-2xl font-bold text-primary">{streak?.current_streak ?? 0}</p>
           <p className="text-xs text-muted-foreground">Day Streak</p>
           {streak?.longest_streak && streak.longest_streak > 0 && (
@@ -96,9 +96,9 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
           {weightTrend !== null ? (
             <>
               {weightTrend > 0 ? (
-                <TrendingUp className="h-6 w-6 mx-auto mb-1 text-red-500" />
+                <TrendingUp className="h-6 w-6 mx-auto mb-1 text-danger" />
               ) : weightTrend < 0 ? (
-                <TrendingDown className="h-6 w-6 mx-auto mb-1 text-green-500" />
+                <TrendingDown className="h-6 w-6 mx-auto mb-1 text-primary" />
               ) : (
                 <Minus className="h-6 w-6 mx-auto mb-1 text-muted-foreground" />
               )}

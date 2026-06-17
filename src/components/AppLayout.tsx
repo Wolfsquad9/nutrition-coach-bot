@@ -105,11 +105,11 @@ export default function AppLayout() {
 
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background to-card-hover flex items-center justify-center">
-        <Card className="p-8 shadow-card">
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="p-8">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Initializing authentication...</p>
+            <p className="tactical-label">Initializing authentication</p>
           </div>
         </Card>
       </div>
@@ -131,16 +131,25 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-card-hover">
-      <header className="bg-gradient-hero text-white py-6 px-4 shadow-xl">
+    <div className="min-h-screen bg-background">
+      <header className="bg-background border-b border-border py-5 px-4">
         <div className="container mx-auto flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-4xl font-bold">FitPlan Pro</h1>
-            <p className="text-white/90 mt-2">Professional Nutrition & Training Planning System</p>
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-1 bg-primary" aria-hidden="true" />
+            <div>
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+                FitPlan Pro
+              </h1>
+              <p className="tactical-label mt-1">Nutrition &amp; Training Command</p>
+            </div>
           </div>
           <div className="flex flex-col items-start gap-2 md:items-end">
-            {user?.email && <span className="text-sm text-white/85">Signed in as {user.email}</span>}
-            <Button variant="secondary" size="sm" onClick={handleLogout}>
+            {user?.email && (
+              <span className="font-body text-xs text-muted-foreground">
+                Signed in as <span className="text-foreground">{user.email}</span>
+              </span>
+            )}
+            <Button variant="outline" size="sm" onClick={handleLogout}>
               Logout
             </Button>
           </div>
@@ -160,7 +169,7 @@ export default function AppLayout() {
         )}
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-card shadow-card">
+          <TabsList className="grid w-full grid-cols-6 bg-card border border-border">
             {TAB_ROUTES.map(tab => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}

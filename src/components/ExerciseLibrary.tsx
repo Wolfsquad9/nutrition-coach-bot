@@ -127,7 +127,6 @@ export const ExerciseLibrary = ({ onSelectExercise }: ExerciseLibraryProps) => {
               variant={selectedCategory === category ? 'default' : 'outline'}
               size="sm"
               onClick={() => setSelectedCategory(category)}
-              className={selectedCategory === category ? 'bg-gradient-primary text-white' : ''}
             >
               {category.charAt(0).toUpperCase() + category.slice(1)}
             </Button>

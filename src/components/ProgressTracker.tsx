@@ -93,7 +93,6 @@ export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) 
           </div>
           <Button 
             onClick={() => setShowAddEntry(!showAddEntry)}
-            className="bg-gradient-primary text-white"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Entry
@@ -167,7 +166,7 @@ export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) 
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button onClick={handleAddEntry} className="bg-gradient-primary text-white">
+              <Button onClick={handleAddEntry}>
                 Save Entry
               </Button>
               <Button variant="outline" onClick={() => setShowAddEntry(false)}>
@@ -219,10 +218,10 @@ export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) 
                 yAxisId="adherence"
                 type="monotone" 
                 dataKey="nutritionAdherence" 
-                stroke="hsl(var(--accent))" 
+                stroke="hsl(var(--secondary))" 
                 strokeWidth={2}
                 name="Adherence %"
-                dot={{ fill: 'hsl(var(--accent))' }}
+                dot={{ fill: 'hsl(var(--secondary))' }}
               />
             </LineChart>
           </ResponsiveContainer>

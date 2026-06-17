@@ -673,7 +673,7 @@ export default function EnhancedIngredientManager({
               <Button
                 onClick={handleGenerateRecipe}
                 disabled={isGeneratingRecipe || isGeneratingPlan}
-                className="flex-1 bg-gradient-primary text-white shadow-glow"
+                className="flex-1"
               >
                 {isGeneratingRecipe ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Generate Recipe
@@ -681,7 +681,8 @@ export default function EnhancedIngredientManager({
               <Button
                 onClick={() => generateAIPlan('full')}
                 disabled={isGeneratingPlan || isGeneratingRecipe}
-                className="flex-1 bg-gradient-accent text-white shadow-glow"
+                variant="secondary"
+                className="flex-1"
               >
                 {isGeneratingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Generate Full Plan
@@ -720,7 +721,7 @@ export default function EnhancedIngredientManager({
                 {/* Macros Display */}
                 <div className="grid grid-cols-4 gap-3">
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
-                    <Flame className="h-4 w-4 mx-auto mb-1 text-orange-500" />
+                    <Flame className="h-4 w-4 mx-auto mb-1 text-warning" />
                     <p className="text-lg font-bold text-foreground">{generatedRecipe.macrosPerServing.calories}</p>
                     <p className="text-xs text-muted-foreground">kcal</p>
                   </div>
@@ -729,11 +730,11 @@ export default function EnhancedIngredientManager({
                     <p className="text-xs text-muted-foreground">Protein</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
-                    <p className="text-lg font-bold text-amber-500">{generatedRecipe.macrosPerServing.carbs}g</p>
+                    <p className="text-lg font-bold text-warning">{generatedRecipe.macrosPerServing.carbs}g</p>
                     <p className="text-xs text-muted-foreground">Carbs</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
-                    <p className="text-lg font-bold text-emerald-500">{generatedRecipe.macrosPerServing.fat}g</p>
+                    <p className="text-lg font-bold text-secondary">{generatedRecipe.macrosPerServing.fat}g</p>
                     <p className="text-xs text-muted-foreground">Fat</p>
                   </div>
                 </div>

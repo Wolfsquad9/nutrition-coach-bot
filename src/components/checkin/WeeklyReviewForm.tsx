@@ -108,7 +108,7 @@ export default function WeeklyReviewForm({ clientId, userId }: Props) {
     return (
       <Card className="p-6 shadow-card">
         <div className="text-center py-8">
-          <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+          <CheckCircle className="h-12 w-12 text-primary mx-auto mb-4" />
           <h3 className="text-xl font-bold text-primary">This Week's Review Complete</h3>
           <p className="text-muted-foreground mt-2">
             Bodyweight: {bodyweightKg ? `${bodyweightKg} kg` : 'Not recorded'}

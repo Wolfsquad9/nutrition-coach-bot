@@ -19,7 +19,7 @@ export default function CoachCheckinDashboard({ trainerId, onNavigateToClient }:
   if (error) {
     return (
       <Card className="p-6 shadow-card">
-        <p className="text-red-500 text-center">Failed to load dashboard: {error}</p>
+        <p className="text-danger text-center">Failed to load dashboard: {error}</p>
       </Card>
     );
   }
@@ -50,11 +50,11 @@ export default function CoachCheckinDashboard({ trainerId, onNavigateToClient }:
           <p className="text-xs text-muted-foreground">Total Clients</p>
         </Card>
         <Card className="p-4 shadow-card text-center">
-          <p className="text-2xl font-bold text-green-600">{avgCompliance}%</p>
+          <p className="text-2xl font-bold text-primary">{avgCompliance}%</p>
           <p className="text-xs text-muted-foreground">Avg Compliance</p>
         </Card>
         <Card className="p-4 shadow-card text-center">
-          <p className="text-2xl font-bold text-red-500">{atRiskCount}</p>
+          <p className="text-2xl font-bold text-danger">{atRiskCount}</p>
           <p className="text-xs text-muted-foreground">At Risk</p>
         </Card>
         <Card className="p-4 shadow-card text-center">
