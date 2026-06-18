@@ -25,6 +25,23 @@ export interface LogEvent {
 const RING_SIZE = 100;
 const ring: LogEvent[] = [];
 
+/**
+ * Optional Sentry bridge. Imported dynamically so the bundle isn't penalized
+ * when Sentry is not configured (no DSN).
+ */
+async function reportToSentry(event: LogEvent): Promise<void> {
+  if (event.level !== 'error') return;
+  if (!import.meta.env.VITE_SENTRY_DSN) return;
+  try {
+    const mod = await import('@sentry/react');
+    mod.captureException(new Error(event.message), {
+      extra: { source: event.source, ...event.context },
+    });
+  } catch {
+    // Sentry not installed or network down — silently skip.
+  }
+}
+
 /** Append an event to the in-memory ring buffer. Pure-data, never throws. */
 export function logEvent(event: Omit<LogEvent, 'timestamp'>): void {
   try {
@@ -45,6 +62,9 @@ export function logEvent(event: Omit<LogEvent, 'timestamp'>): void {
       case 'warn':  console.warn(...args); break;
       case 'error': console.error(...args); break;
     }
+
+    // Fire-and-forget Sentry report (errors only).
+    void reportToSentry(full);
   } catch {
     // Last-ditch swallow. Logging must never crash the app.
   }

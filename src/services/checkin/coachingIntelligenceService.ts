@@ -11,6 +11,10 @@
 import type { AdherenceTrend, ProgressTrajectory, ProgressTrajectoryData, CoachingSummary } from '@/types/checkin';
 import { toComplianceScore } from '@/types/checkin';
 
+/** Mock data is dev-only. In production build, refuse to return fake data. */
+const IS_DEV = import.meta.env.DEV;
+import { createSeededRng } from '@/utils/random';
+
 /**
  * Get adherence trend for a client over a given period.
  *
@@ -20,14 +24,23 @@ export async function getAdherenceTrend(
   clientId: string,
   period: '7d' | '30d' | '90d'
 ): Promise<{ trend: AdherenceTrend | null; error: string | null }> {
-  // Stub: return mock data
+  // In production, refuse to return fake data. Real aggregation must be wired.
+  if (!IS_DEV) {
+    return {
+      trend: null,
+      error: 'getAdherenceTrend is a dev-only stub. Wire to real data before shipping.',
+    };
+  }
+
   const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
+  // Seeded PRNG so the same client+period always returns the same dev trend.
+  const rng = createSeededRng(`adherence-${clientId}-${period}`);
   const dataPoints = Array.from({ length: days }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (days - 1 - i));
     return {
       date: d.toISOString().slice(0, 10),
-      adherence: Math.round(60 + Math.random() * 35),
+      adherence: Math.round(60 + rng.next() * 35),
     };
   });
 

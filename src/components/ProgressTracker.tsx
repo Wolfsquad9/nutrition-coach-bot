@@ -6,13 +6,15 @@ import { Label } from '@/components/ui/label';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, TrendingDown, Camera, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface ProgressEntry {
-  date: string;
-  weight: number;
-  bodyFat?: number;
-  nutritionAdherence: number;
-}
+import { useAuth } from '@/hooks/useAuth';
+import {
+  fetchProgressEntries,
+  upsertProgressEntry,
+  todayIso,
+  latestWeightDelta,
+  averageAdherence,
+  type ProgressEntryView,
+} from '@/services/progress';
 
 interface ProgressTrackerProps {
   clientId: string;
@@ -20,68 +22,106 @@ interface ProgressTrackerProps {
 }
 
 export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) => {
-  const [progressData, setProgressData] = useState<ProgressEntry[]>([]);
+  const [progressData, setProgressData] = useState<ProgressEntryView[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showAddEntry, setShowAddEntry] = useState(false);
-  const [newEntry, setNewEntry] = useState<Partial<ProgressEntry>>({
+  const [newEntry, setNewEntry] = useState<Partial<ProgressEntryView>>({
     weight: 0,
     bodyFat: 0,
     nutritionAdherence: 85
   });
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
 
+  // Load entries from Supabase on mount + when client/auth changes
   useEffect(() => {
-    // Load saved progress from localStorage
-    const saved = localStorage.getItem(`progress_${clientId}`);
-    if (saved) {
-      setProgressData(JSON.parse(saved));
-    } else {
-      // Initialize with sample data
-      const sampleData: ProgressEntry[] = [
-        { date: '2024-01-01', weight: 85, bodyFat: 22, nutritionAdherence: 80 },
-        { date: '2024-01-15', weight: 84.5, bodyFat: 21.5, nutritionAdherence: 85 },
-        { date: '2024-02-01', weight: 83.8, bodyFat: 20.8, nutritionAdherence: 90 },
-        { date: '2024-02-15', weight: 83.2, bodyFat: 20.2, nutritionAdherence: 88 },
-      ];
-      setProgressData(sampleData);
+    let cancelled = false;
+    async function load() {
+      if (!isAuthenticated || !clientId) {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      const { data, error } = await fetchProgressEntries(clientId);
+      if (cancelled) return;
+      if (error) {
+        toast({
+          title: 'Could not load progress',
+          description: error,
+          variant: 'destructive',
+        });
+        setProgressData([]);
+      } else {
+        setProgressData(data ?? []);
+      }
+      setIsLoading(false);
     }
-  }, [clientId]);
-
-  const handleAddEntry = () => {
-    const entry: ProgressEntry = {
-      date: new Date().toISOString().split('T')[0],
-      weight: newEntry.weight || 0,
-      bodyFat: newEntry.bodyFat,
-      nutritionAdherence: newEntry.nutritionAdherence || 0
+    void load();
+    return () => {
+      cancelled = true;
     };
-    
-    const updatedData = [...progressData, entry].sort((a, b) => 
+  }, [clientId, isAuthenticated, toast]);
+
+  const handleAddEntry = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: 'Not signed in',
+        description: 'Please sign in to save progress entries.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const pendingId = `pending-${Date.now()}`;
+    const optimistic: ProgressEntryView = {
+      id: pendingId,
+      date: todayIso(),
+      weight: newEntry.weight ?? 0,
+      bodyFat: newEntry.bodyFat,
+      nutritionAdherence: newEntry.nutritionAdherence ?? 0,
+    };
+
+    // Optimistic update so the UI feels instant
+    const nextData = [...progressData, optimistic].sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
-    
-    setProgressData(updatedData);
-    localStorage.setItem(`progress_${clientId}`, JSON.stringify(updatedData));
-    
-    toast({
-      title: "Progress Updated",
-      description: "New progress entry has been added successfully.",
+    setProgressData(nextData);
+
+    const { data, error } = await upsertProgressEntry({
+      clientId,
+      date: optimistic.date,
+      weight: optimistic.weight,
+      bodyFat: optimistic.bodyFat ?? null,
+      nutritionAdherence: optimistic.nutritionAdherence,
     });
-    
+
+    if (error) {
+      // Roll back optimistic update
+      setProgressData(progressData);
+      toast({
+        title: 'Could not save progress',
+        description: error,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (data) {
+      // Replace optimistic entry with the server row (has the real id)
+      setProgressData(nextData.map((e) => (e.id === pendingId ? data : e)));
+    }
+
+    toast({
+      title: 'Progress Updated',
+      description: 'New progress entry has been added successfully.',
+    });
+
     setShowAddEntry(false);
     setNewEntry({ weight: 0, bodyFat: 0, nutritionAdherence: 85 });
   };
 
-  const getWeightChange = () => {
-    if (progressData.length < 2) return 0;
-    const latest = progressData[progressData.length - 1].weight;
-    const previous = progressData[progressData.length - 2].weight;
-    return latest - previous;
-  };
-
-  const getAverageAdherence = () => {
-    if (!progressData.length) return 0;
-    const sum = progressData.reduce((acc, entry) => acc + entry.nutritionAdherence, 0);
-    return Math.round(sum / progressData.length);
-  };
+  // Pure helpers from the service keep business logic in one place
+  const weightDelta = latestWeightDelta(progressData);
+  const avgAdherence = averageAdherence(progressData);
 
   return (
     <div className="space-y-6">
@@ -91,9 +131,7 @@ export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) 
             <h2 className="text-2xl font-bold text-primary">Progress Tracking</h2>
             <p className="text-muted-foreground">Track {clientName}'s journey</p>
           </div>
-          <Button 
-            onClick={() => setShowAddEntry(!showAddEntry)}
-          >
+          <Button onClick={() => setShowAddEntry(!showAddEntry)}>
             <Plus className="w-4 h-4 mr-2" />
             Add Entry
           </Button>
@@ -105,26 +143,26 @@ export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) 
             <p className="text-muted-foreground text-sm">Weight Change</p>
             <div className="flex items-center gap-2">
               <p className="text-2xl font-bold">
-                {getWeightChange() > 0 ? '+' : ''}{getWeightChange().toFixed(1)} kg
+                {weightDelta > 0 ? '+' : ''}{weightDelta.toFixed(1)} kg
               </p>
-              {getWeightChange() < 0 ? (
+              {weightDelta < 0 ? (
                 <TrendingDown className="w-5 h-5 text-success" />
-              ) : getWeightChange() > 0 ? (
+              ) : weightDelta > 0 ? (
                 <TrendingUp className="w-5 h-5 text-warning" />
               ) : null}
             </div>
           </div>
-          
+
           <div className="bg-gradient-card p-4 rounded-lg">
             <p className="text-muted-foreground text-sm">Current Weight</p>
             <p className="text-2xl font-bold text-primary">
               {progressData.length ? progressData[progressData.length - 1].weight : '—'} kg
             </p>
           </div>
-          
+
           <div className="bg-gradient-card p-4 rounded-lg">
             <p className="text-muted-foreground text-sm">Avg. Adherence</p>
-            <p className="text-2xl font-bold text-accent">{getAverageAdherence()}%</p>
+            <p className="text-2xl font-bold text-accent">{avgAdherence}%</p>
           </div>
         </div>
 
@@ -166,9 +204,7 @@ export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) 
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button onClick={handleAddEntry}>
-                Save Entry
-              </Button>
+              <Button onClick={handleAddEntry}>Save Entry</Button>
               <Button variant="outline" onClick={() => setShowAddEntry(false)}>
                 Cancel
               </Button>
@@ -181,50 +217,61 @@ export const ProgressTracker = ({ clientId, clientName }: ProgressTrackerProps) 
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={progressData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis 
-                dataKey="date" 
+              <XAxis
+                dataKey="date"
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
               />
-              <YAxis 
+              <YAxis
                 yAxisId="weight"
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
               />
-              <YAxis 
+              <YAxis
                 yAxisId="adherence"
                 orientation="right"
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
               />
-              <Tooltip 
-                contentStyle={{ 
+              <Tooltip
+                contentStyle={{
                   backgroundColor: 'hsl(var(--card))',
                   border: '1px solid hsl(var(--border))',
                   borderRadius: '8px'
                 }}
               />
               <Legend />
-              <Line 
+              <Line
                 yAxisId="weight"
-                type="monotone" 
-                dataKey="weight" 
-                stroke="hsl(var(--primary))" 
+                type="monotone"
+                dataKey="weight"
+                stroke="hsl(var(--primary))"
                 strokeWidth={2}
                 name="Weight (kg)"
                 dot={{ fill: 'hsl(var(--primary))' }}
               />
-              <Line 
+              <Line
                 yAxisId="adherence"
-                type="monotone" 
-                dataKey="nutritionAdherence" 
-                stroke="hsl(var(--secondary))" 
+                type="monotone"
+                dataKey="nutritionAdherence"
+                stroke="hsl(var(--secondary))"
                 strokeWidth={2}
                 name="Adherence %"
                 dot={{ fill: 'hsl(var(--secondary))' }}
               />
             </LineChart>
           </ResponsiveContainer>
+        )}
+
+        {isLoading && (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            Loading progress…
+          </p>
+        )}
+        {!isLoading && progressData.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No progress entries yet. Click "Add Entry" to start tracking.
+          </p>
         )}
 
         {/* Photo Upload Placeholder */}
