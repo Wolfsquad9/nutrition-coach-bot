@@ -31,3 +31,4 @@ supabase/.temp/
 build_output.txt
 vitest_results.txt
 ts_errors.txt
+.tmp-tests/
