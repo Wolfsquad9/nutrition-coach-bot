@@ -23,12 +23,29 @@ import {
   MIN_INGREDIENT_GRAMS,
   DAY_NAMES,
 } from './recipe/constants';
-export type { MealType };
+import {
+  calculateTotalMacros,
+  determineDietTypes,
+  determineAllergens,
+  determineEquipment,
+  checkMacroTolerance,
+} from './recipe/nutritionCalculations';
+import type {
+  GeneratedRecipe,
+  FullDayMealPlanResult,
+  WeeklyMealPlanResult,
+  ToleranceCheckResult,
+} from './recipe/types';
 
-export interface GeneratedRecipe extends Recipe {
-  suitableFor: MealType;
-  selectedIngredients: IngredientData[];
-}
+export type { MealType };
+export type { GeneratedRecipe, FullDayMealPlanResult, WeeklyMealPlanResult };
+export {
+  calculateTotalMacros,
+  determineDietTypes,
+  determineAllergens,
+  determineEquipment,
+  checkMacroTolerance,
+};
 
 function getSuitableIngredients(
   selectedFoods: string[],
@@ -151,18 +168,7 @@ function generateInstructions(
   return instructions;
 }
 
-function calculateTotalMacros(ingredients: IngredientData[]): Macros {
-  return ingredients.reduce((total, ing) => {
-    const macros = calculateMacros(ing, ing.typical_serving_size_g);
-    return {
-      calories: total.calories + macros.calories,
-      protein: total.protein + macros.protein,
-      carbs: total.carbs + macros.carbs,
-      fat: total.fat + macros.fat,
-      fiber: (total.fiber || 0) + (macros.fiber || 0),
-    };
-  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
-}
+// calculateTotalMacros extracted to ./recipe/nutritionCalculations
 
 export function generateRecipe(
   selectedFoods: string[],
@@ -237,152 +243,14 @@ export function generateRecipe(
   return recipe;
 }
 
-function determineDietTypes(ingredients: IngredientData[]): string[] {
-  const dietTypes: string[] = [];
-  const hasAnimalProtein = ingredients.some(i => 
-    ['chicken-breast', 'salmon', 'turkey-breast', 'tuna'].includes(i.id)
-  );
-  const hasDairy = ingredients.some(i => 
-    ['greek-yogurt', 'cottage-cheese'].includes(i.id)
-  );
-  const hasEggs = ingredients.some(i => i.id === 'eggs');
-  
-  if (!hasAnimalProtein && !hasDairy && !hasEggs) {
-    dietTypes.push('vegan');
-  } else if (!hasAnimalProtein) {
-    dietTypes.push('vegetarian');
-  }
-  
-  const isGlutenFree = !ingredients.some(i => 
-    ['whole-wheat-pasta', 'whole-wheat-bread', 'barley', 'oats'].includes(i.id)
-  );
-  if (isGlutenFree) dietTypes.push('gluten-free');
-  
-  return dietTypes;
-}
-
-function determineAllergens(ingredients: IngredientData[]): string[] {
-  const allergens: string[] = [];
-  
-  if (ingredients.some(i => i.id === 'eggs')) allergens.push('eggs');
-  if (ingredients.some(i => ['greek-yogurt', 'cottage-cheese'].includes(i.id))) allergens.push('dairy');
-  if (ingredients.some(i => ['almonds', 'walnuts', 'peanut-butter'].includes(i.id))) allergens.push('nuts');
-  if (ingredients.some(i => ['salmon', 'tuna'].includes(i.id))) allergens.push('fish');
-  if (ingredients.some(i => i.id === 'tofu')) allergens.push('soy');
-  if (ingredients.some(i => ['whole-wheat-pasta', 'whole-wheat-bread', 'barley'].includes(i.id))) allergens.push('gluten');
-  
-  return allergens;
-}
-
-function determineEquipment(mealType: MealType): string[] {
-  switch (mealType) {
-    case 'breakfast':
-      return ['stove', 'pan', 'bowl'];
-    case 'lunch':
-    case 'dinner':
-      return ['stove', 'pan', 'cutting board', 'knife'];
-    case 'snack':
-      return ['bowl'];
-    default:
-      return ['bowl'];
-  }
-}
+// determineDietTypes, determineAllergens, determineEquipment extracted to ./recipe/nutritionCalculations
 
 export function getMealSuitability(ingredientId: string): MealType[] {
   const ingredient = coreIngredients.find(ing => ing.id === ingredientId);
   return ingredient?.allowedMeals || ['lunch', 'dinner'];
 }
 
-// MacroTargets is imported from @/types
-
-interface MacroVariance {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-}
-
-interface ToleranceCheckResult {
-  withinTolerance: boolean;
-  outOfTolerance: {
-    calories: boolean;
-    protein: boolean;
-    carbs: boolean;
-    fat: boolean;
-  };
-  percentageVariance: {
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-  };
-}
-
-export interface FullDayMealPlanResult {
-  dailyPlan: import('@/data/ingredientDatabase').DailyMealPlan;
-  totalMacros: Macros;
-  targetMacros: MacroTargets;
-  variance: MacroVariance;
-  convergenceInfo?: {
-    converged: boolean;
-    iterations: number;
-    warningMessage?: string;
-    /** True if scientific constraints prevented full macro convergence */
-    realismConstraintHit: boolean;
-    constraintsHitDetails?: Array<{
-      ingredientId: string;
-      ingredientName: string;
-      maxGrams: number;
-      requestedGrams: number;
-    }>;
-  };
-}
-
-export interface WeeklyMealPlanResult {
-  days: {
-    dayNumber: number;
-    dayName: string;
-    plan: FullDayMealPlanResult;
-  }[];
-  weeklyTotalMacros: Macros;
-  weeklyTargetMacros: MacroTargets;
-  weeklyVariance: {
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-  };
-}
-
-/**
- * Checks if macros are within acceptable tolerance of targets
- */
-function checkMacroTolerance(
-  actual: Macros,
-  target: MacroTargets
-): ToleranceCheckResult {
-  const calcPercentVariance = (actualVal: number, targetVal: number) => 
-    targetVal > 0 ? (actualVal - targetVal) / targetVal : 0;
-
-  const percentageVariance = {
-    calories: calcPercentVariance(actual.calories, target.calories),
-    protein: calcPercentVariance(actual.protein, target.protein),
-    carbs: calcPercentVariance(actual.carbs, target.carbs),
-    fat: calcPercentVariance(actual.fat, target.fat),
-  };
-
-  const outOfTolerance = {
-    calories: Math.abs(percentageVariance.calories) > MACRO_TOLERANCES.calories,
-    protein: Math.abs(percentageVariance.protein) > MACRO_TOLERANCES.protein,
-    carbs: Math.abs(percentageVariance.carbs) > MACRO_TOLERANCES.carbs,
-    fat: Math.abs(percentageVariance.fat) > MACRO_TOLERANCES.fat,
-  };
-
-  const withinTolerance = !outOfTolerance.calories && !outOfTolerance.protein && 
-                          !outOfTolerance.carbs && !outOfTolerance.fat;
-
-  return { withinTolerance, outOfTolerance, percentageVariance };
-}
+// checkMacroTolerance and types extracted to ./recipe/nutritionCalculations & ./recipe/types
 
 /**
  * Adjusts ingredient quantities using science-based hierarchy and constraints.
