@@ -17,6 +17,10 @@ const AuthContext = (0, react_1.createContext)({
     isLoading: true,
     isAuthenticated: false,
     signOut: async () => { },
+    userRole: null,
+    isClient: false,
+    isCoach: false,
+    clientId: null,
 });
 function AuthProvider({ children }) {
     const [user, setUser] = (0, react_1.useState)(null);
@@ -44,6 +48,10 @@ function AuthProvider({ children }) {
         setUser(null);
         setSession(null);
     };
+    const userRole = user ? (user.user_metadata?.role ?? 'coach') : null;
+    const isClient = userRole === 'client';
+    const isCoach = userRole === 'coach';
+    const clientId = user ? (user.user_metadata?.client_id ?? null) : null;
     const value = {
         user,
         session,
@@ -51,6 +59,10 @@ function AuthProvider({ children }) {
         isLoading,
         isAuthenticated: !!session,
         signOut,
+        userRole,
+        isClient,
+        isCoach,
+        clientId,
     };
     return ((0, jsx_runtime_1.jsx)(AuthContext.Provider, { value: value, children: children }));
 }

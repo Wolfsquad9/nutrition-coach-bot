@@ -13,6 +13,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { NotificationRow, NotificationType, NotificationIconKey } from './types';
+export type { NotificationRow, NotificationIconKey };
 import type { NotificationSettingsRow, NotificationScope } from './settings';
 import { DEFAULT_NOTIFICATION_SETTINGS } from './settings';
 

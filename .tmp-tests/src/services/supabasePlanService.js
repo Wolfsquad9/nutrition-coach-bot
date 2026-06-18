@@ -10,18 +10,34 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.saveNutritionPlan = void 0;
+exports.buildLockedPlanPayload = buildLockedPlanPayload;
+exports.hashPlanPayload = hashPlanPayload;
 exports.checkPlanLockStatus = checkPlanLockStatus;
 exports.fetchCurrentPlan = fetchCurrentPlan;
 exports.lockNutritionPlan = lockNutritionPlan;
 exports.fetchPlanHistory = fetchPlanHistory;
 const client_1 = require("@/integrations/supabase/client");
 const profileService_1 = require("@/services/profileService");
+const snapshot_1 = require("@/domain/nutrition/snapshot");
 const constants_1 = require("@/domain/shared/constants");
 const getErrorMessage = (error, fallback) => {
     return error instanceof Error ? error.message : fallback;
 };
+function buildLockedPlanPayload(input) {
+    const lockedAt = input.lockedAt.toISOString();
+    return {
+        type: 'nutrition',
+        generatedAt: lockedAt,
+        lockedAt,
+        macroTargets: input.macroTargets,
+        weeklyPlan: input.weeklyPlan,
+        realismConstraintHit: input.realismConstraintHit,
+        constraintsHitDetails: input.constraintsHitDetails,
+        likedIngredients: input.likedIngredients,
+    };
+}
 // Simple hash function for payload deduplication
-function hashPayload(payload) {
+function hashPlanPayload(payload) {
     const str = JSON.stringify(payload);
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -104,7 +120,7 @@ async function fetchCurrentPlan(clientId) {
         // Get the current version payload, hash, and version number
         const { data: versionData, error: versionError } = await client_1.supabase
             .from('plan_versions')
-            .select('plan_payload, created_at, payload_hash, version_number')
+            .select('plan_payload, locked_snapshot_json, created_at, payload_hash, version_number')
             .eq('id', planData.current_version_id)
             .maybeSingle();
         if (versionError || !versionData) {
@@ -115,7 +131,9 @@ async function fetchCurrentPlan(clientId) {
             planId: planData.id,
             versionId: planData.current_version_id,
             createdAt: versionData.created_at,
-            snapshot: (versionData.plan_payload.locked_snapshot_json ?? null),
+            snapshot: versionData.locked_snapshot_json
+                ? (0, snapshot_1.deepFreeze)(versionData.locked_snapshot_json)
+                : null,
             payloadHash: versionData.payload_hash,
             versionNumber: versionData.version_number,
             error: null,
@@ -127,10 +145,10 @@ async function fetchCurrentPlan(clientId) {
     }
 }
 /**
- * Lock a nutrition plan - saves to DB and starts 7-day lock period
- * This is the ONLY way to persist a plan (drafts are NOT saved)
+ * Lock a nutrition plan through the atomic Supabase RPC.
+ * This is the ONLY client write path for locked plan versions.
  */
-async function lockNutritionPlan(clientId, weeklyPlan, macroTargets, likedIngredients, realismConstraintHit, constraintsHitDetails) {
+async function lockNutritionPlan(clientId, payload, lockedSnapshot, options) {
     try {
         // Ensure profile exists for FK constraint (critical for anonymous auth)
         const profileId = await (0, profileService_1.ensureProfileExists)();
@@ -139,94 +157,59 @@ async function lockNutritionPlan(clientId, weeklyPlan, macroTargets, likedIngred
                 success: false,
                 planId: null,
                 versionId: null,
+                versionNumber: null,
                 error: 'Not authenticated. Please refresh the page.',
             };
         }
-        const userId = profileId;
-        const now = new Date().toISOString();
-        // Create the payload with lock timestamp
-        const payload = {
-            type: 'nutrition',
-            generatedAt: now,
-            lockedAt: now, // Mark when plan was locked
-            macroTargets,
-            weeklyPlan,
-            realismConstraintHit,
-            constraintsHitDetails,
-            likedIngredients,
-        };
-        const payloadHash = hashPayload(payload);
-        // Check if a nutrition_plans record already exists for this client
-        const { data: existingPlan, error: existingError } = await client_1.supabase
-            .from('nutrition_plans')
-            .select('id')
-            .eq('client_id', clientId)
-            .eq('status', 'active')
-            .maybeSingle();
-        let planId;
-        if (existingPlan) {
-            // Use existing plan
-            planId = existingPlan.id;
-        }
-        else {
-            // Create new nutrition_plans record
-            const { data: newPlan, error: planError } = await client_1.supabase
-                .from('nutrition_plans')
-                .insert({
-                client_id: clientId,
-                created_by: userId,
-                plan_data: { type: 'nutrition', version: 1 },
-                status: 'active',
-            })
-                .select('id')
-                .single();
-            if (planError || !newPlan) {
-                console.error('Error creating nutrition plan:', planError);
-                return { success: false, planId: null, versionId: null, error: planError?.message || 'Failed to create plan' };
-            }
-            planId = newPlan.id;
-        }
-        // Get the next version number
-        const { data: versionCount } = await client_1.supabase
-            .from('plan_versions')
-            .select('version_number')
-            .eq('plan_id', planId)
-            .order('version_number', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        const nextVersionNumber = (versionCount?.version_number || 0) + 1;
-        // Create the plan version
         const planPayloadJson = JSON.parse(JSON.stringify(payload));
-        const { data: newVersion, error: versionError } = await client_1.supabase
-            .from('plan_versions')
-            .insert({
-            plan_id: planId,
-            version_number: nextVersionNumber,
-            created_by: userId,
-            plan_payload: planPayloadJson,
-            payload_hash: payloadHash,
-            note: `Plan locked - v${nextVersionNumber}`,
+        const snapshotJson = JSON.parse(JSON.stringify(lockedSnapshot));
+        const payloadHash = hashPlanPayload(payload);
+        const { data, error } = await client_1.supabase
+            .rpc('lock_nutrition_plan', {
+            p_client_id: clientId,
+            p_version_id: options.versionId,
+            p_plan_payload: planPayloadJson,
+            p_locked_snapshot_json: snapshotJson,
+            p_payload_hash: payloadHash,
+            p_idempotency_key: options.idempotencyKey,
         })
-            .select('id')
             .single();
-        if (versionError || !newVersion) {
-            console.error('Error creating plan version:', versionError);
-            return { success: false, planId, versionId: null, error: versionError?.message || 'Failed to create version' };
+        if (error || !data) {
+            console.error('Error locking nutrition plan atomically:', error);
+            return {
+                success: false,
+                planId: null,
+                versionId: null,
+                versionNumber: null,
+                error: error?.message || 'Failed to lock nutrition plan',
+            };
         }
-        // Update the nutrition_plans to point to this version
-        const { error: updateError } = await client_1.supabase
-            .from('nutrition_plans')
-            .update({ current_version_id: newVersion.id })
-            .eq('id', planId);
-        if (updateError) {
-            console.error('Error updating current version:', updateError);
-            // Non-fatal - the version was still created
+        if (!data.success || !data.version_id) {
+            return {
+                success: false,
+                planId: data.plan_id ?? null,
+                versionId: data.version_id ?? null,
+                versionNumber: data.version_number ?? null,
+                error: data.error ?? 'Failed to lock nutrition plan',
+            };
         }
-        return { success: true, planId, versionId: newVersion.id, error: null };
+        return {
+            success: true,
+            planId: data.plan_id,
+            versionId: data.version_id,
+            versionNumber: data.version_number,
+            error: null,
+        };
     }
     catch (error) {
         console.error('Failed to lock nutrition plan:', error);
-        return { success: false, planId: null, versionId: null, error: getErrorMessage(error, 'Failed to lock nutrition plan') };
+        return {
+            success: false,
+            planId: null,
+            versionId: null,
+            versionNumber: null,
+            error: getErrorMessage(error, 'Failed to lock nutrition plan'),
+        };
     }
 }
 /**

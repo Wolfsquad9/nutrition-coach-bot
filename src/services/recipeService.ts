@@ -77,14 +77,14 @@ function selectBalancedIngredients(
   // Must have protein
   const proteins = suitableIngredients.filter(ing => ing.category === 'protein');
   if (proteins.length > 0) {
-    selected.push(proteins[rng.int(0, proteins.length - 1)]);
+    selected.push(proteins[rng.int(proteins.length)]);
   }
 
   // Add carb for main meals
   if (mealType !== 'snack') {
     const carbs = suitableIngredients.filter(ing => ing.category === 'carbohydrate');
     if (carbs.length > 0) {
-      selected.push(carbs[rng.int(0, carbs.length - 1)]);
+      selected.push(carbs[rng.int(carbs.length)]);
     }
   }
 
@@ -102,20 +102,20 @@ function selectBalancedIngredients(
   if (mealType === 'breakfast' || mealType === 'snack') {
     const fruits = suitableIngredients.filter(ing => ing.category === 'fruit');
     if (fruits.length > 0) {
-      selected.push(fruits[rng.int(0, fruits.length - 1)]);
+      selected.push(fruits[rng.int(fruits.length)]);
     }
   }
 
   // Add fat
   const fats = suitableIngredients.filter(ing => ing.category === 'fat');
   if (fats.length > 0) {
-    selected.push(fats[rng.int(0, fats.length - 1)]);
+    selected.push(fats[rng.int(fats.length)]);
   }
 
   // Add misc/seasoning
   const misc = suitableIngredients.filter(ing => ing.category === 'misc');
   if (misc.length > 0 && (mealType === 'lunch' || mealType === 'dinner')) {
-    selected.push(misc[rng.int(0, misc.length - 1)]);
+    selected.push(misc[rng.int(misc.length)]);
   }
 
   return selected;
@@ -127,7 +127,7 @@ function generateRecipeName(
   rng: Rng
 ): string {
   const templates = RECIPE_TEMPLATES[mealType];
-  const template = templates[rng.int(0, templates.length - 1)];
+  const template = templates[rng.int(templates.length)];
   
   const protein = ingredients.find(i => i.category === 'protein')?.name || 'Protein';
   const carb = ingredients.find(i => i.category === 'carbohydrate')?.name || 'Grains';

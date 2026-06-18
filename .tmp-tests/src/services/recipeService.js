@@ -6,6 +6,7 @@ exports.generateFullDayMealPlan = generateFullDayMealPlan;
 exports.canGenerateFullDayPlan = canGenerateFullDayPlan;
 exports.generateWeeklyMealPlan = generateWeeklyMealPlan;
 const ingredientDatabase_1 = require("@/data/ingredientDatabase");
+const random_1 = require("@/utils/random");
 const nutritionScience_1 = require("@/utils/nutritionScience");
 // Target macros per meal type (approximate)
 const MEAL_MACRO_TARGETS = {
@@ -48,18 +49,18 @@ function getSuitableIngredients(selectedFoods, mealType) {
         return isSelected && isSuitable;
     });
 }
-function selectBalancedIngredients(suitableIngredients, mealType) {
+function selectBalancedIngredients(suitableIngredients, mealType, rng) {
     const selected = [];
     // Must have protein
     const proteins = suitableIngredients.filter(ing => ing.category === 'protein');
     if (proteins.length > 0) {
-        selected.push(proteins[Math.floor(Math.random() * proteins.length)]);
+        selected.push(proteins[rng.int(proteins.length)]);
     }
     // Add carb for main meals
     if (mealType !== 'snack') {
         const carbs = suitableIngredients.filter(ing => ing.category === 'carbohydrate');
         if (carbs.length > 0) {
-            selected.push(carbs[Math.floor(Math.random() * carbs.length)]);
+            selected.push(carbs[rng.int(carbs.length)]);
         }
     }
     // Add vegetable for lunch/dinner
@@ -67,7 +68,7 @@ function selectBalancedIngredients(suitableIngredients, mealType) {
         const vegetables = suitableIngredients.filter(ing => ing.category === 'vegetable');
         if (vegetables.length > 0) {
             const numVeggies = Math.min(2, vegetables.length);
-            const shuffled = vegetables.sort(() => Math.random() - 0.5);
+            const shuffled = rng.shuffle(vegetables);
             selected.push(...shuffled.slice(0, numVeggies));
         }
     }
@@ -75,24 +76,24 @@ function selectBalancedIngredients(suitableIngredients, mealType) {
     if (mealType === 'breakfast' || mealType === 'snack') {
         const fruits = suitableIngredients.filter(ing => ing.category === 'fruit');
         if (fruits.length > 0) {
-            selected.push(fruits[Math.floor(Math.random() * fruits.length)]);
+            selected.push(fruits[rng.int(fruits.length)]);
         }
     }
     // Add fat
     const fats = suitableIngredients.filter(ing => ing.category === 'fat');
     if (fats.length > 0) {
-        selected.push(fats[Math.floor(Math.random() * fats.length)]);
+        selected.push(fats[rng.int(fats.length)]);
     }
     // Add misc/seasoning
     const misc = suitableIngredients.filter(ing => ing.category === 'misc');
     if (misc.length > 0 && (mealType === 'lunch' || mealType === 'dinner')) {
-        selected.push(misc[Math.floor(Math.random() * misc.length)]);
+        selected.push(misc[rng.int(misc.length)]);
     }
     return selected;
 }
-function generateRecipeName(ingredients, mealType) {
+function generateRecipeName(ingredients, mealType, rng) {
     const templates = RECIPE_TEMPLATES[mealType];
-    const template = templates[Math.floor(Math.random() * templates.length)];
+    const template = templates[rng.int(templates.length)];
     const protein = ingredients.find(i => i.category === 'protein')?.name || 'Protein';
     const carb = ingredients.find(i => i.category === 'carbohydrate')?.name || 'Grains';
     const vegetable = ingredients.find(i => i.category === 'vegetable')?.name || 'Vegetables';
@@ -152,19 +153,23 @@ function calculateTotalMacros(ingredients) {
         };
     }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
 }
-function generateRecipe(selectedFoods, mealType) {
+function generateRecipe(selectedFoods, mealType, seed = `recipe-${mealType}-${Date.now()}`) {
+    // Deterministic per (selectedFoods, mealType, seed) — same inputs = same recipe.
+    // This is important: "regenerate plan" must not silently change grocery lists
+    // when nothing has changed.
+    const rng = (0, random_1.createSeededRng)(`${seed}-${selectedFoods.join('|')}`);
     // Filter for suitable ingredients
     const suitableIngredients = getSuitableIngredients(selectedFoods, mealType);
     if (suitableIngredients.length === 0) {
         throw new Error(`No suitable ingredients selected for ${mealType}. Please select foods that are appropriate for this meal type.`);
     }
     // Select balanced combination
-    const selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType);
+    const selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
     if (selectedIngredients.length === 0) {
         throw new Error(`Could not build a balanced recipe. Please select more variety of ingredients.`);
     }
     // Generate recipe details
-    const name = generateRecipeName(selectedIngredients, mealType);
+    const name = generateRecipeName(selectedIngredients, mealType, rng);
     const instructions = generateInstructions(selectedIngredients, mealType);
     const totalMacros = calculateTotalMacros(selectedIngredients);
     // Convert to Recipe format

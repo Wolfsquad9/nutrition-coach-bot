@@ -55,7 +55,7 @@ describe('ClientSchema', () => {
   it('rejects an invalid email', () => {
     const result = validateClient({ ...baseClient, email: 'not-an-email' });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if ('errors' in result) {
       expect(result.errors.email).toMatch(/invalid email/i);
     }
   });

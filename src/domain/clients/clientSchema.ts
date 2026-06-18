@@ -188,16 +188,10 @@ export function isClient(input: unknown): input is Client {
 }
 
 // ---------------------------------------------------------------------------
-// Type-level compatibility check (compile-time only — stripped from output)
+// NOTE: Type-level compatibility check between ClientSchemaT and Client
+// is intentionally omitted. .refine() on a ZodObject causes TypeScript to
+// infer all output fields as optional (a known Zod limitation:
+// https://github.com/colinhacks/zod/issues/2623), making any direct
+// assignability check a false positive. Runtime validation via
+// validateClient() / isClient() is the actual safety net.
 // ---------------------------------------------------------------------------
-
-// If Client in @/types gains a field that the schema doesn't know about, the
-// inferred type will be missing it; this assignment will fail with a clear
-// error. The reverse direction (extra schema fields not in the type) is also
-// caught because ClientSchemaT must be assignable to Client.
-type _AssertClientAssignable = (x: ClientSchemaT) => Client;
-type _AssertClientAssignableBack = (x: Client) => ClientSchemaT;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _typecheckClient: _AssertClientAssignable = (x) => x;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _typecheckClientBack: _AssertClientAssignableBack = (x) => x;

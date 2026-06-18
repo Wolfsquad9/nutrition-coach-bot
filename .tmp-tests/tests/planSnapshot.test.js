@@ -109,6 +109,25 @@ function run() {
         generatedBy: "coach",
     };
     const snapshot = (0, snapshot_1.buildPlanSnapshot)(input);
+    const validationResult = (0, snapshot_1.validateSnapshotStructure)(snapshot);
+    assert.deepStrictEqual(validationResult, { valid: true, errors: [] });
+    const invalidSnapshot = {
+        ...snapshot,
+        client: {
+            ...snapshot.client,
+            firstName: "",
+        },
+        metrics: {
+            ...snapshot.metrics,
+            targetCalories: Number.NaN,
+        },
+        weeklyPlan: [],
+    };
+    const invalidValidationResult = (0, snapshot_1.validateSnapshotStructure)(invalidSnapshot);
+    assert.strictEqual(invalidValidationResult.valid, false);
+    assert.ok(invalidValidationResult.errors.includes("client.firstName must be a non-empty string"));
+    assert.ok(invalidValidationResult.errors.includes("metrics.targetCalories must be a finite number"));
+    assert.ok(invalidValidationResult.errors.includes("weeklyPlan must contain at least one day"));
     /* -------------------------------------------------------
        STRUCTURE
     ------------------------------------------------------- */
