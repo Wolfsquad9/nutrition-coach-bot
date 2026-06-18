@@ -1,5 +1,6 @@
 import { coreIngredients, type IngredientData, calculateMacros, type MealTimeType } from '@/data/ingredientDatabase';
 import { Recipe, Ingredient, Macros, MacroTargets } from '@/types';
+import { createSeededRng, type Rng } from '@/utils/random';
 import {
   enhanceIngredientWithRole,
   calculateIngredientRole,
@@ -68,63 +69,65 @@ function getSuitableIngredients(
 
 function selectBalancedIngredients(
   suitableIngredients: IngredientData[],
-  mealType: MealType
+  mealType: MealType,
+  rng: Rng
 ): IngredientData[] {
   const selected: IngredientData[] = [];
-  
+
   // Must have protein
   const proteins = suitableIngredients.filter(ing => ing.category === 'protein');
   if (proteins.length > 0) {
-    selected.push(proteins[Math.floor(Math.random() * proteins.length)]);
+    selected.push(proteins[rng.int(0, proteins.length - 1)]);
   }
-  
+
   // Add carb for main meals
   if (mealType !== 'snack') {
     const carbs = suitableIngredients.filter(ing => ing.category === 'carbohydrate');
     if (carbs.length > 0) {
-      selected.push(carbs[Math.floor(Math.random() * carbs.length)]);
+      selected.push(carbs[rng.int(0, carbs.length - 1)]);
     }
   }
-  
+
   // Add vegetable for lunch/dinner
   if (mealType === 'lunch' || mealType === 'dinner') {
     const vegetables = suitableIngredients.filter(ing => ing.category === 'vegetable');
     if (vegetables.length > 0) {
       const numVeggies = Math.min(2, vegetables.length);
-      const shuffled = vegetables.sort(() => Math.random() - 0.5);
+      const shuffled = rng.shuffle(vegetables);
       selected.push(...shuffled.slice(0, numVeggies));
     }
   }
-  
+
   // Add fruit for breakfast/snack
   if (mealType === 'breakfast' || mealType === 'snack') {
     const fruits = suitableIngredients.filter(ing => ing.category === 'fruit');
     if (fruits.length > 0) {
-      selected.push(fruits[Math.floor(Math.random() * fruits.length)]);
+      selected.push(fruits[rng.int(0, fruits.length - 1)]);
     }
   }
-  
+
   // Add fat
   const fats = suitableIngredients.filter(ing => ing.category === 'fat');
   if (fats.length > 0) {
-    selected.push(fats[Math.floor(Math.random() * fats.length)]);
+    selected.push(fats[rng.int(0, fats.length - 1)]);
   }
-  
+
   // Add misc/seasoning
   const misc = suitableIngredients.filter(ing => ing.category === 'misc');
   if (misc.length > 0 && (mealType === 'lunch' || mealType === 'dinner')) {
-    selected.push(misc[Math.floor(Math.random() * misc.length)]);
+    selected.push(misc[rng.int(0, misc.length - 1)]);
   }
-  
+
   return selected;
 }
 
 function generateRecipeName(
   ingredients: IngredientData[],
-  mealType: MealType
+  mealType: MealType,
+  rng: Rng
 ): string {
   const templates = RECIPE_TEMPLATES[mealType];
-  const template = templates[Math.floor(Math.random() * templates.length)];
+  const template = templates[rng.int(0, templates.length - 1)];
   
   const protein = ingredients.find(i => i.category === 'protein')?.name || 'Protein';
   const carb = ingredients.find(i => i.category === 'carbohydrate')?.name || 'Grains';
@@ -189,24 +192,30 @@ function calculateTotalMacros(ingredients: IngredientData[]): Macros {
 
 export function generateRecipe(
   selectedFoods: string[],
-  mealType: MealType
+  mealType: MealType,
+  seed: string = `recipe-${mealType}-${Date.now()}`
 ): GeneratedRecipe {
+  // Deterministic per (selectedFoods, mealType, seed) — same inputs = same recipe.
+  // This is important: "regenerate plan" must not silently change grocery lists
+  // when nothing has changed.
+  const rng = createSeededRng(`${seed}-${selectedFoods.join('|')}`);
+
   // Filter for suitable ingredients
   const suitableIngredients = getSuitableIngredients(selectedFoods, mealType);
-  
+
   if (suitableIngredients.length === 0) {
     throw new Error(`No suitable ingredients selected for ${mealType}. Please select foods that are appropriate for this meal type.`);
   }
-  
+
   // Select balanced combination
-  const selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType);
-  
+  const selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
+
   if (selectedIngredients.length === 0) {
     throw new Error(`Could not build a balanced recipe. Please select more variety of ingredients.`);
   }
-  
+
   // Generate recipe details
-  const name = generateRecipeName(selectedIngredients, mealType);
+  const name = generateRecipeName(selectedIngredients, mealType, rng);
   const instructions = generateInstructions(selectedIngredients, mealType);
   const totalMacros = calculateTotalMacros(selectedIngredients);
   
