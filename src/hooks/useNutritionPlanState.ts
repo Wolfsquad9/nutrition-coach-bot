@@ -7,6 +7,7 @@ import type { WeeklyMealPlanResult } from "@/services/recipeService";
 import type { PlanSnapshot } from "@/domain/nutrition/snapshot";
 import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
 import type { NutritionMetrics, MacroTargets } from "@/types";
+import { usePlanStateMachine } from "./usePlanStateMachine";
 
 import {
   buildLockedPlanPayload,
@@ -50,15 +51,9 @@ import {
 } from "@/domain/nutrition/snapshotAdapter";
 
 import {
-  derivePlanState,
-  calculateDaysRemaining,
   calculateLockExpiry,
   canLock as domainCanLock,
-  canRegenerate as domainCanRegenerate,
-  isImmutable as domainIsImmutable,
-  isActionPermitted,
   validateImmutability,
-  checkShareability,
   type PlanLifecycleState,
   type PlanStateContext,
 } from "@/domain/nutrition/planLifecycle";
@@ -160,38 +155,50 @@ export function useNutritionPlanState() {
   const lockInFlightRef = useRef<Promise<{ success: boolean; error: string | null }> | null>(null);
   const lastFailedActionRef = useRef<RetryAction>(null);
 
-  /* ---------------- LIFECYCLE ---------------- */
+  /* ---------------- LIFECYCLE (delegated to usePlanStateMachine) ---------------- */
 
-  const lifecycleState = useMemo<PlanLifecycleState>(() => {
-    return derivePlanState({
-      hasPlan: !!weeklyPlan,
-      isPersisted: !!versionId,
-      lockedAt,
-    });
-  }, [weeklyPlan, versionId, lockedAt]);
+  // The derivation of lifecycleState / daysRemaining / lockStatus / permission
+  // booleans from the current state values is pure — no useState, no I/O. It
+  // lives in usePlanStateMachine. We assemble its input here and forward the
+  // results verbatim to the public return.
+  const machine = usePlanStateMachine({
+    weeklyPlan,
+    macroTargets,
+    versionId,
+    lockedAt,
+    lockedUntil,
+    planId,
+    versionNumber,
+    payloadHash,
+    uiState,
+    lastPersistenceFailed,
+  });
 
-  const daysRemaining = useMemo(() => {
-    if (!lockedAt) return 0;
-    return calculateDaysRemaining(lockedAt);
-  }, [lockedAt]);
+  const {
+    lifecycleState,
+    daysRemaining,
+    lockStatus,
+    isDraft,
+    isLocked,
+    isError: _isError,
+    canGenerate,
+    canRegenerate,
+    canLock,
+    canDiscard,
+    canPrint,
+    canShare,
+    isImmutable,
+    isShareable,
+    planStateContext,
+  } = machine;
 
-  const lockStatus: LockStatus = useMemo(() => {
-    return {
-      isLocked: !!lockedAt && daysRemaining > 0,
-      daysRemaining,
-    };
-  }, [lockedAt, daysRemaining]);
-
-  /* ---------------- UI FLAGS ---------------- */
+  /* ---------------- UI FLAGS (depend on a ref; stay here) ---------------- */
 
   const isLoading = uiState === "LOADING";
   const isSaving = uiState === "SAVING";
   const isBlocked = uiState === "ERROR";
   const isError = uiState === "ERROR";
   const isRetryable = isError && lastFailedActionRef.current !== null;
-
-  const isDraft = lifecycleState === "DRAFT";
-  const isLocked = lifecycleState === "LOCKED";
 
   const state: PlanState =
     uiState === "LOADING"
@@ -201,49 +208,6 @@ export function useNutritionPlanState() {
       : uiState === "ERROR"
       ? "ERROR"
       : lifecycleState;
-
-  const planStateContext: PlanStateContext = {
-    state: lifecycleState,
-    planId,
-    versionId,
-    versionNumber,
-    lockedAt,
-    lockedUntil,
-    daysRemaining,
-    payloadHash,
-  };
-
-  /* ---------------- PERMISSIONS ---------------- */
-
-  const canGenerate =
-    !lastPersistenceFailed &&
-    uiState === "IDLE" &&
-    (lifecycleState === "EMPTY" || lifecycleState === "EXPIRED");
-
-  const canRegenerate =
-    !lastPersistenceFailed &&
-    uiState === "IDLE" &&
-    domainCanRegenerate(lifecycleState);
-
-  const canLock =
-    !lastPersistenceFailed &&
-    uiState === "IDLE" &&
-    domainCanLock(lifecycleState) &&
-    !!weeklyPlan &&
-    !!macroTargets;
-
-  const canDiscard =
-    !lastPersistenceFailed &&
-    uiState === "IDLE" &&
-    isActionPermitted(lifecycleState, "DISCARD");
-
-  const canPrint = isActionPermitted(lifecycleState, "PRINT");
-  const canShare = isActionPermitted(lifecycleState, "SHARE");
-
-  const isImmutable = domainIsImmutable(lifecycleState);
-
-  const shareabilityCheck = checkShareability(planStateContext);
-  const isShareable = shareabilityCheck.isShareable;
 
   /* ---------------- CLEAR ---------------- */
   // Defined before loadPlanForClient so it is in scope
