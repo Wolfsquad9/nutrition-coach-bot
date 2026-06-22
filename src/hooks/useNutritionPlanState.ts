@@ -2,46 +2,33 @@
  * useNutritionPlanState - State machine for nutrition plan lifecycle
  */
 import { mapSnapshotToWeeklyPlan } from '@/domain/nutrition/snapshotAdapter';
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { WeeklyMealPlanResult } from "@/services/recipeService";
 import type { PlanSnapshot } from "@/domain/nutrition/snapshot";
 import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
 import type { NutritionMetrics, MacroTargets } from "@/types";
 import { usePlanStateMachine } from "./usePlanStateMachine";
+import { usePlanFetch } from "./usePlanFetch";
 
 import {
   buildLockedPlanPayload,
-  checkPlanLockStatus,
-  fetchCurrentPlan,
   hashPlanPayload,
   lockNutritionPlan,
 } from "@/services/supabasePlanService";
 
 import {
-  fetchPendingOverrides,
   type PlanOverride,
 } from "@/services/supabaseOverrideService";
 
 import {
-  fetchPersistedSnapshot,
-} from "@/services/snapshotPersistence";
-
-import {
   buildPlanSnapshot,
-  deepFreeze,
-  validateSnapshotStructure,
   type SnapshotBuildInput,
 } from "@/domain/nutrition/snapshot";
 import {
   createLockFailureError,
-  createSnapshotInvariantError,
-  createSnapshotValidationError,
-  createTransientLoadError,
-  classifyLoadRuntimeError,
   normalizeRuntimeError,
 } from "@/domain/nutrition/runtimeErrors";
 import {
-  emitHydrationResetTelemetry,
   emitRetryTelemetry,
   emitRuntimeFailure,
 } from "@/domain/nutrition/runtimeTelemetry";
@@ -75,16 +62,6 @@ export interface LockClientInfo {
 
 // MacroTargets is imported from @/types
 
-const ensureValidSnapshot = (snapshot: unknown, source: string): PlanSnapshot => {
-  const validation = validateSnapshotStructure(snapshot);
-
-  if (!validation.valid) {
-    throw createSnapshotValidationError(source, validation.errors);
-  }
-
-  return snapshot as PlanSnapshot;
-};
-
 interface LockAttempt {
   versionId: string;
   idempotencyKey: string;
@@ -95,6 +72,8 @@ type RetryAction =
   | { type: "load"; clientId: string }
   | { type: "lock"; clientId: string; clientInfo: LockClientInfo; attempt: LockAttempt }
   | null;
+
+export type { RetryAction };
 
 const createUuid = (): string => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -235,118 +214,18 @@ export function useNutritionPlanState() {
     setUiState("IDLE");
   }, [resetHydratedPlanState]);
 
-  /* ---------------- LOAD PLAN ---------------- */
+  /* ---------------- LOAD PLAN (delegated to usePlanFetch) ---------------- */
 
-  const loadPlanForClient = useCallback(async (clientId: string) => {
-    if (!clientId) return;
-
-    const currentRequestId = ++loadRequestIdRef.current;
-
-    setUiState("LOADING");
-    setError(null);
-
-    try {
-      const [planResult, lockResult] = await Promise.all([
-        fetchCurrentPlan(clientId),
-        checkPlanLockStatus(clientId),
-      ]);
-
-      if (currentRequestId !== loadRequestIdRef.current) return;
-
-      if (!planResult.plan) {
-        clearState();
-        setUiState("IDLE");
-        lastFailedActionRef.current = null;
-        return;
-      }
-
-      const payload = planResult.plan;
-      const planLockedAt = payload.lockedAt ? new Date(payload.lockedAt) : null;
-      let nextSnapshot = planResult.snapshot
-        ? ensureValidSnapshot(planResult.snapshot, "fetchCurrentPlan.snapshot")
-        : null;
-      let nextPendingOverrides: PlanOverride[] = [];
-
-      if (planResult.versionId) {
-        const snapshotPromise = nextSnapshot
-          ? Promise.resolve({ snapshot: nextSnapshot, error: null })
-          : fetchPersistedSnapshot(planResult.versionId);
-
-        const [snapshotResult, overridesResult] = await Promise.all([
-          snapshotPromise,
-          fetchPendingOverrides(planResult.versionId),
-        ]);
-
-        if (currentRequestId !== loadRequestIdRef.current) return;
-
-        nextSnapshot = snapshotResult.snapshot
-          ? ensureValidSnapshot(snapshotResult.snapshot, nextSnapshot ? "fetchCurrentPlan.snapshot" : "fetchPersistedSnapshot")
-          : null;
-
-        if (snapshotResult.error) {
-          throw createTransientLoadError(snapshotResult.error);
-        }
-
-        if (planLockedAt && !nextSnapshot) {
-          throw createSnapshotInvariantError();
-        }
-
-        if (!overridesResult.error) {
-          nextPendingOverrides = overridesResult.overrides;
-        }
-      }
-
-      setWeeklyPlan(payload.weeklyPlan);
-      setMacroTargets(payload.macroTargets as MacroTargets);
-      setLikedIngredients(payload.likedIngredients || []);
-      setPlanId(planResult.planId);
-      setVersionId(planResult.versionId);
-      setVersionNumber(planResult.versionNumber ?? null);
-      setPlanCreatedAt(planResult.createdAt);
-      setPayloadHash(planResult.payloadHash ?? null);
-      setLockedAt(planLockedAt);
-      setLockedUntil(planLockedAt ? calculateLockExpiry(planLockedAt) : lockResult.lockedUntil);
-      setPendingOverrides(nextPendingOverrides);
-      setSnapshot(nextSnapshot ? deepFreeze(nextSnapshot) : null);
-      setLastPersistenceFailed(false);
-      lastFailedActionRef.current = null;
-      setUiState("IDLE");
-    } catch (err) {
-      if (currentRequestId !== loadRequestIdRef.current) return;
-      console.error(err);
-      const runtimeError = classifyLoadRuntimeError(err, "Failed to load plan");
-      const runtimeErrorWithDetails = runtimeError as { details?: string[] };
-
-      emitRuntimeFailure({
-        code: runtimeError.code,
-        retryable: runtimeError.retryable,
-        source: "fetchCurrentPlan",
-        clientId,
-        planId,
-        versionId,
-        details: runtimeErrorWithDetails.details,
-        metadata: {
-          validationDetailCount: runtimeErrorWithDetails.details?.length ?? 0,
-        },
-      });
-
-      if (runtimeError.code === "SNAPSHOT_MISSING" || runtimeError.code === "SNAPSHOT_INVALID") {
-        resetHydratedPlanState();
-        emitHydrationResetTelemetry({
-          source: "fetchCurrentPlan",
-          clientId,
-          planId,
-          versionId,
-          code: runtimeError.code,
-        });
-        setLastPersistenceFailed(true);
-      }
-
-      setError(runtimeError.message);
-      lastFailedActionRef.current = runtimeError.retryable ? { type: "load", clientId } : null;
-      setUiState("ERROR");
-    }
-  }, [clearState, resetHydratedPlanState, planId, versionId]);
+  const { loadPlanForClient } = usePlanFetch(
+    {
+      setUiState, setError, setLastPersistenceFailed, setWeeklyPlan, setMacroTargets,
+      setLikedIngredients, setSnapshot, setPlanId, setVersionId, setVersionNumber,
+      setPlanCreatedAt, setPayloadHash, setLockedAt, setLockedUntil, setPendingOverrides,
+    },
+    { loadRequestIdRef, lastFailedActionRef },
+    { planId, versionId },
+    { resetHydratedPlanState, clearState }
+  );
 
   /* ---------------- DRAFT ---------------- */
 
