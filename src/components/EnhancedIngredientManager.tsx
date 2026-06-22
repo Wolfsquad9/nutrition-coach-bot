@@ -33,38 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-
-
-type GeneratedDietPlan = {
-  totalCalories: number;
-  macros: { protein: number; carbs: number; fat: number };
-  meals: Array<{
-    day: number;
-    meals: Array<{
-      name: string;
-      calories: number;
-      protein: number;
-      carbs: number;
-      fat: number;
-    }>;
-  }>;
-  shoppingList?: unknown[];
-};
-
-type GeneratedTrainingPlan = {
-  split: string;
-  sessions: number;
-  workouts: Array<{
-    day: number;
-    name: string;
-    exercises: Array<{
-      name: string;
-      sets: number;
-      reps: string;
-    }>;
-  }>;
-};
+import type { GeneratedDietPlan, GeneratedTrainingPlan } from './ingredient-manager/types';
+import { CATEGORIES, useFilteredIngredients } from './ingredient-manager/ingredientFilterUtils';
 
 interface EnhancedIngredientManagerProps {
   activeClientId: string | null;
@@ -72,10 +42,10 @@ interface EnhancedIngredientManagerProps {
   onRestrictionsUpdate: (restrictions: ClientIngredientRestrictions[]) => void;
 }
 
-export default function EnhancedIngredientManager({ 
+export default function EnhancedIngredientManager({
   activeClientId,
   activeClient,
-  onRestrictionsUpdate 
+  onRestrictionsUpdate
 }: EnhancedIngredientManagerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -90,17 +60,9 @@ export default function EnhancedIngredientManager({
   const [selectedMealType, setSelectedMealType] = useState<MealType>('lunch');
   const { toast } = useToast();
 
-  const categories = ['all', 'protein', 'carbohydrate', 'fat', 'fruit', 'vegetable', 'misc'];
+  const categories = CATEGORIES;
 
-  const filteredIngredients = useMemo(() => 
-    coreIngredients.filter(ingredient => {
-      const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            ingredient.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesCategory = selectedCategory === 'all' || ingredient.category === selectedCategory;
-      return matchesSearch && matchesCategory;
-    }),
-    [searchTerm, selectedCategory]
-  );
+  const filteredIngredients = useFilteredIngredients({ searchTerm, selectedCategory });
 
   // Get client restriction for current active client
   const getClientRestriction = useCallback((clientId: string | null): ClientIngredientRestrictions => {
