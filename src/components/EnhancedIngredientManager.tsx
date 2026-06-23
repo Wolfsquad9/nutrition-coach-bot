@@ -35,6 +35,8 @@ import {
 } from '@/components/ui/select';
 import type { GeneratedDietPlan, GeneratedTrainingPlan } from './ingredient-manager/types';
 import { CATEGORIES, useFilteredIngredients } from './ingredient-manager/ingredientFilterUtils';
+import { useRestrictionManager } from './ingredient-manager/restrictionManager';
+import { useMacroSummary } from './ingredient-manager/macroSummarizer';
 
 interface EnhancedIngredientManagerProps {
   activeClientId: string | null;
@@ -64,84 +66,31 @@ export default function EnhancedIngredientManager({
 
   const filteredIngredients = useFilteredIngredients({ searchTerm, selectedCategory });
 
-  // Get client restriction for current active client
-  const getClientRestriction = useCallback((clientId: string | null): ClientIngredientRestrictions => {
-    if (!clientId) {
-      return {
-        clientId: '',
-        clientName: '',
-        blockedIngredients: [],
-        preferredIngredients: [],
-        substitutionRules: {}
-      };
-    }
-    return clientRestrictions.find(r => r.clientId === clientId) || {
-      clientId,
-      clientName: activeClient ? getClientLabel(activeClient) : '',
-      blockedIngredients: [],
-      preferredIngredients: [],
-      substitutionRules: {}
-    };
-  }, [activeClient, clientRestrictions]);
+  // Get client restriction for current active client + toggle/status/matrix
+  // updates. Extracted to restrictionManager; same signatures, same behavior.
+  const {
+    getClientRestriction,
+    toggleIngredientStatus,
+    getIngredientStatus,
+    updateSubstitutionMatrix,
+  } = useRestrictionManager({
+    activeClientId,
+    activeClient,
+    clientRestrictions,
+    setClientRestrictions,
+    setSubstitutionMatrix,
+    autoSubstitute,
+    onRestrictionsUpdate,
+  });
 
-  const toggleIngredientStatus = (ingredientId: string, status: 'blocked' | 'preferred' | 'neutral') => {
-    if (!activeClientId) return;
-
-    const currentRestriction = getClientRestriction(activeClientId);
-    const newRestriction = { ...currentRestriction };
-
-    newRestriction.blockedIngredients = newRestriction.blockedIngredients.filter(id => id !== ingredientId);
-    newRestriction.preferredIngredients = newRestriction.preferredIngredients.filter(id => id !== ingredientId);
-
-    if (status === 'blocked') {
-      newRestriction.blockedIngredients.push(ingredientId);
-    } else if (status === 'preferred') {
-      newRestriction.preferredIngredients.push(ingredientId);
-    }
-
-    const newRestrictions = clientRestrictions.filter(r => r.clientId !== activeClientId);
-    newRestrictions.push(newRestriction);
-    setClientRestrictions(newRestrictions);
-    onRestrictionsUpdate(newRestrictions);
-
-    if (autoSubstitute && status === 'blocked') {
-      updateSubstitutionMatrix(newRestriction);
-    }
-  };
-
-  const getIngredientStatus = (ingredientId: string): 'blocked' | 'preferred' | 'neutral' => {
-    if (!activeClientId) return 'neutral';
-    const restriction = getClientRestriction(activeClientId);
-    if (restriction.blockedIngredients.includes(ingredientId)) return 'blocked';
-    if (restriction.preferredIngredients.includes(ingredientId)) return 'preferred';
-    return 'neutral';
-  };
-
-  const updateSubstitutionMatrix = (restriction: ClientIngredientRestrictions) => {
-    const matrix = generateSubstitutionMatrix(restriction.blockedIngredients, restriction);
-    setSubstitutionMatrix(matrix);
-  };
-
-  const calculateTotalMacros = useMemo(() => {
-    if (!activeClientId) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
-    
-    const restriction = getClientRestriction(activeClientId);
-    const allowedIngredients = coreIngredients.filter(ing => 
-      !restriction.blockedIngredients.includes(ing.id)
-    );
-
-    const total = allowedIngredients.reduce((acc, ing) => {
-      const servingFactor = ing.typical_serving_size_g / 100;
-      return {
-        calories: acc.calories + (ing.macros.calories * servingFactor),
-        protein: acc.protein + (ing.macros.protein * servingFactor),
-        carbs: acc.carbs + (ing.macros.carbs * servingFactor),
-        fat: acc.fat + (ing.macros.fat * servingFactor),
-      };
-    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-
-    return total;
-  }, [activeClientId, getClientRestriction]);
+  // Compute currentRestriction once for the rest of the component.
+  // The early-return at the top of the render ensures we never hit
+  // the JSX without a real activeClientId, so the non-null assertion
+  // is safe.
+  const currentRestriction = activeClientId
+    ? getClientRestriction(activeClientId)
+    : null;
+  const calculateTotalMacros = useMacroSummary(currentRestriction);
 
   const exportRestrictions = () => {
     const dataStr = JSON.stringify(clientRestrictions, null, 2);
@@ -407,8 +356,6 @@ export default function EnhancedIngredientManager({
       </Card>
     );
   }
-
-  const currentRestriction = getClientRestriction(activeClientId);
 
   return (
     <div className="space-y-6">
