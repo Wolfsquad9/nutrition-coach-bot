@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,20 +11,18 @@ import { Separator } from '@/components/ui/separator';
 import { Search, Check, X, Download, Upload, FileJson, Printer, Send, Loader2, Sparkles, Clock, Utensils, Flame } from 'lucide-react';
 import { coreIngredients, type IngredientData } from '@/data/ingredientDatabase';
 import { Client } from '@/types';
-import { 
-  findBestSubstitute, 
+import {
+  findBestSubstitute,
   generateSubstitutionMatrix,
   type ClientIngredientRestrictions,
-  type SubstitutionRule 
+  type SubstitutionRule
 } from '@/utils/ingredientSubstitution';
 import { useToast } from '@/hooks/use-toast';
 import { MacroDonutChart } from './MacroDonutChart';
 import { DietPlanDisplay } from './DietPlanDisplay';
 import { TrainingPlanDisplay } from './TrainingPlanDisplay';
 import { formatMacro, formatCalories } from '@/utils/formatters';
-import { generateCompletePlanPDF, downloadPDF } from '@/utils/pdfExport';
-import { supabase } from '@/integrations/supabase/client';
-import { generateRecipe, type GeneratedRecipe, type MealType } from '@/services/recipeService';
+import { type GeneratedRecipe, type MealType } from '@/services/recipeService';
 import { getClientLabel } from '@/utils/clientHelpers';
 import {
   Select,
@@ -37,6 +35,8 @@ import type { GeneratedDietPlan, GeneratedTrainingPlan } from './ingredient-mana
 import { CATEGORIES, useFilteredIngredients } from './ingredient-manager/ingredientFilterUtils';
 import { useRestrictionManager } from './ingredient-manager/restrictionManager';
 import { useMacroSummary } from './ingredient-manager/macroSummarizer';
+import { useIngredientExporter } from './ingredient-manager/ingredientExporter';
+import { useRecipeActionHandler } from './ingredient-manager/recipeActionHandler';
 
 interface EnhancedIngredientManagerProps {
   activeClientId: string | null;
@@ -92,258 +92,37 @@ export default function EnhancedIngredientManager({
     : null;
   const calculateTotalMacros = useMacroSummary(currentRestriction);
 
-  const exportRestrictions = () => {
-    const dataStr = JSON.stringify(clientRestrictions, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', `client_restrictions_${Date.now()}.json`);
-    linkElement.click();
-    
-    toast({
-      title: "Export successful",
-      description: "Restrictions have been exported as JSON",
-    });
-  };
+  // Persistence- and plan-dispatch side effects live in dedicated
+  // hooks so the component below stays focused on rendering. Same
+  // function names, same behavior, just relocated.
+  const {
+    exportRestrictions,
+    importRestrictions,
+    handlePrintPlan,
+    handleExportPDF,
+    handleSendWhatsApp,
+  } = useIngredientExporter({
+    clientRestrictions,
+    setClientRestrictions,
+    onRestrictionsUpdate,
+    toast,
+    activeClient,
+    generatedDietPlan,
+    generatedTrainingPlan,
+  });
 
-  const importRestrictions = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const imported = JSON.parse(e.target?.result as string);
-          setClientRestrictions(imported);
-          onRestrictionsUpdate(imported);
-          toast({
-            title: "Import successful",
-            description: "Restrictions have been imported",
-          });
-        } catch (error) {
-          toast({
-            title: "Import error",
-            description: "Invalid JSON file",
-            variant: "destructive",
-          });
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const handleGenerateRecipe = async () => {
-    if (!activeClientId || !activeClient) {
-      toast({
-        title: "No client selected",
-        description: "A client must be selected in the Client tab",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const restriction = getClientRestriction(activeClientId);
-    const preferredIngredients = restriction.preferredIngredients;
-
-    if (preferredIngredients.length === 0) {
-      toast({
-        title: "No ingredients selected",
-        description: "First mark ingredients as 'liked' (green star)",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsGeneratingRecipe(true);
-
-    try {
-      // Small delay for UX
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const recipe = generateRecipe(preferredIngredients, selectedMealType);
-      setGeneratedRecipe(recipe);
-
-      toast({
-        title: "Recipe generated!",
-        description: `${recipe.name} created successfully`,
-      });
-    } catch (error) {
-      console.error('Recipe generation error:', error);
-      toast({
-        title: "Generation error",
-        description: error instanceof Error ? error.message : "Unable to generate recipe",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingRecipe(false);
-    }
-  };
-
-  const generateAIPlan = async (planType: 'full') => {
-    if (!activeClientId || !activeClient) {
-      toast({
-        title: "No client selected",
-        description: "A client must be selected in the Client tab",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsGeneratingPlan(true);
-
-    try {
-      const restriction = getClientRestriction(activeClientId);
-      const allowedIngredients = coreIngredients.filter(ing => 
-        !restriction.blockedIngredients.includes(ing.id)
-      );
-
-      // Mock AI response for demo (replace with actual AI endpoint call)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const mockResponse = {
-        dietPlan: {
-          totalCalories: 2200,
-          macros: { protein: 165, carbs: 220, fat: 73 },
-          meals: Array(7).fill(null).map((_, day) => ({
-            day: day + 1,
-            meals: [
-              { name: 'Breakfast', calories: 550, protein: 40, carbs: 55, fat: 18 },
-              { name: 'Lunch', calories: 660, protein: 50, carbs: 66, fat: 22 },
-              { name: 'Dinner', calories: 660, protein: 50, carbs: 66, fat: 22 },
-              { name: 'Snack', calories: 330, protein: 25, carbs: 33, fat: 11 },
-            ]
-          }))
-        },
-        trainingPlan: {
-          split: 'Push/Pull/Legs',
-          sessions: activeClient.trainingDaysPerWeek,
-          workouts: Array(activeClient.trainingDaysPerWeek).fill(null).map((_, i) => ({
-            day: i + 1,
-            name: ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body', 'Active Recovery'][i],
-            exercises: [
-              { name: 'Exercise 1', sets: 4, reps: '8-10' },
-              { name: 'Exercise 2', sets: 3, reps: '10-12' },
-              { name: 'Exercise 3', sets: 3, reps: '12-15' },
-            ]
-          }))
-        },
-        shoppingList: [
-          { category: 'Protein', items: ['Chicken Breast 1.5kg', 'Eggs 24ct', 'Greek Yogurt 1kg'] },
-          { category: 'Carbs', items: ['Rice 2kg', 'Oats 1kg', 'Sweet Potatoes 2kg'] },
-          { category: 'Fats', items: ['Olive Oil 500ml', 'Avocado 6ct', 'Almonds 500g'] },
-          { category: 'Vegetables', items: ['Broccoli 1kg', 'Spinach 500g', 'Bell Peppers 6ct'] },
-        ]
-      };
-
-      setGeneratedDietPlan(mockResponse.dietPlan);
-      setGeneratedTrainingPlan(mockResponse.trainingPlan);
-
-      toast({
-        title: "Plan generated!",
-        description: "Complete plan generated successfully",
-      });
-
-    } catch (error) {
-      console.error('AI generation error:', error);
-      toast({
-        title: "Generation error",
-        description: "Unable to generate plan",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingPlan(false);
-    }
-  };
-
-  const handlePrintPlan = () => {
-    window.print();
-    toast({
-      title: "Print started",
-      description: "The plan is ready to print",
-    });
-  };
-
-  const handleExportPDF = async () => {
-    if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
-      toast({
-        title: "Missing data",
-        description: "Generate a complete plan first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      // Mock CompletePlan structure for PDF export
-      const completePlan = {
-        client: activeClient,
-        nutritionPlan: {
-          metrics: {
-            tdee: generatedDietPlan.totalCalories,
-            targetCalories: generatedDietPlan.totalCalories,
-            proteinGrams: generatedDietPlan.macros.protein,
-            carbsGrams: generatedDietPlan.macros.carbs,
-            fatGrams: generatedDietPlan.macros.fat,
-            fiberGrams: 30,
-            waterLiters: 3,
-          },
-          weeklyMealPlan: generatedDietPlan.meals,
-          groceryList: generatedDietPlan.shoppingList || [],
-        },
-        trainingPlan: generatedTrainingPlan,
-      };
-
-      const clientLabel = getClientLabel(activeClient);
-      const pdf = generateCompletePlanPDF(completePlan as unknown as Parameters<typeof generateCompletePlanPDF>[0]);
-      downloadPDF(pdf, `${clientLabel.replace(/\s+/g, '_')}_plan.pdf`);
-
-      toast({
-        title: "PDF exported",
-        description: "The plan has been downloaded successfully",
-      });
-    } catch (error) {
-      console.error('PDF export error:', error);
-      toast({
-        title: "Export error",
-        description: "Unable to generate PDF",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSendWhatsApp = async () => {
-    if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
-      toast({
-        title: "Missing data",
-        description: "Generate a complete plan first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-        body: {
-          clientPhone: activeClient.phone,
-          planData: { diet: generatedDietPlan, training: generatedTrainingPlan },
-          planType: 'complete',
-        },
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "WhatsApp - Ready",
-        description: data.note || "Twilio/Make.com integration required",
-      });
-    } catch (error) {
-      console.error('WhatsApp send error:', error);
-      toast({
-        title: "WhatsApp error",
-        description: "Unable to send the plan",
-        variant: "destructive",
-      });
-    }
-  };
+  const { handleGenerateRecipe, generateAIPlan } = useRecipeActionHandler({
+    activeClientId,
+    activeClient,
+    getClientRestriction,
+    selectedMealType,
+    setIsGeneratingRecipe,
+    setGeneratedRecipe,
+    setIsGeneratingPlan,
+    setGeneratedDietPlan,
+    setGeneratedTrainingPlan,
+    toast,
+  });
 
   // Guard: if no client is selected, don't render
   if (!activeClientId || !activeClient) {
