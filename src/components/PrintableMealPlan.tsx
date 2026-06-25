@@ -15,12 +15,14 @@
 
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { MealTimeType, MealData } from '@/data/ingredientDatabase';
+import type { GroceryItem } from '@/types';
 import { formatCalories, formatMacro } from '@/utils/formatters';
 
 interface PrintableMealPlanProps {
   weeklyPlan: WeeklyMealPlanResult;
   clientName?: string;
   generatedDate?: string;
+  groceryList?: GroceryItem[];
 }
 
 const MEAL_ORDER: MealTimeType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -164,6 +166,23 @@ export function PrintableMealPlan({
           />
         ))}
       </section>
+
+      {/* Grocery List */}
+      {groceryList && groceryList.length > 0 && (
+        <section className="print-grocery-list">
+          <h2 className="print-grocery-title">Grocery List</h2>
+          <div className="print-grocery-grid">
+            {groceryList.map((item, idx) => (
+              <div key={idx} className="print-grocery-item">
+                <span className="print-grocery-name">{item.ingredient}</span>
+                <span className="print-grocery-amount">
+                  {item.totalAmount} {item.unit}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Footer */}
       <footer className="print-footer">

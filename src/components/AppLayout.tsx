@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useSupabaseClients } from '@/hooks/useSupabaseClients';
 import { ClientSelector } from '@/components/ClientSelector';
-import type { Client } from '@/types';
+import type { Client, CompletePlan } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 /**
@@ -31,6 +31,8 @@ export interface AppLayoutContext {
   createNewClientDraft: () => Client;
   clientRestrictions: ClientIngredientRestrictions[];
   setClientRestrictions: React.Dispatch<React.SetStateAction<ClientIngredientRestrictions[]>>;
+  generatedPlan: CompletePlan | null;
+  setGeneratedPlan: React.Dispatch<React.SetStateAction<CompletePlan | null>>;
 }
 
 // Tab-to-route mapping
@@ -62,6 +64,7 @@ export default function AppLayout() {
   } = useSupabaseClients();
 
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
+  const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
 
   // Derive active tab from current route
   const pathSegments = location.pathname.split('/').filter(Boolean);
@@ -128,6 +131,8 @@ export default function AppLayout() {
     createNewClientDraft,
     clientRestrictions,
     setClientRestrictions,
+    generatedPlan,
+    setGeneratedPlan,
   };
 
   return (

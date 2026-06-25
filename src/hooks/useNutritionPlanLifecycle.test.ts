@@ -48,6 +48,15 @@ vi.mock('@/services/supabasePlanService', () => ({
   lockNutritionPlan: (...args: unknown[]) => mockLockNutritionPlan(...args),
   checkPlanLockStatus: (...args: unknown[]) => mockCheckPlanLockStatus(...args),
   fetchCurrentPlan: (...args: unknown[]) => mockFetchCurrentPlan(...args),
+  buildLockedPlanPayload: vi.fn((input: unknown) => ({
+    type: 'nutrition',
+    generatedAt: new Date().toISOString(),
+    lockedAt: new Date().toISOString(),
+    macroTargets: { calories: 2200, protein: 165, carbs: 220, fat: 75 },
+    weeklyPlan: {},
+    likedIngredients: [],
+  })),
+  hashPlanPayload: vi.fn((payload: unknown) => 'hash-test'),
 }));
 
 // Snapshot persistence backed by in-memory store

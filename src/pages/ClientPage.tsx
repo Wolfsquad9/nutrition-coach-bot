@@ -17,6 +17,7 @@ import { NoClientGuard } from '@/components/NoClientGuard';
 import { getClientLabel, calculateAgeFromBirthDate } from '@/utils/clientHelpers';
 import { generatePersonalizedPlan } from '@/services/planService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
+import { GroceryListDisplay } from '@/components/GroceryListDisplay';
 import type { Client, CompletePlan, Recipe } from '@/types';
 
 export default function ClientPage() {
@@ -29,10 +30,11 @@ export default function ClientPage() {
     handleCreateClient,
     createNewClientDraft,
     clientRestrictions,
+    generatedPlan,
+    setGeneratedPlan,
   } = useAppLayout();
 
   const [draftClient, setDraftClient] = useState<Client | null>(null);
-  const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -285,6 +287,18 @@ export default function ClientPage() {
           </div>
         )}
       </Card>
+
+      {generatedPlan && (
+        <Card className="p-6 shadow-card">
+          <GroceryListDisplay 
+            groceryList={generatedPlan.nutritionPlan.groceryList}
+            totalEstimatedCost={generatedPlan.nutritionPlan.groceryList.reduce(
+              (sum, item) => sum + (item.estimatedCost || 0),
+              0
+            )}
+          />
+        </Card>
+      )}
     </div>
   );
 }

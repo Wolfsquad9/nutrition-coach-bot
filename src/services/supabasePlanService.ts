@@ -313,50 +313,7 @@ export async function lockNutritionPlan(
   }
 }
 
-/**
- * Get all plan versions for a client (for history)
- */
-export async function fetchPlanHistory(clientId: string): Promise<{
-  versions: Array<{ id: string; versionNumber: number; createdAt: string; note: string | null }>;
-  error: string | null;
-}> {
-  try {
-    const { data: planData, error: planError } = await supabase
-      .from('nutrition_plans')
-      .select('id')
-      .eq('client_id', clientId)
-      .eq('status', 'active')
-      .maybeSingle();
 
-    if (planError || !planData) {
-      return { versions: [], error: planError?.message || null };
-    }
-
-    const { data: versions, error: versionsError } = await supabase
-      .from('plan_versions')
-      .select('id, version_number, created_at, note')
-      .eq('plan_id', planData.id)
-      .eq('archived', false)
-      .order('version_number', { ascending: false });
-
-    if (versionsError) {
-      return { versions: [], error: versionsError.message };
-    }
-
-    return {
-      versions: (versions || []).map(v => ({
-        id: v.id,
-        versionNumber: v.version_number,
-        createdAt: v.created_at,
-        note: v.note,
-      })),
-      error: null,
-    };
-  } catch (error: unknown) {
-    console.error('Failed to fetch plan history:', error);
-    return { versions: [], error: getErrorMessage(error, 'Failed to fetch plan history') };
-  }
-}
 
 // Legacy function alias for backward compatibility
 export const saveNutritionPlan = lockNutritionPlan;

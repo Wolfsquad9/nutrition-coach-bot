@@ -8,7 +8,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 
-const SUPABASE_URL = "https://ennbxdpthjtzsobnqvqw.supabase.co";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 /**
  * Generate a shareable URL for a locked plan version.
@@ -31,7 +32,7 @@ export async function fetchSharedPlan(
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVubmJ4ZHB0aGp0enNvYm5xdnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjA2OTUsImV4cCI6MjA3MzUzNjY5NX0.QK19cuza0iptrdkoDctEI9iOOvx0tYzy_UPSPrm00dU',
+          'apikey': SUPABASE_ANON_KEY,
         },
       }
     );
