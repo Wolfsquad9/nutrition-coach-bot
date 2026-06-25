@@ -117,7 +117,8 @@ function PrintDaySection({
 export function PrintableMealPlan({ 
   weeklyPlan, 
   clientName,
-  generatedDate 
+  generatedDate,
+  groceryList
 }: PrintableMealPlanProps) {
   return (
     <div className="printable-meal-plan">
