@@ -26,6 +26,7 @@ import { calculateNutritionMetrics } from '@/utils/calculations';
 import { generateWeeklyMealPlan, generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
+import { GroceryListDisplay } from '@/components/GroceryListDisplay';
 import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
 import { SharePlanButton } from '@/components/SharePlanButton';
 import { getClientLabel } from '@/utils/clientHelpers';
@@ -240,6 +241,18 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
 
       {hasWeeklyPlan && !planState.isLoading && <WeeklyMealPlanDisplay weeklyPlan={planState.resolvedWeeklyPlan!} />}
       {hasDailyPlan && !planState.isLoading && <DailyMealPlanDisplay {...dailyMealPlan} />}
+
+      {planState.snapshot && planState.snapshot.groceryList && !planState.isLoading && (
+        <Card className="p-6 shadow-card">
+          <GroceryListDisplay 
+            groceryList={Array.from(planState.snapshot.groceryList)}
+            totalEstimatedCost={Array.from(planState.snapshot.groceryList).reduce(
+              (sum, item) => sum + (item.estimatedCost || 0),
+              0
+            )}
+          />
+        </Card>
+      )}
 
       {!hasAnyPlan && !planState.isLoading && planState.state !== 'ERROR' && (
         <Card className="p-6 shadow-card">

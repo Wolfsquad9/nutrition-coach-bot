@@ -18,5 +18,5 @@ export default function TrainingPage() {
     );
   }
 
-  return <TrainingPlanDisplay plan={generatedPlan.trainingPlan} />;
+  return <TrainingPlanDisplay plan={generatedPlan.trainingPlan as any} />;
 }
