@@ -18,5 +18,21 @@ export default function TrainingPage() {
     );
   }
 
-  return <TrainingPlanDisplay plan={generatedPlan.trainingPlan as any} />;
+  return (
+    <TrainingPlanDisplay 
+      plan={{
+        split: generatedPlan.trainingPlan.split,
+        sessions: generatedPlan.trainingPlan.frequency,
+        workouts: generatedPlan.trainingPlan.workouts.map(w => ({
+          day: w.dayNumber,
+          name: w.name,
+          exercises: w.exercises.map(ex => ({
+            name: ex.exercise.name,
+            sets: ex.sets,
+            reps: ex.reps,
+          })),
+        })),
+      }}
+    />
+  );
 }
