@@ -27,7 +27,7 @@ export default function TrainingPage() {
           day: w.dayNumber,
           name: w.name,
           exercises: w.exercises.map(ex => ({
-            name: ex.exercise.name,
+            name: ex.exercise?.name ?? 'Unknown exercise',
             sets: ex.sets,
             reps: ex.reps,
           })),
