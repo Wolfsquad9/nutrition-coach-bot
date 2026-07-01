@@ -8,6 +8,19 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+
+// ─── Deterministic IDs ───────────────────────────────────────────────────────
+// Declared BEFORE vi.mock calls. Vitest hoists vi.mock factories to the top
+// of the file, so any const referenced inside a factory must be initialized
+// by the time the factory runs. Top-level `const` is in the TDZ until
+// evaluation reaches its declaration, so we use literal values in the mock
+// factory (see below) and expose constants for the rest of the test file.
+
+const PLAN_ID = 'plan-lc-1';
+const VERSION_ID = 'ver-lc-1';
+const VERSION_NUMBER = 1;
+const PAYLOAD_HASH = 'hash-abc123';
+
 import { useNutritionPlanState } from './useNutritionPlanState';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { MacroTargets } from '@/types';
@@ -49,15 +62,18 @@ vi.mock('@/services/supabasePlanService', () => ({
   checkPlanLockStatus: (...args: unknown[]) => mockCheckPlanLockStatus(...args),
   fetchCurrentPlan: (...args: unknown[]) => mockFetchCurrentPlan(...args),
   buildLockedPlanPayload: vi.fn((input: unknown) => {
-    // Return a full snapshot object with deterministic versionId
+    // Return a snapshot object with literal, hoisting-safe values. The
+    // factory runs before the top-level `const` bindings are initialized,
+    // so we cannot reference PLAN_ID / VERSION_ID / VERSION_NUMBER by name
+    // here — they are in the temporal dead zone.
     return {
       type: 'nutrition',
       identifier: {
-        versionId: VERSION_ID,
-        planId: PLAN_ID,
+        versionId: 'ver-lc-1',
+        planId: 'plan-lc-1',
       },
       meta: {
-        versionNumber: VERSION_NUMBER,
+        versionNumber: 1,
         generatedAt: new Date().toISOString(),
         lockedAt: new Date().toISOString(),
       },
@@ -101,10 +117,6 @@ vi.mock('@/services/supabaseOverrideService', () => ({
 // ─── Test data ───────────────────────────────────────────────────────────[...]
 
 const CLIENT_ID = 'client-lifecycle-1';
-const PLAN_ID = 'plan-lc-1';
-const VERSION_ID = 'ver-lc-1';
-const VERSION_NUMBER = 1;
-const PAYLOAD_HASH = 'hash-abc123';
 
 const fakeMacros: MacroTargets = {
   calories: 2200,
