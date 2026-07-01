@@ -8,8 +8,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 /**
  * Generate a shareable URL for a locked plan version.
@@ -25,6 +25,13 @@ export function generateShareLink(versionId: string): string {
 export async function fetchSharedPlan(
   versionId: string
 ): Promise<{ snapshot: PlanSnapshot | null; error: string | null }> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return {
+      snapshot: null,
+      error: 'Supabase env not configured: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.',
+    };
+  }
+
   try {
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/get-shared-plan?versionId=${encodeURIComponent(versionId)}`,
