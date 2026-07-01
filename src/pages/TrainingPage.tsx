@@ -2,12 +2,45 @@
  * Training tab page — displays the training plan from generated complete plan
  */
 
+import { useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { TrainingPlanDisplay } from '@/components/TrainingPlanDisplay';
 import { useAppLayout } from '@/hooks/useAppLayout';
+import type { WorkoutExercise } from '@/types';
+
+/**
+ * Validate a workout exercise entry. The upstream generator must always
+ * produce a valid `exercise` reference; the prior fallback that rendered
+ * "Unknown exercise" silently masked a data-pipeline regression. Drop
+ * invalid entries and log in dev so the regression is observable without
+ * poisoning the rendered output.
+ */
+function isValidWorkoutExercise(
+  ex: WorkoutExercise
+): ex is WorkoutExercise & { exercise: NonNullable<WorkoutExercise['exercise']> } {
+  if (ex.exercise && typeof ex.exercise.name === 'string') return true;
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.error('[TrainingPage] Dropping workout exercise with missing reference:', ex);
+  }
+  return false;
+}
 
 export default function TrainingPage() {
   const { generatedPlan } = useAppLayout();
+
+  const workouts = useMemo(() => {
+    if (!generatedPlan) return [];
+    return generatedPlan.trainingPlan.workouts.map(w => ({
+      day: w.dayNumber,
+      name: w.name,
+      exercises: w.exercises.filter(isValidWorkoutExercise).map(ex => ({
+        name: ex.exercise.name,
+        sets: ex.sets,
+        reps: ex.reps,
+      })),
+    }));
+  }, [generatedPlan]);
 
   if (!generatedPlan) {
     return (
@@ -19,19 +52,11 @@ export default function TrainingPage() {
   }
 
   return (
-    <TrainingPlanDisplay 
+    <TrainingPlanDisplay
       plan={{
         split: generatedPlan.trainingPlan.split,
         sessions: generatedPlan.trainingPlan.frequency,
-        workouts: generatedPlan.trainingPlan.workouts.map(w => ({
-          day: w.dayNumber,
-          name: w.name,
-          exercises: w.exercises.map(ex => ({
-            name: ex.exercise?.name ?? 'Unknown exercise',
-            sets: ex.sets,
-            reps: ex.reps,
-          })),
-        })),
+        workouts,
       }}
     />
   );
