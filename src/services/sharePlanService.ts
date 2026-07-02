@@ -8,7 +8,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 
-const SUPABASE_URL = "https://ennbxdpthjtzsobnqvqw.supabase.co";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 /**
  * Generate a shareable URL for a locked plan version.
@@ -24,6 +25,13 @@ export function generateShareLink(versionId: string): string {
 export async function fetchSharedPlan(
   versionId: string
 ): Promise<{ snapshot: PlanSnapshot | null; error: string | null }> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return {
+      snapshot: null,
+      error: 'Supabase env not configured: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.',
+    };
+  }
+
   try {
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/get-shared-plan?versionId=${encodeURIComponent(versionId)}`,
@@ -31,7 +39,7 @@ export async function fetchSharedPlan(
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVubmJ4ZHB0aGp0enNvYm5xdnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjA2OTUsImV4cCI6MjA3MzUzNjY5NX0.QK19cuza0iptrdkoDctEI9iOOvx0tYzy_UPSPrm00dU',
+          'apikey': SUPABASE_ANON_KEY,
         },
       }
     );

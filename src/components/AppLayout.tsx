@@ -4,7 +4,7 @@
  */
 
 import { Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useSupabaseClients } from '@/hooks/useSupabaseClients';
 import { ClientSelector } from '@/components/ClientSelector';
-import type { Client } from '@/types';
+import type { Client, CompletePlan } from '@/types';
 import type { ClientIngredientRestrictions } from '@/utils/ingredientSubstitution';
 
 /**
@@ -31,6 +31,8 @@ export interface AppLayoutContext {
   createNewClientDraft: () => Client;
   clientRestrictions: ClientIngredientRestrictions[];
   setClientRestrictions: React.Dispatch<React.SetStateAction<ClientIngredientRestrictions[]>>;
+  generatedPlan: CompletePlan | null;
+  setGeneratedPlan: React.Dispatch<React.SetStateAction<CompletePlan | null>>;
 }
 
 // Tab-to-route mapping
@@ -62,6 +64,7 @@ export default function AppLayout() {
   } = useSupabaseClients();
 
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
+  const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
 
   // Derive active tab from current route
   const pathSegments = location.pathname.split('/').filter(Boolean);
@@ -89,6 +92,7 @@ export default function AppLayout() {
 
   const handleClientChange = (clientId: string) => {
     setActiveClientId(clientId);
+    setGeneratedPlan(null);
     // Navigate to the same tab for the new client
     const route = TAB_ROUTES.find(t => t.value === activeTab);
     if (route && route.path) {
@@ -103,6 +107,14 @@ export default function AppLayout() {
     navigate('/login', { replace: true });
   };
 
+  // Isolate generated plan to the active client. The active client can change
+  // via routing (deep link, browser back/forward) as well as via the selector,
+  // so reset in both paths. Resetting in handleClientChange covers the
+  // selector path; this effect covers the routing path.
+  useEffect(() => {
+    setGeneratedPlan(null);
+  }, [activeClientId, setGeneratedPlan]);
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -116,19 +128,38 @@ export default function AppLayout() {
     );
   }
 
-  const context: AppLayoutContext = {
-    clients,
-    activeClientId,
-    activeClient,
-    isLoadingClients,
-    clientError,
-    setActiveClientId,
-    handleCreateClient,
-    refreshClients,
-    createNewClientDraft,
-    clientRestrictions,
-    setClientRestrictions,
-  };
+  const context: AppLayoutContext = useMemo(
+    () => ({
+      clients,
+      activeClientId,
+      activeClient,
+      isLoadingClients,
+      clientError,
+      setActiveClientId,
+      handleCreateClient,
+      refreshClients,
+      createNewClientDraft,
+      clientRestrictions,
+      setClientRestrictions,
+      generatedPlan,
+      setGeneratedPlan,
+    }),
+    [
+      clients,
+      activeClientId,
+      activeClient,
+      isLoadingClients,
+      clientError,
+      setActiveClientId,
+      handleCreateClient,
+      refreshClients,
+      createNewClientDraft,
+      clientRestrictions,
+      setClientRestrictions,
+      generatedPlan,
+      setGeneratedPlan,
+    ]
+  );
 
   return (
     <div className="min-h-screen bg-background">

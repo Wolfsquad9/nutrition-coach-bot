@@ -232,7 +232,10 @@ export function useNutritionPlanState() {
   const setDraftPlan = useCallback(
     (plan: WeeklyMealPlanResult, macros: MacroTargets, ingredients: string[]) => {
       const validation = validateImmutability(lifecycleState, "REGENERATE");
-      if (!validation.valid) return;
+      if (!validation.valid) {
+        setError("Can't regenerate a locked plan");
+        return;
+      }
 
       setWeeklyPlan(plan);
       setMacroTargets(macros);

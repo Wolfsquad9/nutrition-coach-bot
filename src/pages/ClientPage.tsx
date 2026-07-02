@@ -29,10 +29,11 @@ export default function ClientPage() {
     handleCreateClient,
     createNewClientDraft,
     clientRestrictions,
+    generatedPlan,
+    setGeneratedPlan,
   } = useAppLayout();
 
   const [draftClient, setDraftClient] = useState<Client | null>(null);
-  const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
