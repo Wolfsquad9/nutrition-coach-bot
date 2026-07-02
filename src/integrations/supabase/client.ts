@@ -20,21 +20,33 @@ function initializeClient(): ReturnType<typeof createClient<Database>> {
   // Actual API calls will fail with network errors that clearly indicate missing config.
   const url = SUPABASE_URL || 'https://env-not-configured.invalid';
   const key = SUPABASE_ANON_KEY || 'env-not-configured';
+  const hasConfig = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
 
-  if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
+  if (import.meta.env.DEV && !hasConfig) {
     console.warn(
       '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
       'See .env.example for required env vars. Using stub URLs for development.'
     );
   }
 
-  _supabaseClient = createClient<Database>(url, key, {
-    auth: {
-      storage: localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  });
+  try {
+    _supabaseClient = createClient<Database>(url, key, {
+      auth: {
+        storage: localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+  } catch (error) {
+    // In development/preview, suppress errors from stub URLs failing to initialize
+    if (import.meta.env.DEV && !hasConfig) {
+      console.debug('[supabase] Stub client initialization (expected without config)');
+      // Create a minimal stub client that won't crash
+      _supabaseClient = createClient<Database>(url, key) as any;
+    } else {
+      throw error;
+    }
+  }
 
   return _supabaseClient;
 }
