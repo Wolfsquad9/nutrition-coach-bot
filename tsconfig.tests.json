@@ -1,26 +1,22 @@
 {
-  "extends": "./tsconfig.app.json",
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    "strict": true,
     "noEmit": false,
-    "allowImportingTsExtensions": false,
-    "module": "CommonJS",
-    "moduleResolution": "node",
     "outDir": "./.tmp-tests",
-    "strict": false
+
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+
+    "types": ["vitest/globals"]
   },
+
   "include": [
-    "src/data/ingredientDatabase.ts",
-    "src/services/recipeService.ts",
-    "src/services/supabaseOverrideService.ts",
-    "src/services/supabasePlanService.ts",
-    "src/types/index.ts",
-    "src/types/planSnapshot.ts",
-    "src/utils/planSnapshot.ts",
-    "src/utils/snapshotResolver.ts",
-    "src/domain/nutrition/snapshot.ts",
-    "src/domain/nutrition/snapshotAdapter.ts",
-    "src/domain/nutrition/planLifecycle.ts",
-    "src/domain/shared/constants.ts",
-    "tests/planSnapshot.test.ts"
+    "tests/**/*.ts"
   ]
 }
