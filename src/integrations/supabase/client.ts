@@ -20,7 +20,6 @@ const STUB_URL = 'https://env-not-configured.invalid';
 const STUB_KEY = 'env-not-configured';
 
 if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
-  // eslint-disable-next-line no-console
   console.error(
     '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
     'See .env.example for the required env vars.'
