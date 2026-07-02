@@ -42,7 +42,7 @@ function initializeClient(): ReturnType<typeof createClient<Database>> {
     if (import.meta.env.DEV && !hasConfig) {
       console.debug('[supabase] Stub client initialization (expected without config)');
       // Create a minimal stub client that won't crash
-      _supabaseClient = createClient<Database>(url, key) as any;
+      _supabaseClient = createClient<Database>(url, key);
     } else {
       throw error;
     }
@@ -57,9 +57,11 @@ function initializeClient(): ReturnType<typeof createClient<Database>> {
 // The client is lazily initialized on first access. If env vars are missing,
 // an error is thrown at runtime with a clear message pointing to .env.example.
 
-export const supabase = new Proxy({} as ReturnType<typeof createClient<Database>>, {
-  get(target, prop) {
+type SupabaseClient = ReturnType<typeof createClient<Database>>;
+
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(target: SupabaseClient, prop: PropertyKey): unknown {
     const client = initializeClient();
-    return (client as any)[prop];
+    return Reflect.get(client, prop);
   },
-});
+}) as SupabaseClient;
