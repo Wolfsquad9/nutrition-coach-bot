@@ -7,43 +7,36 @@ import type { Database } from './types';
 // Lazy initialization to avoid import-time failures and TS1343 errors in
 // test compilation. The client is created on first access.
 let _supabaseClient: ReturnType<typeof createClient<Database>> | null = null;
-let _initError: Error | null = null;
 
 function initializeClient(): ReturnType<typeof createClient<Database>> {
   // Return cached client if already initialized
   if (_supabaseClient) return _supabaseClient;
-  
-  // Throw cached error if initialization failed before
-  if (_initError) throw _initError;
 
-  try {
-    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      const error = new Error(
-        '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
-        'See .env.example for required env vars.'
-      );
-      _initError = error;
-      throw error;
-    }
+  // In development/preview without env vars, use stub URLs to allow the app to load.
+  // Production deployments will have env vars set via Supabase integration.
+  // Actual API calls will fail with network errors that clearly indicate missing config.
+  const url = SUPABASE_URL || 'https://env-not-configured.invalid';
+  const key = SUPABASE_ANON_KEY || 'env-not-configured';
 
-    _supabaseClient = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        storage: localStorage,
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    });
-
-    return _supabaseClient;
-  } catch (error) {
-    if (!_initError) {
-      _initError = error instanceof Error ? error : new Error(String(error));
-    }
-    throw _initError;
+  if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
+    console.warn(
+      '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
+      'See .env.example for required env vars. Using stub URLs for development.'
+    );
   }
+
+  _supabaseClient = createClient<Database>(url, key, {
+    auth: {
+      storage: localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+
+  return _supabaseClient;
 }
 
 // Import the supabase client like this:
