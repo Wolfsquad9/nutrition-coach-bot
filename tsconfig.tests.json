@@ -1,16 +1,16 @@
 {
   "extends": "./tsconfig.app.json",
-
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",
+
+    "allowImportingTsExtensions": false,
 
     "noEmit": false,
     "outDir": "./.tmp-tests",
 
     "types": ["vitest/globals"]
   },
-
   "include": [
     "tests/**/*.ts",
     "src/domain/**/*.ts",
