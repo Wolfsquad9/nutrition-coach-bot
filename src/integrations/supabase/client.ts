@@ -4,39 +4,57 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// Lazy initialization to avoid import-time failures and TS1343 errors in
+// test compilation. The client is created on first access.
+let _supabaseClient: ReturnType<typeof createClient<Database>> | null = null;
+let _initError: Error | null = null;
 
-// Use a stub URL/anon key when env vars are missing so that import-time
-// `createClient()` does not throw. Test environments that don't set the env
-// vars will load a non-functional client; the createClient() throw above
-// would otherwise abort module evaluation and break pure-function tests
-// that import transitively (e.g. progress/relativeTime).
-//
-// In real dev/prod, missing env vars are surfaced via the dev console.error
-// below and via runtime request failures, both of which point the developer
-// at the missing config.
-const STUB_URL = 'https://env-not-configured.invalid';
-const STUB_KEY = 'env-not-configured';
+function initializeClient(): ReturnType<typeof createClient<Database>> {
+  // Return cached client if already initialized
+  if (_supabaseClient) return _supabaseClient;
+  
+  // Throw cached error if initialization failed before
+  if (_initError) throw _initError;
 
-if (import.meta.env.DEV && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
-  console.error(
-    '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
-    'See .env.example for the required env vars.'
-  );
+  try {
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      const error = new Error(
+        '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
+        'See .env.example for required env vars.'
+      );
+      _initError = error;
+      throw error;
+    }
+
+    _supabaseClient = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        storage: localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+
+    return _supabaseClient;
+  } catch (error) {
+    if (!_initError) {
+      _initError = error instanceof Error ? error : new Error(String(error));
+    }
+    throw _initError;
+  }
 }
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
+// 
+// The client is lazily initialized on first access. If env vars are missing,
+// an error is thrown at runtime with a clear message pointing to .env.example.
 
-export const supabase = createClient<Database>(
-  SUPABASE_URL ?? STUB_URL,
-  SUPABASE_ANON_KEY ?? STUB_KEY,
-  {
-    auth: {
-      storage: localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
-    }
-  }
-);
+export const supabase = new Proxy({} as ReturnType<typeof createClient<Database>>, {
+  get(target, prop) {
+    const client = initializeClient();
+    return (client as any)[prop];
+  },
+});
