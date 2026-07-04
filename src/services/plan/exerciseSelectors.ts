@@ -9,7 +9,7 @@ export function selectExercisesForSession(
   sessionType: 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body',
   experience: string,
   availableEquipment: string[],
-  rng: Rng = createSeededRng(`session-${sessionType}-${experience}-${Date.now()}`)
+  rng: Rng = createSeededRng(`session-${sessionType}-${experience}`)
 ): Exercise[] {
   const expConfig = EXPERIENCE_ADJUSTMENTS[experience] || EXPERIENCE_ADJUSTMENTS.intermediate;
   let muscleGroups: string[] = [];

@@ -66,7 +66,7 @@ export function generateInstructions(
 export function generateRecipe(
   selectedFoods: string[],
   mealType: MealType,
-  seed: string = `recipe-${mealType}-${Date.now()}`
+  seed: string = `recipe-${mealType}`
 ): GeneratedRecipe {
   // Deterministic per (selectedFoods, mealType, seed) — same inputs = same recipe.
   // This is important: "regenerate plan" must not silently change grocery lists
