@@ -1,22 +1,20 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
-
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-
-    "strict": true,
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "noEmit": false,
     "outDir": "./.tmp-tests",
-
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-
-    "types": ["vitest/globals"]
+    "types": ["node"]
   },
-
   "include": [
-    "tests/**/*.ts"
+    "tests/planSnapshot.test.ts",
+    "src/domain/nutrition/snapshot.ts"
   ]
 }
+

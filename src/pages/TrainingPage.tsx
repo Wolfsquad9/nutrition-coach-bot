@@ -20,7 +20,6 @@ function isValidWorkoutExercise(
 ): ex is WorkoutExercise & { exercise: NonNullable<WorkoutExercise['exercise']> } {
   if (ex.exercise && typeof ex.exercise.name === 'string') return true;
   if (import.meta.env.DEV) {
-    // eslint-disable-next-line no-console
     console.error('[TrainingPage] Dropping workout exercise with missing reference:', ex);
   }
   return false;

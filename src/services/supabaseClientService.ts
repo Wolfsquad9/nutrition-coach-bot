@@ -110,12 +110,20 @@ export async function clientToSupabaseRow(client: Client): Promise<Omit<Supabase
 
 /**
  * Fetch all clients from Supabase
+ * Uses explicit user filter as defense-in-depth alongside RLS.
  */
 export async function fetchClients(): Promise<{ clients: Client[]; isMockData: boolean }> {
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      console.error('No authenticated user when fetching clients');
+      return { clients: [], isMockData: false };
+    }
+
     const { data, error } = await supabase
       .from('clients')
       .select('*')
+      .eq('created_by', userId) // Defense-in-depth: explicit user filter
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -230,13 +238,20 @@ export async function updateClient(clientId: string, updates: Partial<Client>): 
 
 /**
  * Fetch a single client by ID
+ * Uses explicit user filter as defense-in-depth alongside RLS.
  */
 export async function fetchClientById(clientId: string): Promise<{ client: Client | null; error: string | null }> {
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { client: null, error: 'Not authenticated' };
+    }
+
     const { data, error } = await supabase
       .from('clients')
       .select('*')
       .eq('id', clientId)
+      .eq('created_by', userId) // Defense-in-depth: explicit user filter
       .maybeSingle();
 
     if (error) {

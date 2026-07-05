@@ -115,19 +115,8 @@ export default function AppLayout() {
     setGeneratedPlan(null);
   }, [activeClientId, setGeneratedPlan]);
 
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="p-8">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="tactical-label">Initializing authentication</p>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
+  // Create context object. Must be called unconditionally before any early return
+  // to satisfy React Hook rules (hooks must execute in the same order every render).
   const context: AppLayoutContext = useMemo(
     () => ({
       clients,
@@ -160,6 +149,19 @@ export default function AppLayout() {
       setGeneratedPlan,
     ]
   );
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="p-8">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="tactical-label">Initializing authentication</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
