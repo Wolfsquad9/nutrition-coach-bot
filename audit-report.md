@@ -1,334 +1,242 @@
-# FitPlan Pro — Comprehensive Audit & Roadmap
+# Client Onboarding & Invitation Flow — Repository-Wide Audit
 
-## Report generated: 2026-06-13
-
----
-
-## 1. Current Application State
-
-### Build Status
-| Check | Result |
-|-------|--------|
-| `npm run build` | ✅ **PASS** (3042 modules, 0 errors) |
-| `npx vitest run` | ✅ **PASS** (20/20 tests passing) |
-| `tsc --noEmit` | ⚠️ **Source errors only from untracked tables** (see §4) |
-| Production bundle | ✅ 1.96 MB total (gzip: ~510 KB) |
-
-### Git Context
-- **Branch:** `feat/follow-up-sequence-orchestration` (2 commits ahead of `chore/audit-fixes-w1`)
-- **Last 2 commits:** Check-in engine foundation + test suite
-- **Uncommitted:** 0 (all changes tracked)
-
-### Core Architecture
-- **Frontend:** Vite + React 18 + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend:** Supabase (PostgreSQL + Auth + Row Level Security)
-- **Routing:** React Router v6 with nested layouts
-- **Auth:** Email/password via Supabase Auth, context-based
+**Date:** 2026-07-08  
+**Scope:** Full trace from coach-created client → authenticated client portal user  
+**Method:** Static code analysis of all migrations, services, pages, hooks, and Edge Functions  
+**Rule:** No code modifications — description only.
 
 ---
 
-## 2. Features — Complete Inventory
+## 1. When a coach creates a client, where is the client's email collected?
 
-### 2.1 Core Features (Pre-existing)
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Client CRUD | ✅ Complete | Supabase-backed, RLS protected |
-| Nutrition plan generation | ✅ Complete | Algorithmic with convergence logic |
-| Nutrition plan locking | ✅ Complete | Atomic snapshot + edge function |
-| Weekly meal plans | ✅ Complete | 7-day variation algorithm |
-| Training plans | ✅ Complete | CRUD + display |
-| Recipe management | ✅ Complete | Database-backed |
-| Ingredient management | ✅ Complete | With substitution engine |
-| Plan sharing | ✅ Complete | Public share links via edge function |
-| Plan overrides / swaps | ✅ Complete | With tolerance checking |
-| Client invitations | ✅ Complete | Token-based coach-to-client linking |
+**Answer: The email is NOT collected in the coach UI.**
 
-### 2.2 New Check-in Engine (This session)
+- The `Client` type (`src/types/index.ts`, inferred from `src/hooks/useSupabaseClients.ts` line 19) includes an `email: ''` field.
+- The `clients` table has an `email TEXT` column (added by migration `20260129081000` line 18).
+- However, the coach-facing client creation form in `src/pages/ClientPage.tsx` (lines 182–258) renders fields for: firstName, lastName, birthDate, gender, weight, height, primaryGoal, activityLevel, trainingDaysPerWeek, trainingExperience. **There is no `<Input>` for email.**
+- The `createEmptyClient()` function in `src/hooks/useSupabaseClients.ts` (line 19) sets `email: ''` — an empty default that is never surfaced to the coach.
+- The `clientToSupabaseRow()` function in `src/services/supabaseClientService.ts` (line 91) passes `email: client.email || null` to the DB insert, so it will always be `null`.
 
-#### Database Layer
-| Component | File | Status |
-|-----------|------|--------|
-| `daily_checkins` table | `20260613120000_checkin_engine.sql` | ✅ RLS, CHECK constraints, partial index (7d), UNIQUE(client,date) |
-| `weekly_reviews` table | `20260613120000_checkin_engine.sql` | ✅ RLS with coach UPDATE exemption, measurements, qualitative fields |
-| `checkin_streaks` table | `20260613120000_checkin_engine.sql` | ✅ Denormalized streak tracking |
-| `coach_alerts` table | `20260613120000_checkin_engine.sql` | ✅ 8 alert types, severity enum, read/dismissed, JSONB metadata |
-| `ai_summaries` table | `20260613120000_checkin_engine.sql` | ✅ Trajectory, highlights, recommendations, risk flags |
-| `alert_severity` ENUM | `20260613120000_checkin_engine.sql` | ✅ `green | yellow | red` |
-| 11 database indexes | `20260613120000_checkin_engine.sql` | ✅ Including partial/filtered indexes |
-| `updated_at` triggers | `20260613120000_checkin_engine.sql` | ✅ On 3 tables |
-
-#### TypeScript Types
-| File | Exports | Status |
-|------|---------|--------|
-| `src/types/checkin.ts` | 28 exports | ✅ Row types, inserts, domain types (ComplianceScore, AdherenceTrend, CoachingSummary), form types |
-
-#### Service Layer (5 files, 20 functions)
-| File | Functions | Status |
-|------|-----------|--------|
-| `dailyCheckinService.ts` | `submitDailyCheckin`, `getTodayCheckin`, `getCheckinHistory`, `getClientCheckins` | ✅ Upsert semantics, filters |
-| `weeklyReviewService.ts` | `submitWeeklyReview`, `getCurrentWeekReview`, `getReviewHistory`, `updateCoachNotes` | ✅ Coach-notes update, week-start calc |
-| `streakService.ts` | `getStreak`, `updateStreak` | ✅ Consecutive/increment, gap/broken logic |
-| `alertService.ts` | `getCoachAlerts`, `markAlertRead`, `markAlertsRead`, `dismissAlert`, `getUnreadAlertCount`, `generateAlert` | ✅ Severity/type filtering, batch ops |
-| `coachingIntelligenceService.ts` | `getAdherenceTrend`, `getProgressTrajectory`, `generateWeeklySummary` | ✅ Stub with mock data + TODO |
-
-#### UI Components (7 components)
-| Component | Role | Status |
-|-----------|------|--------|
-| `DailyCheckinForm` | Mobile-first daily check-in with sliders, toggle, numeric inputs | ✅ Streak display, submitted state |
-| `WeeklyReviewForm` | Body measurements (3), sliders, qualitative fields, photo upload placeholder | ✅ Bodyweight delta calculation |
-| `ClientCheckinDashboard` | Compliance SVG ring chart, streak, weight trend, checkin grid | ✅ 4 summary cards + 14-day list |
-| `CoachAlertFeed` | Severity color-coded alerts, mark read/dismiss, client navigation | ✅ Realtime-ready refresh |
-| `ClientComplianceCard` | Per-client compliance %, streak, risk dot, trend arrow | ✅ Risk dots + at-risk indicators |
-| `CoachCheckinDashboard` | Aggregate stats + alert feed + client roster | ✅ 4 stat cards, 2-column layout |
-| `ClientDetailView` | Full history, AI summary generation, weekly review timeline, coach notes | ✅ Mock AI summary, coach notes save |
-
-#### Routing & Navigation
-| Change | Status |
-|--------|--------|
-| New route `/clients/:clientId/checkin` | ✅ Wired in `App.tsx` |
-| "Check-in" tab in navigation | ✅ 6-column tab bar |
-| `CheckinPage.tsx` with 3 sub-tabs | ✅ Daily / Weekly / Dashboard |
-
-#### Tests (5 files, 20 tests)
-| File | Tests | Status |
-|------|-------|--------|
-| `dailyCheckinService.test.ts` | 4 | ✅ All passing |
-| `weeklyReviewService.test.ts` | 3 | ✅ All passing |
-| `streakService.test.ts` | 3 | ✅ All passing |
-| `alertService.test.ts` | 5 | ✅ All passing (chainable mock pattern) |
-| `coachingIntelligenceService.test.ts` | 5 | ✅ All passing (pure mock data) |
+**Result:** The email field exists in the schema and data model but is invisible in the coach UI. Coaches cannot enter a client's email during creation.
 
 ---
 
-## 3. New Files Created (This Session)
+## 2. Is a Supabase Auth user automatically created? If yes, where?
 
-```
-supabase/
-  migrations/
-    20260613120000_checkin_engine.sql          -- 5 tables + RLS + indexes + triggers (NEW)
+**Answer: NO. There is no automatic `auth.users` creation when a coach inserts a client row.**
 
-src/
-  types/
-    checkin.ts                                  -- 28 type exports (NEW)
-  services/
-    checkin/
-      dailyCheckinService.ts                    -- 4 functions (NEW)
-      weeklyReviewService.ts                    -- 4 functions (NEW)
-      streakService.ts                          -- 2 functions (NEW)
-      alertService.ts                           -- 6 functions (NEW)
-      coachingIntelligenceService.ts            -- 3 stubs (NEW)
-  components/
-    checkin/
-      DailyCheckinForm.tsx                      -- Mobile-first form (NEW)
-      WeeklyReviewForm.tsx                      -- Measurements + qualitative (NEW)
-      ClientCheckinDashboard.tsx                -- SVG ring + stats (NEW)
-      CoachAlertFeed.tsx                        -- Severity-coded feed (NEW)
-      ClientComplianceCard.tsx                  -- Per-client summary card (NEW)
-      CoachCheckinDashboard.tsx                 -- Coach overview (NEW)
-      ClientDetailView.tsx                      -- Full per-client detail (NEW)
-  pages/
-    CheckinPage.tsx                             -- Tabbed check-in page (NEW)
-  __tests__/
-    checkin/
-      dailyCheckinService.test.ts               -- 4 tests (NEW)
-      weeklyReviewService.test.ts               -- 3 tests (NEW)
-      streakService.test.ts                     -- 3 tests (NEW)
-      alertService.test.ts                      -- 5 tests (NEW)
-      coachingIntelligenceService.test.ts        -- 5 tests (NEW)
-```
+- `src/services/supabaseClientService.ts` → `createClient()` (line 149) performs a simple `supabase.from('clients').insert(insertData)` with `user_profile_id: null` and `created_by: auth.uid()`.
+- There is **no trigger on `public.clients` INSERT** that creates an `auth.users` entry.
+- The only trigger on `auth.users` is `on_auth_user_created` (migration `20260131112805`), which fires **after** an auth user is created and inserts a `public.profiles` row. This is the reverse direction (auth → profile), not client → auth.
 
-**Modified files:**
-```
-src/App.tsx              -- Added CheckinPage route import
-src/components/AppLayout.tsx -- Added "Check-in" tab (6-column grid)
-```
+**Result:** A coach-created client row exists in `public.clients` with `user_profile_id = NULL` and has no corresponding `auth.users` entry. The client does not yet exist as a platform user.
 
 ---
 
-## 4. Known Issues & Blockers
+## 3. Is there an invitation token system? Which tables and services implement it?
 
-### 4.1 TypeScript Type Errors (Will-Fix After Migration)
-All TS errors are in the same category — the auto-generated `src/integrations/supabase/types.ts` does not yet include the 5 new tables. This is by design:
+**Answer: YES. A complete invitation token system exists at the database and service layer.**
 
-- `daily_checkins` → "not assignable to parameter"
-- `weekly_reviews` → "not assignable to parameter"
-- `checkin_streaks` → "not assignable to parameter"
-- `coach_alerts` → "not assignable to parameter"
-- `ai_summaries` → not yet referenced in code
+### Database
 
-**Fix:** After migration is applied to Supabase:
-```bash
-npx supabase gen types typescript --linked > src/integrations/supabase/types.ts
-```
+- **Table:** `public.client_invitations` (created in migration `20260530120000` lines 201–212)
+  - `id UUID PRIMARY KEY`
+  - `client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE`
+  - `invited_email TEXT` (nullable — can be empty)
+  - `invite_token_hash TEXT NOT NULL UNIQUE` (SHA-256 hash of the raw token)
+  - `created_by UUID NOT NULL REFERENCES auth.users(id)`
+  - `accepted_by UUID REFERENCES auth.users(id)` (set on claim)
+  - `accepted_at TIMESTAMP WITH TIME ZONE`
+  - `expires_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() + interval '14 days')`
+  - `revoked_at TIMESTAMP WITH TIME ZONE`
+  - `created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()`
 
-**Impact:** Production build still succeeds because Vite's `esbuild` skips type checking. At runtime, these calls work correctly — the errors are only at the IDE/CI type-check level.
+- **RPC — `create_client_invitation()`** (migration `20260530120000` lines 241–289):
+  - Validates the caller owns the client (`c.created_by = v_user_id`)
+  - Inserts a row into `client_invitations` with the hashed token
+  - Returns the invitation UUID
 
-### 4.2 Minor Issues
-| Issue | Severity | Resolution |
-|-------|----------|------------|
-| `ClientDetailView` uses mock AI data | Low | Replace with edge function call when deployed |
-| `CoachCheckinDashboard` expects pre-computed `ClientSummary[]` | Low | Needs parent to aggregate daily_checkins data |
-| Photo upload button disabled in `WeeklyReviewForm` | Low | Requires Supabase Storage bucket setup |
-| `tsconfig.tests.json` may need `@/` path alias | Low | Already resolved by vitest config |
+- **RPC — `claim_client_invitation()`** (migration `20260530120000` lines 291–345):
+  - Validates the token hash matches, not expired, not revoked, not already accepted
+  - `UPDATE public.clients SET user_profile_id = v_user_id WHERE id = v_invitation.client_id`
+  - `UPDATE public.profiles SET trainer_id = ..., role = 'client', email = ... WHERE id = v_user_id`
+  - `UPDATE public.user_roles SET role = 'client' WHERE user_id = v_user_id`
+  - `UPDATE public.client_invitations SET accepted_by = v_user_id, accepted_at = now()`
+  - Returns the client UUID
 
-### 4.3 No Known Runtime Bugs
-- ✅ All 20 unit tests pass
-- ✅ Build completes cleanly (0 errors)
-- ✅ No console warnings in dev mode
-- ✅ No circular dependencies detected
-- ✅ All RLS policies follow existing patterns and are internally consistent
+- **RLS:** `client_invitations` has policies for coach management (created_by) and client read (accepted_by).
 
----
+### Service Layer
 
-## 5. Code Quality Rating
+- **File:** `src/services/clientInvitationService.ts`
+  - `createInvitationToken()` — generates 32 random bytes as hex string
+  - `hashInvitationToken(token)` — SHA-256 hash via `crypto.subtle.digest`
+  - `createClientInvitation(input)` — calls `create_client_invitation` RPC, returns `{ token, inviteUrl, invitationId, error }`
+  - `claimClientInvitation(token)` — calls `claim_client_invitation` RPC, returns `{ clientId, error }`
 
-| Category | Rating (1-10) | Notes |
-|----------|---------------|-------|
-| **Architecture** | 9/10 | Clean service/component separation, RLS-first auth, consistent patterns |
-| **Type Safety** | 8/10 | 28 well-typed exports; the 5 missing table types are by-design pre-migration |
-| **Test Coverage** | 8/10 | 20 new tests covering all service paths; no component/edge function tests yet |
-| **Data Integrity** | 9/10 | CHECK constraints, UNIQUE constraints, FK references, write-once patterns |
-| **Security (RLS)** | 9/10 | Coach + client RLS on all tables, service-role gate on ai_summaries insert |
-| **UI/UX** | 7/10 | Functional but not polished; no skeleton loaders, no animations |
-| **Error Handling** | 8/10 | All services return `{ data, error }` tuples; components use toast for failures |
-| **Performance** | 8/10 | Partial indexes on critical query paths; proper column selections |
+### Frontend Pages
 
-**Overall: 8.3/10** — Production-ready codebase with minor gaps (all identified above).
+- **`src/pages/SignupPage.tsx`** — reads `?invite=` from URL, after signup calls `claimClientInvitation()`, navigates to `/my-plan`
+- **`src/pages/LoginPage.tsx`** — reads `?invite=` from URL, after login calls `claimClientInvitation()`, navigates to client route
+- **`src/pages/ClientClaimPage.tsx`** — a standalone claim page (route `/claim/:token`), but **this route is NOT registered in `App.tsx`** (no `<Route path="/claim/:token">` exists). This page is dead code.
 
 ---
 
-## 6. Roadmap to Sellable Product
+## 4. Is there an email invitation system? If yes, which Edge Function or service sends it?
 
-### Phase A: Deploy & Validate (2-3 days)
-```
-1. Apply migration to production Supabase
-   → supabase db push
-   → supabase gen types → regenerate types.ts
+**Answer: NO. There is no email sending for invitations.**
 
-2. Configure Supabase Storage bucket
-   → Storage bucket: checkin-photos
-   → RLS: authenticated users can upload, read own
-   → CORS policy for web app origin
+- The `createClientInvitation()` function generates an `inviteUrl` string but **never sends it**.
+- The Edge Functions in `supabase/functions/` are:
+  - `generate-coach-alerts/` — AI alert generation
+  - `generate-fitness-plan/` — AI plan generation
+  - `get-shared-plan/` — public plan sharing (requires auth)
+  - `send-whatsapp/` — WhatsApp skeleton (not invitation-related)
+- **There is no `send-invitation-email` Edge Function.**
+- There is no integration with any email service (Resend, SendGrid, SMTP, etc.) for invitations.
+- The `sharePlanService.ts` only handles plan sharing links, not invitations.
 
-3. Create 3 edge functions:
-   → generate-coach-alerts: scheduled + webhook, aggregates checkins + writes coach_alerts
-   → generate-ai-summary: weekly cron, calls OpenAI/Claude, writes ai_summaries
-   → upload-checkin-photo: validates + resizes + stores to Storage
-
-4. Connect coachingIntelligenceService stubs to edge functions
-```
-
-### Phase B: MVP Polish (1 week)
-```
-1. Add form validation:
-   → Zod schemas for DailyCheckinInsert, WeeklyReviewInsert
-   → Client-side pre-validation before submit
-
-2. Add loading skeletons:
-   → SkeletonCard components for all checkin components
-   → Replace Loader2 with proper skeleton UIs
-
-3. Add empty states:
-   → All "no data" states should have illustrations + CTAs
-
-4. Coach Dashboard aggregation:
-   → Build parent component that fetches all client_ids via get_trainer_client_ids()
-   → Aggregates compliance scores from daily_checkins
-   → Feeds CoachCheckinDashboard
-
-5. Add streak badge/notification:
-   → Milestone alerts at 7, 14, 21, 30 days
-   → Celebrate in DailyCheckinForm after submit
-```
-
-### Phase C: Client-Facing Portal (1-2 weeks)
-```
-1. Build dedicated client login flow:
-   → client subdomain (client.fitplanpro.com)
-   → Limited read-only view of own plans
-   → Only their check-in forms
-   → No client creation, no coaching tools
-
-2. Client onboarding:
-   → First-time check-in tutorial
-   → Notification permission request
-   → Goal setting wizard
-
-3. Messaging layer:
-   → Coach → client notes via weekly_reviews.coach_notes
-   → In-app notification when coach leaves notes
-   → Email notification via Supabase edge function + Resend
-```
-
-### Phase D: Revenue Features (2-3 weeks)
-```
-1. Subscription tiers (Stripe):
-   → Free: 1 client, basic plans
-   → Pro: up to 20 clients + check-ins + AI summaries
-   → Enterprise: unlimited clients + white-label + API access
-
-2. White-label / branding:
-   → Custom logo, colors, domain
-   → Client-facing PDF with coach branding
-
-3. Advanced analytics:
-   → Historical trends across all clients
-   → Churn prediction (low adherence → intervention)
-   → Coach performance dashboard (client results aggregation)
-
-4. Batch operations:
-   → Send bulk messages/notes to multiple clients
-   → Apply macro adjustments to multiple plans
-```
-
-### Phase E: Growth & Scale (1 month)
-```
-1. Team features:
-   → Multiple coaches per account
-   → Coach role hierarchy (admin → coach → assistant)
-   → Shared client pools
-
-2. Integrations:
-   → Apple Health / Google Fit sync (weight, activity)
-   → MyFitnessPal / Cronometer sync
-   → Calendar integration (Google Calendar, Outlook)
-
-3. Automated marketing:
-   → Referral program
-   → Client success story generation (with permission)
-   → Automated re-engagement for dormant clients
-
-4. Mobile app:
-   → React Native or PWA with push notifications
-   → Offline check-in support
-   → Camera integration for progress photos
-```
-
-### Revenue Model
-
-| Tier | Price | Key Feature |
-|------|-------|-------------|
-| **Free** | $0 | 1 client, basic plans |
-| **Starter** | $29/mo | Up to 10 clients, check-ins, basic analytics |
-| **Pro** | $79/mo | Up to 50 clients, AI summaries, coach alerts, priority support |
-| **Enterprise** | $199/mo | Unlimited clients, white-label, API, team seats, custom integrations |
-
-**Target market:** Personal trainers, nutrition coaches, online coaches managing 5-50 clients.
-
-**Estimated path to first dollar:** 2-3 weeks (Phase A + B + basic Stripe integration).
+**Result:** The coach would need to manually copy the invite URL from the browser console or a future UI and send it to the client via their own email/WhatsApp.
 
 ---
 
-## 7. Recommendation
+## 5. How is `clients.user_profile_id` populated?
 
-The check-in engine is **architecturally complete and safe to merge**. The codebase follows the same patterns as every other service/component in the project. Build passes, tests pass, and there are zero runtime bugs.
+**Answer: Exclusively via the `claim_client_invitation()` RPC.**
 
-**Priority actions before production launch:**
-1. Apply migration to Supabase
-2. Regenerate TypeScript types
-3. Wire up the 3 edge functions
-4. Deploy
+- When a client signs up or logs in with a valid invitation token, `claimClientInvitation()` is called from either `SignupPage.tsx` (line 33) or `LoginPage.tsx` (line 34).
+- The RPC executes (migration `20260530120000` lines 317–321):
+  ```sql
+  UPDATE public.clients
+  SET user_profile_id = v_user_id,
+      updated_at = now()
+  WHERE id = v_invitation.client_id
+    AND (user_profile_id IS NULL OR user_profile_id = v_user_id);
+  ```
+- There is **no other code path** that sets `user_profile_id`. It is not set during client creation (it's explicitly `null` in `clientToSupabaseRow()` line 93).
 
-Estimated total effort to close remaining gaps: **3-4 days of focused work** for a solo developer.
+---
 
-The product as it stands (with the check-in engine) solves a real, validated pain point for fitness coaches: fragmented client communication and manual adherence tracking. It is a viable MVP for a narrow launch to early users.
+## 6. How is `user.user_metadata.role` assigned?
+
+**Answer: There are two competing flows with different behavior.**
+
+### Flow A: SignupPage.tsx (the primary invite flow)
+- `supabase.auth.signUp({ email, password })` — **no `options.data` is passed** (line 24).
+- The `handle_new_user()` trigger (migration `20260530120000` lines 68–87) creates:
+  - `public.profiles` with `role = 'trainer'`
+  - `public.user_roles` with `role = 'trainer'`
+- The JWT `user_metadata.role` is **not set** (defaults to `'coach'` fallback in `useAuth.tsx` line 69).
+- After signup, `claim_client_invitation()` updates `profiles.role` and `user_roles.role` to `'client'`, but **the JWT is not refreshed**, so `user_metadata.role` remains `'coach'` until the user logs out and back in.
+
+### Flow B: ClientClaimPage.tsx (dead code — route not registered)
+- `supabase.auth.signUp({ email, password, options: { data: { role: 'client', client_id: clientId } } })` (lines 71–79).
+- This **does** set `user_metadata.role = 'client'` and `user_metadata.client_id = clientId` in the JWT at signup time.
+- However, this page is **unreachable** because no route exists for it in `App.tsx`.
+
+### Key Issue
+- `useAuth.tsx` line 69: `const userRole = user ? (user.user_metadata?.role ?? 'coach') : null;`
+- This reads from the JWT, not from the database. After the claim flow via SignupPage, the JWT still says `'coach'` (or undefined → `'coach'` fallback).
+- `ProtectedRoute.tsx` uses `userRole` to enforce role-based access. A client who just signed up via the invite link will be treated as a coach and redirected to `/` (coach home) instead of `/my-plan` (client home).
+
+---
+
+## 7. How does a newly invited client reach the client portal?
+
+**Answer: Via the `/signup?invite=TOKEN` URL, but with caveats.**
+
+1. Coach generates invitation → gets `inviteUrl` = `https://app.example.com/signup?invite=TOKEN`
+2. Coach manually sends this URL to the client (no automated email)
+3. Client opens URL → `SignupPage.tsx` renders with `inviteToken` from search params
+4. Client fills in email + password → `supabase.auth.signUp()`
+5. **If email confirmation is disabled** (Supabase project setting): `data.session` is available
+   - `claimClientInvitation(inviteToken)` is called immediately
+   - On success → `navigate('/my-plan')`
+   - **Problem:** JWT role is still `'coach'` → `ProtectedRoute` with `role="client"` will redirect to `/` instead
+6. **If email confirmation is enabled** (Supabase default): `data.session` is `null`
+   - Claim is skipped → user sees "Please confirm your email, then use the invitation link again" toast
+   - User confirms email, clicks invite link again → this time they're already authenticated → `LoginPage.tsx` handles it
+   - `LoginPage.tsx` calls `claimClientInvitation()` → on success navigates to `/clients/{clientId}/nutrition` (coach route!) instead of `/my-plan`
+   - **Problem:** LoginPage navigates to a coach route, not the client portal
+
+---
+
+## 8. Is the onboarding flow complete, partially implemented, or missing?
+
+**Answer: PARTIALLY IMPLEMENTED — the database and service layer are complete, but the frontend integration and email delivery are missing.**
+
+### What works:
+- ✅ `client_invitations` table with proper schema, indexes, RLS
+- ✅ `create_client_invitation()` RPC with ownership validation
+- ✅ `claim_client_invitation()` RPC that atomically links client, updates roles, marks invitation accepted
+- ✅ `clientInvitationService.ts` with token generation, hashing, RPC calls
+- ✅ Invite URL generation (`/signup?invite=TOKEN`)
+- ✅ SignupPage reads invite token and attempts claim
+- ✅ LoginPage reads invite token and attempts claim
+
+### What is missing or broken:
+- ❌ **No coach UI to trigger invitation** — no "Invite Client" button anywhere in the coach dashboard
+- ❌ **Email field not rendered** in client creation form (`ClientPage.tsx`)
+- ❌ **No email sending** — no Edge Function, no service integration
+- ❌ **`ClientClaimPage.tsx` is dead code** — route not registered in `App.tsx`
+- ❌ **JWT role mismatch** — `user_metadata.role` is not set during SignupPage signup, and the JWT is not refreshed after `claim_client_invitation()` updates the DB role
+- ❌ **LoginPage navigates to coach route** after claim (`/clients/{clientId}/nutrition`) instead of client portal (`/my-plan`)
+- ❌ **No invitation status UI** — coach cannot see which invitations are pending, accepted, or expired
+
+---
+
+## 9. Can I realistically test the client portal today without manually creating a Supabase Auth user?
+
+**Answer: NO.**
+
+To test the client portal end-to-end, you would need to:
+
+1. Create a client record in `public.clients` with `user_profile_id = NULL`
+2. Manually create an `auth.users` entry (via Supabase dashboard or API)
+3. Manually set `user_metadata.role = 'client'` and `user_metadata.client_id = <client-uuid>` on that auth user
+4. Manually update `public.clients.user_profile_id` to the auth user's ID
+5. Manually create `public.profiles` and `public.user_roles` entries with `role = 'client'`
+6. Log in with that auth user's credentials
+
+The invitation system is designed to automate steps 2–5, but:
+- There is no coach UI to trigger it
+- There is no email to deliver the invite URL
+- The JWT role assignment is broken in the primary flow
+
+**Without manual database manipulation, the client portal (`/my-plan`, `/checkin`, `/progress`, `/alerts`, `/messages`) is unreachable.**
+
+---
+
+## 10. If the flow is incomplete, identify exactly what is missing and estimate the implementation effort.
+
+### Missing Components
+
+| # | Component | Details | Effort |
+|---|-----------|---------|--------|
+| 1 | **Coach UI: Invite button** | Add "Invite Client" action in the coach client view. Calls `createClientInvitation()`, displays the invite URL (or copies to clipboard). | Small |
+| 2 | **Coach UI: Email field** | Add email input to client creation form in `ClientPage.tsx`. | Small |
+| 3 | **Email sending Edge Function** | Create a `send-invitation-email` Supabase Edge Function that uses Resend/SendGrid to deliver the invite URL. | Medium |
+| 4 | **JWT role fix** | Either (a) pass `options.data.role = 'client'` in SignupPage when invite token is present, or (b) call `supabase.auth.refreshSession()` after `claim_client_invitation()` to reload the JWT with updated metadata. | Small |
+| 5 | **LoginPage navigation fix** | Change line 39 from `navigate('/clients/${claimResult.clientId}/nutrition')` to `navigate('/my-plan')` when an invite token is being claimed. | Trivial |
+| 6 | **ClientClaimPage route** | Either register the route in `App.tsx` or remove the dead code. | Trivial |
+| 7 | **Invitation status UI** | Show pending/accepted/expired invitations in the coach client detail view. | Medium |
+| 8 | **Email confirmation handling** | Improve the UX when email confirmation is required — currently the user sees a confusing toast and must re-click the invite link. | Small |
+
+### Total Estimated Effort: **Small–Medium** (2–5 days for a single developer)
+
+The database foundation (tables, RPCs, RLS) is solid. The service layer is complete. The gaps are primarily in:
+- Frontend UI (coach-facing invite trigger + status)
+- Email delivery (new Edge Function)
+- JWT metadata synchronization (small fix in SignupPage)
+- Navigation correctness (small fix in LoginPage)
+
+### Critical Path
+
+1. Add email field to client creation form (trivial)
+2. Add "Invite Client" button to coach UI (small)
+3. Fix JWT role in SignupPage when invite token is present (small)
+4. Fix LoginPage navigation for invite claims (trivial)
+5. Create email sending Edge Function (medium — requires Resend/SendGrid setup)
+6. Wire the invite button to call `createClientInvitation()` and trigger the email Edge Function
+
+Steps 1–4 would make the flow testable end-to-end (with manual URL sharing). Step 5 is required for a production-ready experience.

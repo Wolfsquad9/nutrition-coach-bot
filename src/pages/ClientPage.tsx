@@ -10,14 +10,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertCircle, Plus, Save, CheckCircle, Download, FileJson } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Loader2, AlertCircle, Plus, Save, CheckCircle, Download, FileJson, UserPlus, Copy, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppLayout } from '@/hooks/useAppLayout';
 import { NoClientGuard } from '@/components/NoClientGuard';
 import { getClientLabel, calculateAgeFromBirthDate } from '@/utils/clientHelpers';
 import { generatePersonalizedPlan } from '@/services/planService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
+import { createClientInvitation } from '@/services/clientInvitationService';
 import type { Client, CompletePlan, Recipe } from '@/types';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ClientPage() {
   const {
@@ -36,7 +46,13 @@ export default function ClientPage() {
   const [draftClient, setDraftClient] = useState<Client | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Invitation state
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   const editingClient = draftClient || activeClient;
   const hasActiveClient = !!activeClientId && !!activeClient;
@@ -55,17 +71,72 @@ export default function ClientPage() {
   };
 
   const handleStartNewClient = () => setDraftClient(createNewClientDraft());
-  const handleCancelNewClient = () => setDraftClient(null);
+  const handleCancelNewClient = () => {
+    setDraftClient(null);
+    setEmailError(null);
+  };
+
+  const validateEmail = (email: string): boolean => {
+    if (!email.trim()) return true; // email is optional during creation
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setEmailError('Please enter a valid email address');
+      return false;
+    }
+    setEmailError(null);
+    return true;
+  };
 
   const handleSaveClient = async () => {
     if (!draftClient) return;
+
+    // Validate email if provided
+    if (!validateEmail(draftClient.email)) return;
+
     const result = await handleCreateClient(draftClient);
     if (result.success && result.client) {
       setDraftClient(null);
+      setEmailError(null);
       toast({ title: "Client saved", description: "Client has been saved to the database." });
     } else {
       toast({ title: "Error", description: result.error || "Unable to save client", variant: "destructive" });
     }
+  };
+
+  const handleInviteClient = async () => {
+    if (!activeClientId) return;
+    setIsCreatingInvite(true);
+    try {
+      const result = await createClientInvitation({
+        clientId: activeClientId,
+        invitedEmail: activeClient?.email || null,
+      });
+      if (result.error || !result.inviteUrl) {
+        toast({ title: "Invitation failed", description: result.error || "Unable to create invitation", variant: "destructive" });
+      } else {
+        setInviteLink(result.inviteUrl);
+        setInviteDialogOpen(true);
+        toast({ title: "Invitation created", description: "Invite link has been generated." });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create invitation";
+      toast({ title: "Invitation error", description: msg, variant: "destructive" });
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  };
+
+  const handleCopyInviteLink = () => {
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      toast({ title: "Copied", description: "Invite link copied to clipboard." });
+    }).catch(() => {
+      toast({ title: "Copy failed", description: "Unable to copy to clipboard, please select and copy manually.", variant: "destructive" });
+    });
+  };
+
+  const handleOpenInviteLink = () => {
+    if (!inviteLink) return;
+    window.open(inviteLink, '_blank', 'noopener,noreferrer');
   };
 
   const handleGeneratePlan = async () => {
@@ -147,6 +218,36 @@ export default function ClientPage() {
         </Alert>
       )}
 
+      {/* Invitation success dialog */}
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Invitation created
+            </DialogTitle>
+            <DialogDescription>
+              Share this link with {activeClient?.firstName || 'the client'} to give them access to their client portal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-muted p-3 rounded-md break-all text-sm font-mono">
+              {inviteLink}
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleCopyInviteLink} className="flex-1">
+                <Copy className="mr-2 h-4 w-4" />
+                Copy Invite Link
+              </Button>
+              <Button variant="outline" onClick={handleOpenInviteLink} className="flex-1">
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open Invite Link
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="p-6 shadow-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -165,6 +266,15 @@ export default function ClientPage() {
               <Button variant="outline" onClick={handleStartNewClient}>
                 <Plus className="mr-2 h-4 w-4" />
                 New
+              </Button>
+            )}
+            {!isCreatingNewClient && hasActiveClient && (
+              <Button variant="outline" onClick={handleInviteClient} disabled={isCreatingInvite}>
+                {isCreatingInvite ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</>
+                ) : (
+                  <><UserPlus className="mr-2 h-4 w-4" />Invite Client</>
+                )}
               </Button>
             )}
             {isCreatingNewClient && (
@@ -187,6 +297,11 @@ export default function ClientPage() {
           <div>
             <Label htmlFor="lastName">Last Name <span className="text-destructive">*</span></Label>
             <Input id="lastName" value={editingClient?.lastName || ''} onChange={e => handleInputChange('lastName', e.target.value)} className="mt-1" disabled={!isCreatingNewClient} placeholder="Last name required" />
+          </div>
+          <div>
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" value={editingClient?.email || ''} onChange={e => { handleInputChange('email', e.target.value); if (emailError) setEmailError(null); }} className="mt-1" disabled={!isCreatingNewClient} placeholder="client@example.com" />
+            {emailError && <p className="text-xs text-destructive mt-1">{emailError}</p>}
           </div>
           <div>
             <Label htmlFor="birthDate">Date of Birth <span className="text-destructive">*</span></Label>

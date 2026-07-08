@@ -21,7 +21,15 @@ export default function SignupPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const options: Parameters<typeof supabase.auth.signUp>[0] = { email, password };
+    if (inviteToken) {
+      options.options = {
+        data: {
+          role: 'client',
+        },
+      };
+    }
+    const { data, error } = await supabase.auth.signUp(options);
 
     if (error) {
       setIsLoading(false);
