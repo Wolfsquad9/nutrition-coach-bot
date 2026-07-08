@@ -40,7 +40,7 @@ export default function SignupPage() {
       }
 
       toast({ title: 'Client access linked', description: 'Your account is linked to your plan.' });
-      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/');
+      navigate('/my-plan', { replace: true });
       return;
     }
 

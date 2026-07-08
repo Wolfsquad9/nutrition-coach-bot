@@ -7,6 +7,7 @@ import {
   BookOpen,
   CheckCircle,
   TrendingUp,
+  Bell,
   MessageCircle,
   LogOut,
 } from 'lucide-react';
@@ -78,6 +79,11 @@ export default function ClientLayout() {
       to: '/progress',
       label: 'Progress',
       icon: TrendingUp,
+    },
+    {
+      to: '/alerts',
+      label: 'Alerts',
+      icon: Bell,
     },
     {
       to: '/messages',

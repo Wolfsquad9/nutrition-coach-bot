@@ -21,7 +21,7 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     setIsLoading(false);
 
@@ -40,7 +40,13 @@ export default function LoginPage() {
       return;
     }
 
-    navigate('/');
+    // Role-aware navigation
+    const role = data.user?.user_metadata?.role ?? 'coach';
+    if (role === 'client') {
+      navigate('/my-plan', { replace: true });
+    } else {
+      navigate('/', { replace: true });
+    }
   };
 
   return (

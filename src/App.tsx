@@ -21,6 +21,8 @@ import PlanViewerPage from "./pages/PlanViewerPage";
 import ClientMyPlanPage from "./pages/ClientMyPlanPage";
 import ClientProgressPage from "./pages/ClientProgressPage";
 import ClientAlertsPage from "./pages/ClientAlertsPage";
+import ClientCheckinPage from "./pages/ClientCheckinPage";
+import ClientMessagesPage from "./pages/ClientMessagesPage";
 
 const queryClient = new QueryClient();
 
@@ -38,8 +40,8 @@ const App = () => (
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/plan/:shareId" element={<PlanViewerPage />} />
 
-              {/* Coach-facing protected routes */}
-              <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              {/* Coach-facing protected routes — coach only */}
+              <Route element={<ProtectedRoute role="coach"><AppLayout /></ProtectedRoute>}>
                 <Route index element={<ClientPage />} />
                 <Route path="clients/:clientId" element={<ClientPage />} />
                 <Route path="clients/:clientId/ingredients" element={<IngredientsPage />} />
@@ -49,11 +51,13 @@ const App = () => (
                 <Route path="clients/:clientId/progress" element={<ProgressPage />} />
               </Route>
 
-              {/* Client-facing protected routes */}
-              <Route element={<ProtectedRoute><ClientLayout /></ProtectedRoute>}>
+              {/* Client-facing protected routes — client only */}
+              <Route element={<ProtectedRoute role="client"><ClientLayout /></ProtectedRoute>}>
                 <Route path="my-plan" element={<ClientMyPlanPage />} />
+                <Route path="checkin" element={<ClientCheckinPage />} />
                 <Route path="progress" element={<ClientProgressPage />} />
                 <Route path="alerts" element={<ClientAlertsPage />} />
+                <Route path="messages" element={<ClientMessagesPage />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
