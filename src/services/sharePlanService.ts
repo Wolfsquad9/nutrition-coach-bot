@@ -4,14 +4,17 @@
  * Generates shareable links for locked plans and fetches shared plan data
  * via the get-shared-plan edge function.
  *
- * The get-shared-plan edge function now requires authentication.
- * This service sends the authenticated user's bearer token.
+ * RESTORED Sprint 1.75 behavior:
+ *   - Public shared plans work WITHOUT authentication
+ *   - Uses apikey header (no bearer required) for anonymous access
+ *   - Authenticated users still get bearer token for RLS-enforced access
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 /**
  * Generate a shareable URL for a locked plan version.
@@ -31,35 +34,40 @@ async function getAccessToken(): Promise<string | null> {
 
 /**
  * Fetch a shared plan snapshot via edge function.
- * Requires authentication — sends the bearer token.
+ * PUBLIC — does NOT require authentication (Sprint 1.75 behavior).
+ * Uses apikey header for anonymous access.
  */
 export async function fetchSharedPlan(
   versionId: string
 ): Promise<{ snapshot: PlanSnapshot | null; error: string | null }> {
-  if (!SUPABASE_URL) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return {
       snapshot: null,
-      error: 'Supabase env not configured: VITE_SUPABASE_URL must be set.',
+      error: 'Supabase env not configured: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.',
     };
   }
 
   const token = await getAccessToken();
-  if (!token) {
-    return {
-      snapshot: null,
-      error: 'Not authenticated. Please sign in to view this plan.',
-    };
-  }
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // If authenticated, send bearer token for RLS-respected access
+    // If anonymous, use apikey header (Sprint 1.75 behavior)
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    } else {
+      // Sprint 1.75: anonymous access via apikey
+      headers['apikey'] = SUPABASE_ANON_KEY;
+    }
+
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/get-shared-plan?versionId=${encodeURIComponent(versionId)}`,
       {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers,
       }
     );
 

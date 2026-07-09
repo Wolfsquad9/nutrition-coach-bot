@@ -61,7 +61,8 @@ export default function SignupPage() {
       }
 
       toast({ title: 'Client access linked', description: 'Your account is linked to your plan.' });
-      // AuthProvider will resolve the new clientId and role, then useEffect navigates
+      // Navigate immediately (Sprint 1.75 behavior)
+      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/', { replace: true });
       return;
     }
 
@@ -72,7 +73,8 @@ export default function SignupPage() {
         ? 'Please confirm your email, then use the invitation link again to finish linking your plan.'
         : 'Please check your email to confirm your account.',
     });
-    // No navigation — user needs to check email
+    // Navigate to login after non-invite signup (Sprint 1.75 behavior)
+    navigate('/login', { replace: true });
   };
 
   return (

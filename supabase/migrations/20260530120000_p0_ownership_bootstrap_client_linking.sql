@@ -78,10 +78,15 @@ DECLARE
   v_role app_role;
 BEGIN
   -- Derive initial role from signup metadata, default to 'coach' (self-serve signups are coaches)
-  v_role := COALESCE(
-    (NEW.raw_user_meta_data->>'role')::app_role,
-    'coach'::app_role
-  );
+  -- Uses a safe cast to avoid errors if metadata contains an invalid app_role value
+  BEGIN
+    v_role := COALESCE(
+      (NEW.raw_user_meta_data->>'role')::app_role,
+      'coach'::app_role
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_role := 'coach'::app_role;
+  END;
 
   INSERT INTO public.profiles (id, role, email, full_name)
   VALUES (NEW.id, v_role, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email))

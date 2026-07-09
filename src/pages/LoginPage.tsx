@@ -50,7 +50,7 @@ export default function LoginPage() {
     }
 
     if (inviteToken && data.session) {
-      // Claim invitation then navigate to client portal
+      // Claim invitation then navigate immediately to client portal (Sprint 1.75 behavior)
       const claimResult = await claimClientInvitation(inviteToken);
       if (claimResult.error) {
         toast({ title: 'Invitation link failed', description: claimResult.error, variant: 'destructive' });
@@ -58,18 +58,16 @@ export default function LoginPage() {
         return;
       }
       
-      // AuthProvider will resolve the new clientId and role automatically
-      // Navigate to client portal after auth state settles
       toast({ title: 'Plan linked!', description: 'Your client account is now linked.' });
       setSubmitting(false);
-      // The useEffect will handle navigation based on resolved role
-      // No manual navigation needed
+      // Navigate immediately — do NOT wait for useEffect (Sprint 1.75 behavior)
+      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/', { replace: true });
       return;
     }
 
-    // No invite token — the useEffect will handle navigation based on resolved role
-    // Do NOT navigate here; let the AuthProvider resolve the role
+    // No invite token — role-based navigation (Sprint 1.75 navigated to '/')
     setSubmitting(false);
+    navigate('/', { replace: true });
   };
 
   return (

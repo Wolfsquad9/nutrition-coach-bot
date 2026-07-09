@@ -2,18 +2,16 @@
  * Authentication hook for Supabase — email/password auth.
  * SINGLE SOURCE OF TRUTH for:
  *   - authenticated user (auth.users)
- *   - application role (from profiles/user_roles DB, falling back to user_metadata)
- *   - resolved clientId (clients.id via clients.user_profile_id)
+ *   - application role (from user_metadata first, DB as async refinement)
+ *   - resolved clientId (from user_metadata first, DB as async refinement)
  *
- * The AuthProvider owns the complete lifecycle:
- *   auth.users.id → clients.user_profile_id → clients.id
+ * RESTORED Sprint 1.75 behavior:
+ *   - clientId and role are derived from user_metadata SYNCHRONOUSLY
+ *   - isReady is set to true as soon as session is found, NOT after DB queries
+ *   - DB queries run in background to refine state if needed
+ *   - No loading flicker on token refresh
  *
  * Pages must only consume via useAuth().
- * Pages must NEVER call refreshClientId() or similar.
- * Pages must never manually refresh auth state.
- *
- * The `isReady` flag guarantees that clientId and role are fully resolved
- * before any consumer sees a non-loading state.
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from 'react';
@@ -25,7 +23,7 @@ export interface AuthContextType {
   session: Session | null;
   userId: string | null;
   isLoading: boolean;
-  /** True once session, role, and clientId (if applicable) are fully resolved. */
+  /** True once session is resolved. Does NOT wait for DB queries. */
   isReady: boolean;
   isAuthenticated: boolean;
   signOut: () => Promise<void>;
@@ -62,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Resolve clientId from the clients table using the authenticated user's UID.
-   * This is the ONLY source of truth for clientId.
+   * Runs in background — does NOT block isReady.
    */
   const resolveClientId = useCallback(async (uid: string): Promise<string | null> => {
     try {
@@ -86,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Resolve the application role from the database (profiles or user_roles),
    * falling back to user_metadata.role if no DB record exists.
+   * Runs in background — does NOT block isReady.
    */
   const resolveUserRole = useCallback(async (uid: string, currentUser: User): Promise<'coach' | 'client'> => {
     try {
@@ -130,34 +129,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Resolve all auth-derived state for a given user.
-   * This is the single orchestration point.
+   * Resolve derived state (role, clientId) from user_metadata ONLY.
+   * This is synchronous and sets isReady immediately.
+   * Sprint 1.75 behavior restored.
    */
-  const resolveAuthState = useCallback(async (currentUser: User, currentSession: Session | null) => {
+  const resolveFromMetadata = useCallback((currentUser: User) => {
+    // Derive clientId from metadata synchronously (Sprint 1.75 behavior)
+    const metaClientId = currentUser.user_metadata?.client_id ?? null;
+    setClientId(metaClientId);
+
+    // Derive role from metadata synchronously (Sprint 1.75 behavior)
+    const metaRole = currentUser.user_metadata?.role;
+    if (metaRole === 'client' || metaRole === 'coach') {
+      setUserRole(metaRole);
+    } else {
+      setUserRole('coach');
+    }
+  }, []);
+
+  /**
+   * Refresh role and clientId from DB in background.
+   * Does NOT block isReady — runs asynchronously.
+   */
+  const refreshFromDb = useCallback(async (currentUser: User) => {
     const uid = currentUser.id;
 
-    // Resolve clientId and role in parallel
     const [resolvedClientId, resolvedRole] = await Promise.all([
       resolveClientId(uid),
       resolveUserRole(uid, currentUser),
     ]);
 
-    // Only update state if this is still the current session
+    // Only update if session hasn't changed
     const { data: { session: latestSession } } = await supabase.auth.getSession();
     if (latestSession?.user?.id !== uid) {
-      // Session changed while we were resolving — bail out
       return;
     }
 
-    setClientId(resolvedClientId);
-    setUserRole(resolvedRole);
-    setIsReady(true);
-    setIsLoading(false);
+    // Only update if different from current — avoid unnecessary rerenders
+    setClientId(prev => {
+      // If metadata had a value and DB also has it, prefer DB
+      // But only update if it's actually different
+      if (resolvedClientId !== null && resolvedClientId !== prev) {
+        return resolvedClientId;
+      }
+      return prev;
+    });
+
+    setUserRole(prev => {
+      if (resolvedRole !== prev) {
+        return resolvedRole;
+      }
+      return prev;
+    });
   }, [resolveClientId, resolveUserRole]);
 
   /**
    * Handle an auth state change event.
-   * Called both from the onAuthStateChange subscription AND from getSession().
+   * Sprint 1.75: metadata-based sync resolution, isReady set immediately.
    */
   const handleAuthChange = useCallback(async (currentSession: Session | null) => {
     setSession(currentSession);
@@ -165,9 +193,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(currentUser);
 
     if (currentUser) {
-      // Reset ready state while resolving
-      setIsReady(false);
-      await resolveAuthState(currentUser, currentSession);
+      // Step 1: Resolve from metadata SYNC (Sprint 1.75 behavior)
+      resolveFromMetadata(currentUser);
+      // Step 2: Mark ready immediately — no DB wait (Sprint 1.75 behavior)
+      setIsReady(true);
+      setIsLoading(false);
+      // Step 3: Refresh from DB in background (new, non-blocking enhancement)
+      refreshFromDb(currentUser);
     } else {
       // No user — clear all auth-derived state immediately
       setClientId(null);
@@ -175,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsReady(true);
       setIsLoading(false);
     }
-  }, [resolveAuthState]);
+  }, [resolveFromMetadata, refreshFromDb]);
 
   useEffect(() => {
     let mounted = true;

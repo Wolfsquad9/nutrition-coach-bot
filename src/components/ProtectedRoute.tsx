@@ -21,10 +21,10 @@ interface ProtectedRouteProps {
  * Client accessing a coach route → /my-plan
  */
 export default function ProtectedRoute({ children, role }: ProtectedRouteProps) {
-  const { isAuthenticated, isReady, isLoading, userRole } = useAuth();
+  const { isAuthenticated, isLoading, userRole } = useAuth();
 
   // Show loading spinner while auth state is initializing
-  if (isLoading || !isReady) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
