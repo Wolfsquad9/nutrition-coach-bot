@@ -7,46 +7,69 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { claimClientInvitation } from '@/services/clientInvitationService';
+import { useAuth } from '@/hooks/useAuth';
+import { useEffect } from 'react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
+  const { isAuthenticated, isReady, userRole, clientId } = useAuth();
+
+  // Navigate on auth state change — the AuthProvider owns role resolution
+  useEffect(() => {
+    if (!isReady || !isAuthenticated) return;
+
+    if (inviteToken) {
+      // Invitation flow: stay on page, invitation claiming handled separately
+      return;
+    }
+
+    // Role-aware navigation — AuthProvider has resolved the role
+    if (userRole === 'client') {
+      navigate('/my-plan', { replace: true });
+    } else if (userRole === 'coach') {
+      navigate('/', { replace: true });
+    }
+  }, [isReady, isAuthenticated, userRole, inviteToken, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setSubmitting(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    setIsLoading(false);
-
     if (error) {
+      setSubmitting(false);
       toast({ title: 'Login failed', description: error.message, variant: 'destructive' });
       return;
     }
 
-    if (inviteToken) {
+    if (inviteToken && data.session) {
+      // Claim invitation then navigate to client portal
       const claimResult = await claimClientInvitation(inviteToken);
       if (claimResult.error) {
         toast({ title: 'Invitation link failed', description: claimResult.error, variant: 'destructive' });
+        setSubmitting(false);
         return;
       }
-      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/');
+      
+      // AuthProvider will resolve the new clientId and role automatically
+      // Navigate to client portal after auth state settles
+      toast({ title: 'Plan linked!', description: 'Your client account is now linked.' });
+      setSubmitting(false);
+      // The useEffect will handle navigation based on resolved role
+      // No manual navigation needed
       return;
     }
 
-    // Role-aware navigation
-    const role = data.user?.user_metadata?.role ?? 'coach';
-    if (role === 'client') {
-      navigate('/my-plan', { replace: true });
-    } else {
-      navigate('/', { replace: true });
-    }
+    // No invite token — the useEffect will handle navigation based on resolved role
+    // Do NOT navigate here; let the AuthProvider resolve the role
+    setSubmitting(false);
   };
 
   return (
@@ -83,8 +106,8 @@ export default function LoginPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign in'}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
 

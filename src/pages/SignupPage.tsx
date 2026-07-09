@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -7,19 +7,32 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { claimClientInvitation } from '@/services/clientInvitationService';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
+  const { isAuthenticated, isReady, userRole } = useAuth();
+
+  // Navigate on auth state change — the AuthProvider owns role resolution
+  useEffect(() => {
+    if (!isReady || !isAuthenticated) return;
+
+    if (userRole === 'client') {
+      navigate('/my-plan', { replace: true });
+    } else if (userRole === 'coach') {
+      navigate('/', { replace: true });
+    }
+  }, [isReady, isAuthenticated, userRole, navigate]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setSubmitting(true);
 
     const options: Parameters<typeof supabase.auth.signUp>[0] = { email, password };
     if (inviteToken) {
@@ -32,34 +45,34 @@ export default function SignupPage() {
     const { data, error } = await supabase.auth.signUp(options);
 
     if (error) {
-      setIsLoading(false);
+      setSubmitting(false);
       toast({ title: 'Signup failed', description: error.message, variant: 'destructive' });
       return;
     }
 
     if (inviteToken && data.session) {
+      // Claim the invitation immediately after signup
       const claimResult = await claimClientInvitation(inviteToken);
-      setIsLoading(false);
+      setSubmitting(false);
 
       if (claimResult.error) {
         toast({ title: 'Account created', description: claimResult.error, variant: 'destructive' });
-        navigate('/login');
         return;
       }
 
       toast({ title: 'Client access linked', description: 'Your account is linked to your plan.' });
-      navigate('/my-plan', { replace: true });
+      // AuthProvider will resolve the new clientId and role, then useEffect navigates
       return;
     }
 
-    setIsLoading(false);
+    setSubmitting(false);
     toast({
       title: 'Account created',
       description: inviteToken
         ? 'Please confirm your email, then use the invitation link again to finish linking your plan.'
         : 'Please check your email to confirm your account.',
     });
-    navigate('/login');
+    // No navigation — user needs to check email
   };
 
   return (
@@ -97,8 +110,8 @@ export default function SignupPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Creating account...' : 'Sign up'}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Creating account...' : 'Sign up'}
           </Button>
         </form>
 

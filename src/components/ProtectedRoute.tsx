@@ -12,14 +12,19 @@ interface ProtectedRouteProps {
  * Wraps routes that require authentication.
  * Optionally restricts access by role.
  *
+ * Uses `isReady` to guarantee that auth state (role, clientId) is fully resolved
+ * before making any routing decisions. This prevents race conditions where
+ * navigation occurs before clientId resolution completes.
+ *
  * Unauthenticated users → /login
- * Coach accessing a client route → /my-plan
- * Client accessing a coach route → /
+ * Coach accessing a client route → /
+ * Client accessing a coach route → /my-plan
  */
 export default function ProtectedRoute({ children, role }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, userRole } = useAuth();
+  const { isAuthenticated, isReady, isLoading, userRole } = useAuth();
 
-  if (isLoading) {
+  // Show loading spinner while auth state is initializing
+  if (isLoading || !isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -31,7 +36,7 @@ export default function ProtectedRoute({ children, role }: ProtectedRouteProps) 
     return <Navigate to="/login" replace />;
   }
 
-  // Role-based access control
+  // Role-based access control — only redirect when role is definitively known
   if (role && userRole && userRole !== role) {
     if (role === 'coach') {
       // Client trying to access a coach route → redirect to client home
