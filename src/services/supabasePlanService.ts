@@ -9,7 +9,6 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { ensureProfileExists } from '@/services/profileService';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 import { deepFreeze } from '@/domain/nutrition/snapshot';
@@ -246,9 +245,9 @@ export async function lockNutritionPlan(
   options: LockNutritionPlanOptions
 ): Promise<LockNutritionPlanResult> {
   try {
-    // Ensure profile exists for FK constraint (critical for anonymous auth)
-    const profileId = await ensureProfileExists();
-    if (!profileId) {
+    // Auth check: verify user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
       return {
         success: false,
         planId: null,

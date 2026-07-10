@@ -77,14 +77,14 @@ async function fetchTrainingPlan(clientId: string): Promise<TrainingPlanData | n
 }
 
 export default function ClientMyPlanPage() {
-  const { clientId, isAuthenticated, isReady } = useAuth();
+  const { clientId, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [plan, setPlan] = useState<PlanPayload | null>(null);
   const [trainingPlan, setTrainingPlan] = useState<TrainingPlanData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isReady) return;
+    if (isAuthLoading) return;
     if (!isAuthenticated || !clientId) {
       setLoading(false);
       setError('Please sign in to view your plan.');
@@ -115,9 +115,9 @@ export default function ClientMyPlanPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [clientId, isAuthenticated, isReady]);
+  }, [clientId, isAuthenticated, isAuthLoading]);
 
-  if (!isReady || loading) {
+  if (isAuthLoading || loading) {
     return (
       <Card className="p-12 shadow-card">
         <div className="flex flex-col items-center justify-center gap-4">

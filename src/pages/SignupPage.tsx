@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -17,32 +17,13 @@ export default function SignupPage() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
-  const { isAuthenticated, isReady, userRole } = useAuth();
-
-  // Navigate on auth state change — the AuthProvider owns role resolution
-  useEffect(() => {
-    if (!isReady || !isAuthenticated) return;
-
-    if (userRole === 'client') {
-      navigate('/my-plan', { replace: true });
-    } else if (userRole === 'coach') {
-      navigate('/', { replace: true });
-    }
-  }, [isReady, isAuthenticated, userRole, navigate]);
+  const { refreshAuthState } = useAuth();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
-    const options: Parameters<typeof supabase.auth.signUp>[0] = { email, password };
-    if (inviteToken) {
-      options.options = {
-        data: {
-          role: 'client',
-        },
-      };
-    }
-    const { data, error } = await supabase.auth.signUp(options);
+    const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
       setSubmitting(false);
@@ -60,9 +41,12 @@ export default function SignupPage() {
         return;
       }
 
+      // Re-fetch role and clientId from DB after claim mutation
+      await refreshAuthState();
+
       toast({ title: 'Client access linked', description: 'Your account is linked to your plan.' });
-      // Navigate immediately (Sprint 1.75 behavior)
-      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/', { replace: true });
+      // Navigate to client portal (not coach route)
+      navigate('/my-plan', { replace: true });
       return;
     }
 
@@ -73,7 +57,7 @@ export default function SignupPage() {
         ? 'Please confirm your email, then use the invitation link again to finish linking your plan.'
         : 'Please check your email to confirm your account.',
     });
-    // Navigate to login after non-invite signup (Sprint 1.75 behavior)
+    // Navigate to login after non-invite signup
     navigate('/login', { replace: true });
   };
 

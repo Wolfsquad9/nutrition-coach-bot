@@ -12,9 +12,8 @@ interface ProtectedRouteProps {
  * Wraps routes that require authentication.
  * Optionally restricts access by role.
  *
- * Uses `isReady` to guarantee that auth state (role, clientId) is fully resolved
- * before making any routing decisions. This prevents race conditions where
- * navigation occurs before clientId resolution completes.
+ * isLoading is the only loading gate — role and clientId are fully resolved
+ * before isLoading becomes false (single DB query path).
  *
  * Unauthenticated users → /login
  * Coach accessing a client route → /

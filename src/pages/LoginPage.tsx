@@ -8,7 +8,6 @@ import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { claimClientInvitation } from '@/services/clientInvitationService';
 import { useAuth } from '@/hooks/useAuth';
-import { useEffect } from 'react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,24 +17,7 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
-  const { isAuthenticated, isReady, userRole, clientId } = useAuth();
-
-  // Navigate on auth state change — the AuthProvider owns role resolution
-  useEffect(() => {
-    if (!isReady || !isAuthenticated) return;
-
-    if (inviteToken) {
-      // Invitation flow: stay on page, invitation claiming handled separately
-      return;
-    }
-
-    // Role-aware navigation — AuthProvider has resolved the role
-    if (userRole === 'client') {
-      navigate('/my-plan', { replace: true });
-    } else if (userRole === 'coach') {
-      navigate('/', { replace: true });
-    }
-  }, [isReady, isAuthenticated, userRole, inviteToken, navigate]);
+  const { refreshAuthState } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +32,7 @@ export default function LoginPage() {
     }
 
     if (inviteToken && data.session) {
-      // Claim invitation then navigate immediately to client portal (Sprint 1.75 behavior)
+      // Claim invitation then refresh auth state and navigate to client portal
       const claimResult = await claimClientInvitation(inviteToken);
       if (claimResult.error) {
         toast({ title: 'Invitation link failed', description: claimResult.error, variant: 'destructive' });
@@ -58,14 +40,17 @@ export default function LoginPage() {
         return;
       }
       
+      // Re-fetch role and clientId from DB after claim mutation
+      await refreshAuthState();
+      
       toast({ title: 'Plan linked!', description: 'Your client account is now linked.' });
       setSubmitting(false);
-      // Navigate immediately — do NOT wait for useEffect (Sprint 1.75 behavior)
-      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/', { replace: true });
+      // Navigate to client portal (not coach route)
+      navigate('/my-plan', { replace: true });
       return;
     }
 
-    // No invite token — role-based navigation (Sprint 1.75 navigated to '/')
+    // No invite token — navigate to coach home (ProtectedRoute will redirect if wrong role)
     setSubmitting(false);
     navigate('/', { replace: true });
   };
