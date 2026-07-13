@@ -16,8 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
-import { Loader2, AlertCircle, Plus, Save, CheckCircle, Download, FileJson, UserPlus, Copy, ExternalLink } from 'lucide-react';
+import { Loader2, AlertCircle, Plus, Save, CheckCircle, Download, FileJson, UserPlus, Copy, ExternalLink, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppLayout } from '@/hooks/useAppLayout';
 import { NoClientGuard } from '@/components/NoClientGuard';
@@ -25,6 +26,7 @@ import { getClientLabel, calculateAgeFromBirthDate } from '@/utils/clientHelpers
 import { generatePersonalizedPlan } from '@/services/planService';
 import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
 import { createClientInvitation } from '@/services/clientInvitationService';
+import { saveTrainingPlan } from '@/services/supabaseTrainingPlanService';
 import type { Client, CompletePlan, Recipe } from '@/types';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,6 +39,7 @@ export default function ClientPage() {
     isLoadingClients,
     clientError,
     handleCreateClient,
+    handleDeleteClient: deleteClientFromHook,
     createNewClientDraft,
     clientRestrictions,
     generatedPlan,
@@ -53,6 +56,10 @@ export default function ClientPage() {
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  // Delete state
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const editingClient = draftClient || activeClient;
   const hasActiveClient = !!activeClientId && !!activeClient;
@@ -139,6 +146,29 @@ export default function ClientPage() {
     window.open(inviteLink, '_blank', 'noopener,noreferrer');
   };
 
+  const handleConfirmDelete = async () => {
+    if (!activeClientId) return;
+    setIsDeleting(true);
+    try {
+      const result = await deleteClientFromHook(activeClientId);
+      setDeleteDialogOpen(false);
+      if (result.success) {
+        toast({
+          title: 'Client deleted',
+          description: `${activeClient ? getClientLabel(activeClient) : 'Client'} has been removed from your list.`,
+        });
+      } else {
+        toast({
+          title: 'Delete failed',
+          description: result.error || 'Unable to delete client',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleGeneratePlan = async () => {
     if (!activeClientId || !activeClient) {
       toast({ title: "No client selected", description: "Select or create a client first.", variant: "destructive" });
@@ -153,6 +183,18 @@ export default function ClientPage() {
       }
       const plan = await generatePersonalizedPlan(activeClient, likedFoods);
       setGeneratedPlan(plan);
+
+      // Persist the training plan to the database so the client portal can
+      // read it. The nutrition plan is persisted separately on lock.
+      const trainingResult = await saveTrainingPlan(activeClientId, plan.trainingPlan);
+      if (!trainingResult.success) {
+        toast({
+          title: "Training plan not saved",
+          description: trainingResult.error || "Client portal will not show the training plan until this is resolved.",
+          variant: "destructive",
+        });
+      }
+
       toast({ title: "Plan generated!", description: `Personalized plan: ${plan.nutritionPlan.metrics.targetCalories} kcal/day` });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unable to generate plan, please try again later";
@@ -248,6 +290,35 @@ export default function ClientPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Delete client
+            </DialogTitle>
+            <DialogDescription>
+              This will archive {activeClient ? getClientLabel(activeClient) : 'this client'} and revoke any
+              pending invitations. Their plan history and progress entries are preserved. This cannot
+              be undone from the coach UI.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete} disabled={isDeleting}>
+              {isDeleting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting...</>
+              ) : (
+                <><Trash2 className="mr-2 h-4 w-4" />Delete client</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card className="p-6 shadow-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -275,6 +346,16 @@ export default function ClientPage() {
                 ) : (
                   <><UserPlus className="mr-2 h-4 w-4" />Invite Client</>
                 )}
+              </Button>
+            )}
+            {!isCreatingNewClient && hasActiveClient && (
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(true)}
+                className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
               </Button>
             )}
             {isCreatingNewClient && (

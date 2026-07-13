@@ -7,17 +7,18 @@
  * - Daily meal plan (reuses DailyMealPlanDisplay)
  *
  * Fetches the locked nutrition plan AND training plan from the database
- * via existing services. Uses the resolved clientId from AuthProvider.
+ * via the Supabase services. Uses the resolved clientId from AuthProvider.
  */
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchCurrentPlan } from '@/services/supabasePlanService';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchActiveTrainingPlan } from '@/services/supabaseTrainingPlanService';
 import { TrainingPlanDisplay } from '@/components/TrainingPlanDisplay';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import type { PlanPayload } from '@/services/supabasePlanService';
+import type { Exercise, TrainingPlan as PersistedTrainingPlan, WorkoutSession } from '@/types';
 
 interface TrainingPlanData {
   split: string;
@@ -33,48 +34,40 @@ interface TrainingPlanData {
   }>;
 }
 
-/**
- * Fetch the most recent active training plan for a client.
- */
-async function fetchTrainingPlan(clientId: string): Promise<TrainingPlanData | null> {
-  try {
-    const { data, error } = await supabase
-      .from('training_plans')
-      .select('plan_data, status')
-      .eq('client_id', clientId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !data) {
-      return null;
-    }
-
-    const planData = data.plan_data as Record<string, unknown> | null;
-    if (!planData) return null;
-
-    // The plan_data JSON can have various structures — normalize to TrainingPlanData
-    const rawWorkouts = (planData.workouts as Array<Record<string, unknown>>) || [];
-
-    return {
-      split: (planData.split as string) || 'Custom',
-      sessions: (planData.sessions as number) || (planData.frequency as number) || rawWorkouts.length || 3,
-      workouts: rawWorkouts.map((w: Record<string, unknown>, idx: number) => ({
-        day: (w.day as number) || (w.dayNumber as number) || idx + 1,
-        name: (w.name as string) || `Workout ${idx + 1}`,
-        exercises: ((w.exercises as Array<Record<string, unknown>>) || []).map((ex: Record<string, unknown>) => ({
-          name: (ex.exercise && typeof ex.exercise === 'object' ? (ex.exercise as Record<string, unknown>).name as string : null)
-            || (ex.name as string) || 'Exercise',
-          sets: (ex.sets as number) || 3,
-          reps: (ex.reps as string) || '10-12',
-        })),
-      })),
-    };
-  } catch {
-    return null;
+const getExerciseName = (ex: Exercise | unknown): string => {
+  if (!ex || typeof ex !== 'object') return 'Exercise';
+  const obj = ex as Record<string, unknown>;
+  const exercise = obj.exercise;
+  if (exercise && typeof exercise === 'object') {
+    const name = (exercise as Record<string, unknown>).name;
+    if (typeof name === 'string') return name;
   }
-}
+  if (typeof obj.name === 'string') return obj.name;
+  return 'Exercise';
+};
+
+const normalizeTrainingPlan = (plan: PersistedTrainingPlan | null): TrainingPlanData | null => {
+  if (!plan) return null;
+  const workouts: WorkoutSession[] = Array.isArray(plan.workouts) ? plan.workouts : [];
+  return {
+    split: plan.split || 'Custom',
+    sessions:
+      plan.frequency ??
+      workouts.length ??
+      3,
+    workouts: workouts.map((w, idx) => ({
+      day: (w as unknown as { day?: number; dayNumber?: number }).day
+        ?? (w as unknown as { dayNumber?: number }).dayNumber
+        ?? idx + 1,
+      name: w.name || `Workout ${idx + 1}`,
+      exercises: (w.exercises || []).map((ex) => ({
+        name: getExerciseName(ex),
+        sets: ex.sets ?? 3,
+        reps: ex.reps || '10-12',
+      })),
+    })),
+  };
+};
 
 export default function ClientMyPlanPage() {
   const { clientId, isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -97,9 +90,9 @@ export default function ClientMyPlanPage() {
       setError(null);
 
       // Fetch nutrition and training plans in parallel
-      const [nutritionResult] = await Promise.all([
+      const [nutritionResult, trainingResult] = await Promise.all([
         fetchCurrentPlan(clientId),
-        fetchTrainingPlan(clientId).then(tp => { if (!cancelled) setTrainingPlan(tp); }),
+        fetchActiveTrainingPlan(clientId),
       ]);
 
       if (cancelled) return;
@@ -110,6 +103,10 @@ export default function ClientMyPlanPage() {
         setError('No plan found. Your coach has not yet created a plan for you.');
       } else {
         setPlan(nutritionResult.plan);
+      }
+
+      if (!cancelled) {
+        setTrainingPlan(normalizeTrainingPlan(trainingResult.plan));
       }
       setLoading(false);
     }

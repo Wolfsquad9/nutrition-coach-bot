@@ -5,10 +5,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Client } from '@/types';
-import { 
-  fetchClients, 
+import {
+  fetchClients,
   createClient as createSupabaseClient,
-  updateClient as updateSupabaseClient 
+  updateClient as updateSupabaseClient,
+  archiveClient,
 } from '@/services/supabaseClientService';
 
 // Default empty client for new client creation form
@@ -52,6 +53,7 @@ interface UseSupabaseClientsResult {
   setActiveClientId: (clientId: string | null) => void;
   handleCreateClient: (client: Client) => Promise<{ success: boolean; client: Client | null; error: string | null }>;
   handleUpdateClient: (clientId: string, updates: Partial<Client>) => Promise<{ success: boolean; error: string | null }>;
+  handleDeleteClient: (clientId: string) => Promise<{ success: boolean; error: string | null }>;
   refreshClients: () => Promise<void>;
   createNewClientDraft: () => Client;
 }
@@ -126,18 +128,37 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
   const handleUpdateClient = useCallback(async (clientId: string, updates: Partial<Client>): Promise<{ success: boolean; error: string | null }> => {
     try {
       const result = await updateSupabaseClient(clientId, updates);
-      
+
       if (result.error || !result.client) {
         return { success: false, error: result.error || 'Failed to update client' };
       }
 
       // Update local state
       setClients(prev => prev.map(c => c.id === clientId ? result.client! : c));
-      
+
       return { success: true, error: null };
     } catch (err: unknown) {
       console.error('Error updating client:', err);
       return { success: false, error: getErrorMessage(err, 'Failed to update client') };
+    }
+  }, []);
+
+  const handleDeleteClient = useCallback(async (clientId: string): Promise<{ success: boolean; error: string | null }> => {
+    try {
+      const result = await archiveClient(clientId);
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to delete client' };
+      }
+
+      // Remove from local state immediately so the coach UI updates without
+      // a full refetch. RLS would hide the row on the next fetch anyway.
+      setClients(prev => prev.filter(c => c.id !== clientId));
+      setActiveClientId(prev => (prev === clientId ? null : prev));
+
+      return { success: true, error: null };
+    } catch (err: unknown) {
+      console.error('Error deleting client:', err);
+      return { success: false, error: getErrorMessage(err, 'Failed to delete client') };
     }
   }, []);
 
@@ -150,6 +171,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
     setActiveClientId,
     handleCreateClient,
     handleUpdateClient,
+    handleDeleteClient,
     refreshClients: loadClients,
     createNewClientDraft: createEmptyClient,
   };

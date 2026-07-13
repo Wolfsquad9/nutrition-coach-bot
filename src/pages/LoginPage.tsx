@@ -17,11 +17,21 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
-  const { refreshAuthState } = useAuth();
+  const { refreshAuthState, session } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+
+    // If a Supabase session is already active, sign it out before login so the
+    // invitation claim links the new account, not the existing one.
+    if (inviteToken && session) {
+      await supabase.auth.signOut();
+      toast({
+        title: 'Switching accounts',
+        description: 'You were already signed in. Switching to your client account.',
+      });
+    }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 

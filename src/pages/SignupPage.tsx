@@ -17,11 +17,22 @@ export default function SignupPage() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
-  const { refreshAuthState } = useAuth();
+  const { refreshAuthState, session } = useAuth();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+
+    // If a Supabase session is already active (e.g., a coach opened this invite
+    // link in the same browser), sign it out before signup so the new account
+    // does not silently replace the existing localStorage session.
+    if (inviteToken && session) {
+      await supabase.auth.signOut();
+      toast({
+        title: 'Switching accounts',
+        description: 'You were already signed in. Switching to your client account.',
+      });
+    }
 
     const { data, error } = await supabase.auth.signUp({ email, password });
 
