@@ -15,7 +15,7 @@
  * Pages must only consume via useAuth().
  */
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -93,51 +93,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await resolveAuthState(user.id);
   }, [user?.id, resolveAuthState]);
 
-  // In-flight handleAuthChange promise guard. onAuthStateChange and the
-  // initial getSession() both call handleAuthChange on mount; without this
-  // guard they fire two parallel resolveAuthState DB queries. If a new auth
-  // event arrives while one is in flight we drop the redundant call and let
-  // the in-flight one finish.
-  const inFlightRef = useRef<Promise<void> | null>(null);
-
   /**
    * Handle an auth state change event.
    * Single resolution path: read from DB, set isLoading=false when done.
    * Wrapped in try/finally so a rejection in resolveAuthState cannot leave
    * isLoading stuck at true (which would cause an infinite spinner).
+   *
+   * The listener and the initial getSession().then both call this; they are
+   * allowed to run in parallel and each clears isLoading in its own finally.
+   * That double-resolution is wasteful but correct — coalescing them with an
+   * in-flight guard drops legitimate auth events (SIGNED_OUT followed by
+   * SIGNED_IN from signInWithPassword) and leaves the SPA holding the wrong
+   * session.
    */
   const handleAuthChange = useCallback(async (currentSession: Session | null) => {
-    // If an identical session is already being resolved, skip. The in-flight
-    // call will set the final state. This collapses the listener + getSession
-    // double-fire on initial mount into a single resolution.
-    if (inFlightRef.current) return;
-    inFlightRef.current = (async () => {
-      try {
-        setSession(currentSession);
-        const currentUser = currentSession?.user ?? null;
-        setUser(currentUser);
+    try {
+      setSession(currentSession);
+      const currentUser = currentSession?.user ?? null;
+      setUser(currentUser);
 
-        if (currentUser) {
-          // Single resolution: read from database, no metadata fallback
-          await resolveAuthState(currentUser.id);
-        } else {
-          // No user — clear all auth-derived state immediately
-          setClientId(null);
-          setUserRole(null);
-        }
-      } catch (err) {
-        // Swallow the error so the loading gate is always released. The
-        // resolved state will be the last successful one (or null on first
-        // failure), which is correct: if we can't read the role, the
-        // ProtectedRoute null-role branch will require the user to sign in
-        // again rather than hang forever.
-        console.error('[useAuth] Failed to resolve auth state:', err);
-      } finally {
-        setIsLoading(false);
-        inFlightRef.current = null;
+      if (currentUser) {
+        // Single resolution: read from database, no metadata fallback
+        await resolveAuthState(currentUser.id);
+      } else {
+        // No user — clear all auth-derived state immediately
+        setClientId(null);
+        setUserRole(null);
       }
-    })();
-    return inFlightRef.current;
+    } catch (err) {
+      // Swallow the error so the loading gate is always released. The
+      // resolved state will be the last successful one (or null on first
+      // failure), which is correct: if we can't read the role, the
+      // ProtectedRoute null-role branch will require the user to sign in
+      // again rather than hang forever.
+      console.error('[useAuth] Failed to resolve auth state:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, [resolveAuthState]);
 
   useEffect(() => {
