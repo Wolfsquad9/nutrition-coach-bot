@@ -46,6 +46,16 @@ export default function ProtectedRoute({ children, role }: ProtectedRouteProps) 
     return <Navigate to="/login" replace />;
   }
 
+  // If we require a role but the auth state has fully loaded with no role,
+  // treat as unauthorized — redirect to login rather than rendering children
+  // in a broken state (no clientId, no userRole).
+  if (role && !userRole) {
+    if (lastRedirectRef.current !== '/login') {
+      lastRedirectRef.current = '/login';
+    }
+    return <Navigate to="/login" replace />;
+  }
+
   // Role-based access control — only redirect when role is definitively known
   if (role && userRole && userRole !== role) {
     if (role === 'coach') {

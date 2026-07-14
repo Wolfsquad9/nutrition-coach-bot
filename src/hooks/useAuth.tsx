@@ -15,7 +15,7 @@
  * Pages must only consume via useAuth().
  */
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -54,6 +54,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'coach' | 'client' | null>(null);
+  // Track user.id in a ref so refreshAuthState always reads the latest value,
+  // even when called from an event handler that hasn't re-rendered yet.
+  const userIdRef = useRef<string | null>(null);
+
+  // Sync the ref with state on every render so it is always current.
+  userIdRef.current = user?.id ?? null;
 
   /**
    * Fetch role from user_roles and clientId from clients in parallel.
@@ -87,11 +93,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Public method for pages to call after invitation claim mutates the DB.
    * Re-fetches role and clientId, updates state.
+   * Uses userIdRef instead of `user?.id` from closure so that calls from
+   * event handlers that haven't re-rendered still see the latest user id.
    */
   const refreshAuthState = useCallback(async () => {
-    if (!user?.id) return;
-    await resolveAuthState(user.id);
-  }, [user?.id, resolveAuthState]);
+    const uid = userIdRef.current;
+    if (!uid) return;
+    await resolveAuthState(uid);
+  }, [resolveAuthState]);
 
   /**
    * Handle an auth state change event.
