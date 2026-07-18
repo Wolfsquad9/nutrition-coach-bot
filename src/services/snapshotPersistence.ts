@@ -62,6 +62,7 @@ export async function persistSnapshot(
 export async function fetchPersistedSnapshot(
   versionId: string
 ): Promise<{ snapshot: PlanSnapshot | null; error: string | null }> {
+  console.log(`[TRACE] fetchPersistedSnapshot ENTERED versionId="${versionId}" timestamp=${Date.now()}`);
   try {
     const { data, error } = await supabase
       .from('plan_versions')
@@ -70,19 +71,23 @@ export async function fetchPersistedSnapshot(
       .maybeSingle();
 
     if (error) {
+      console.log(`[TRACE] fetchPersistedSnapshot ERROR:`, error);
       console.error('Error fetching snapshot:', error);
       return { snapshot: null, error: error.message };
     }
 
     if (!data?.locked_snapshot_json) {
+      console.log(`[TRACE] fetchPersistedSnapshot no snapshot data, returning null`);
       return { snapshot: null, error: null };
     }
 
+    console.log(`[TRACE] fetchPersistedSnapshot COMPLETE returning snapshot`);
     return {
       snapshot: deepFreeze(data.locked_snapshot_json as unknown as PlanSnapshot),
       error: null,
     };
 } catch (err: unknown) {
+  console.log(`[TRACE] fetchPersistedSnapshot CAUGHT:`, err);
   return { snapshot: null, error: err instanceof Error ? err.message : 'Unknown error' };
 }
 }

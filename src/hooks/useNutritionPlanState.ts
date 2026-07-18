@@ -97,9 +97,25 @@ const createLockAttempt = (): LockAttempt => ({
 export function useNutritionPlanState() {
   /* ---------------- UI STATE ---------------- */
 
-  const [uiState, setUiState] = useState<UIState>("IDLE");
+  const [uiState, setUiState_] = useState<UIState>("IDLE");
   const [error, setError] = useState<string | null>(null);
   const [lastPersistenceFailed, setLastPersistenceFailed] = useState(false);
+
+  // Instrumented setUiState that logs every transition
+  const setUiState = useCallback((next: UIState | ((prev: UIState) => UIState)) => {
+    if (typeof next === 'function') {
+      setUiState_((prev) => {
+        const result = (next as (prev: UIState) => UIState)(prev);
+        console.log(`[TRACE] setUiState transition: ${prev} -> ${result} timestamp=${Date.now()}`);
+        return result;
+      });
+    } else {
+      setUiState_((prev) => {
+        console.log(`[TRACE] setUiState transition: ${prev} -> ${next} timestamp=${Date.now()}`);
+        return next;
+      });
+    }
+  }, []);
 
   /* ---------------- PLAN DATA ---------------- */
 

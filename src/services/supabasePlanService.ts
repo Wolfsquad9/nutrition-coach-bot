@@ -120,8 +120,10 @@ export function hashPlanPayload(payload: PlanPayload): string {
  * Check if a plan is locked (within 7 days of lock creation)
  */
 export async function checkPlanLockStatus(clientId: string): Promise<PlanLockStatus> {
+  console.log(`[TRACE] checkPlanLockStatus ENTERED clientId="${clientId}" timestamp=${Date.now()}`);
   try {
     // Get the latest nutrition plan for this client
+    console.log(`[TRACE] checkPlanLockStatus querying nutrition_plans for clientId="${clientId}"`);
     const { data: planData, error: planError } = await supabase
       .from('nutrition_plans')
       .select('id, current_version_id, created_at')
@@ -132,13 +134,17 @@ export async function checkPlanLockStatus(clientId: string): Promise<PlanLockSta
       .maybeSingle();
 
     if (planError) {
+      console.log(`[TRACE] checkPlanLockStatus ERROR:`, planError);
       console.error('Error checking plan lock:', planError);
       return { isLocked: false, lockedUntil: null, daysRemaining: 0 };
     }
 
     if (!planData || !planData.current_version_id) {
+      console.log(`[TRACE] checkPlanLockStatus no plan or no current_version_id, returning unlocked`);
       return { isLocked: false, lockedUntil: null, daysRemaining: 0 };
     }
+
+    console.log(`[TRACE] checkPlanLockStatus found plan id=${planData.id} versionId=${planData.current_version_id}`);
 
     // Get the current version to check its creation date (lock starts on version creation)
     const { data: versionData, error: versionError } = await supabase
@@ -148,6 +154,7 @@ export async function checkPlanLockStatus(clientId: string): Promise<PlanLockSta
       .maybeSingle();
 
     if (versionError || !versionData) {
+      console.log(`[TRACE] checkPlanLockStatus version error or not found:`, versionError);
       return { isLocked: false, lockedUntil: null, daysRemaining: 0 };
     }
 
@@ -161,12 +168,14 @@ export async function checkPlanLockStatus(clientId: string): Promise<PlanLockSta
       ? Math.ceil((lockEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
 
+    console.log(`[TRACE] checkPlanLockStatus COMPLETE isLocked=${isLocked} daysRemaining=${daysRemaining}`);
     return {
       isLocked,
       lockedUntil: isLocked ? lockEndDate : null,
       daysRemaining,
     };
   } catch (error) {
+    console.log(`[TRACE] checkPlanLockStatus CAUGHT:`, error);
     console.error('Failed to check plan lock status:', error);
     return { isLocked: false, lockedUntil: null, daysRemaining: 0 };
   }
@@ -185,8 +194,10 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
   versionNumber: number | null;
   error: string | null;
 }> {
+  console.log(`[TRACE] fetchCurrentPlan ENTERED clientId="${clientId}" timestamp=${Date.now()}`);
   try {
     // Get the active nutrition plan
+    console.log(`[TRACE] fetchCurrentPlan querying nutrition_plans for clientId="${clientId}"`);
     const { data: planData, error: planError } = await supabase
       .from('nutrition_plans')
       .select('id, current_version_id, created_at')
@@ -197,13 +208,17 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       .maybeSingle();
 
     if (planError) {
+      console.log(`[TRACE] fetchCurrentPlan planError:`, planError);
       console.error('Error fetching plan:', planError);
       return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: planError.message };
     }
 
     if (!planData || !planData.current_version_id) {
+      console.log(`[TRACE] fetchCurrentPlan no plan or no current_version_id, returning null plan`);
       return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: null };
     }
+
+    console.log(`[TRACE] fetchCurrentPlan found plan id=${planData.id} versionId=${planData.current_version_id}`);
 
     // Get the current version payload, hash, and version number
     const { data: versionData, error: versionError } = await supabase
@@ -213,9 +228,11 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       .maybeSingle();
 
     if (versionError || !versionData) {
+      console.log(`[TRACE] fetchCurrentPlan versionError or no versionData:`, versionError);
       return { plan: null, planId: planData.id, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: versionError?.message || 'Version not found' };
     }
 
+    console.log(`[TRACE] fetchCurrentPlan COMPLETE returning plan payload`);
     return {
       plan: versionData.plan_payload as unknown as PlanPayload,
       planId: planData.id,
@@ -229,6 +246,7 @@ export async function fetchCurrentPlan(clientId: string): Promise<{
       error: null,
     };
   } catch (error: unknown) {
+    console.log(`[TRACE] fetchCurrentPlan CAUGHT:`, error);
     console.error('Failed to fetch current plan:', error);
     return { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, payloadHash: null, versionNumber: null, error: getErrorMessage(error, 'Failed to fetch current plan') };
   }

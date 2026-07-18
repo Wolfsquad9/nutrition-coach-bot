@@ -1,0 +1,134 @@
+diff --git a/src/components/checkin/ClientCheckinDashboard.tsx b/src/components/checkin/ClientCheckinDashboard.tsx
+index 393b17d..b98b8bc 100644
+--- a/src/components/checkin/ClientCheckinDashboard.tsx
++++ b/src/components/checkin/ClientCheckinDashboard.tsx
+@@ -20,18 +20,27 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
+   const [streak, setStreak] = useState<CheckinStreak | null>(null);
+   const [reviews, setReviews] = useState<WeeklyReview[]>([]);
+   const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
+ 
+   useEffect(() => {
++    setError(null);
+     Promise.all([
+       getCheckinHistory(clientId, { limit: 30 }),
+       getStreak(clientId),
+       getReviewHistory(clientId, { limit: 4 }),
+-    ]).then(([checkinResult, streakResult, reviewResult]) => {
+-      setCheckins(checkinResult.checkins);
+-      setStreak(streakResult.streak);
+-      setReviews(reviewResult.reviews);
+-      setLoading(false);
+-    });
++    ])
++      .then(([checkinResult, streakResult, reviewResult]) => {
++        setCheckins(checkinResult.checkins);
++        setStreak(streakResult.streak);
++        setReviews(reviewResult.reviews);
++      })
++      .catch((err) => {
++        console.error('Failed to load check-in dashboard data:', err);
++        setError(err instanceof Error ? err.message : 'Failed to load check-in dashboard data');
++      })
++      .finally(() => {
++        setLoading(false);
++      });
+   }, [clientId]);
+ 
+   if (loading) {
+@@ -42,6 +51,17 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
+     );
+   }
+ 
++  if (error) {
++    return (
++      <Card className="p-6 shadow-card">
++        <div className="text-center py-8 text-destructive">
++          <p className="font-bold">Error loading dashboard</p>
++          <p className="text-sm mt-2">{error}</p>
++        </div>
++      </Card>
++    );
++  }
++
+   // Calculate compliance from last 7 checkins
+   const recentCheckins = checkins.slice(0, 7);
+   const avgAdherence = recentCheckins.length > 0
+diff --git a/src/components/checkin/DailyCheckinForm.tsx b/src/components/checkin/DailyCheckinForm.tsx
+index 73af7c9..94955c3 100644
+--- a/src/components/checkin/DailyCheckinForm.tsx
++++ b/src/components/checkin/DailyCheckinForm.tsx
+@@ -41,29 +41,38 @@ export default function DailyCheckinForm({ clientId, userId }: Props) {
+   const [submitting, setSubmitting] = useState(false);
+   const [streak, setStreak] = useState<CheckinStreak | null>(null);
+   const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
+ 
+   // Load today's check-in + streak on mount
+   useEffect(() => {
++    setError(null);
+     Promise.all([
+       getTodayCheckin(clientId),
+       getStreak(clientId),
+-    ]).then(([checkinResult, streakResult]) => {
+-      if (checkinResult.checkin) {
+-        setSubmitted(true);
+-        setMealAdherence(checkinResult.checkin.meal_adherence);
+-        setWorkoutCompleted(checkinResult.checkin.workout_completed);
+-        setEnergyLevel(checkinResult.checkin.energy_level);
+-        setMood(checkinResult.checkin.mood);
+-        setSleepHours(checkinResult.checkin.sleep_hours);
+-        setWaterIntake(checkinResult.checkin.water_intake_liters);
+-        setCurrentWeight(checkinResult.checkin.current_weight_kg);
+-        setNotes(checkinResult.checkin.notes ?? '');
+-      }
+-      if (streakResult.streak) {
+-        setStreak(streakResult.streak);
+-      }
+-      setLoading(false);
+-    });
++    ])
++      .then(([checkinResult, streakResult]) => {
++        if (checkinResult.checkin) {
++          setSubmitted(true);
++          setMealAdherence(checkinResult.checkin.meal_adherence);
++          setWorkoutCompleted(checkinResult.checkin.workout_completed);
++          setEnergyLevel(checkinResult.checkin.energy_level);
++          setMood(checkinResult.checkin.mood);
++          setSleepHours(checkinResult.checkin.sleep_hours);
++          setWaterIntake(checkinResult.checkin.water_intake_liters);
++          setCurrentWeight(checkinResult.checkin.current_weight_kg);
++          setNotes(checkinResult.checkin.notes ?? '');
++        }
++        if (streakResult.streak) {
++          setStreak(streakResult.streak);
++        }
++      })
++      .catch((err) => {
++        console.error('Failed to load check-in data:', err);
++        setError(err instanceof Error ? err.message : 'Failed to load check-in data');
++      })
++      .finally(() => {
++        setLoading(false);
++      });
+   }, [clientId]);
+ 
+   const handleSubmit = async () => {
+@@ -105,6 +114,17 @@ export default function DailyCheckinForm({ clientId, userId }: Props) {
+     );
+   }
+ 
++  if (error) {
++    return (
++      <Card className="p-6 shadow-card">
++        <div className="text-center py-8 text-destructive">
++          <p className="font-bold">Error loading check-in</p>
++          <p className="text-sm mt-2">{error}</p>
++        </div>
++      </Card>
++    );
++  }
++
+   if (submitted) {
+     return (
+       <Card className="p-6 shadow-card">

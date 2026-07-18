@@ -64,9 +64,23 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 
 export function useSupabaseClients(): UseSupabaseClientsResult {
   const [clients, setClients] = useState<Client[]>([]);
-  const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const [activeClientId, setActiveClientId_] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Instrumented setActiveClientId
+  const setActiveClientId = useCallback((id: string | null | ((prev: string | null) => string | null)) => {
+    if (typeof id === 'function') {
+      setActiveClientId_((prev) => {
+        const result = (id as (prev: string | null) => string | null)(prev);
+        console.log(`[TRACE] setActiveClientId: ${prev} -> ${result} timestamp=${Date.now()}`);
+        return result;
+      });
+    } else {
+      console.log(`[TRACE] setActiveClientId: ${activeClientId} -> ${id} timestamp=${Date.now()}`);
+      setActiveClientId_(id);
+    }
+  }, [activeClientId]);
 
   // Derive activeClient from activeClientId and clients list
   const activeClient = activeClientId 

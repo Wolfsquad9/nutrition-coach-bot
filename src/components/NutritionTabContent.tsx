@@ -73,9 +73,13 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const [isGeneratingWeekly, setIsGeneratingWeekly] = useState(false);
 
   useEffect(() => {
+    console.log(`[TRACE] NutritionTabContent useEffect FIRED activeClientId="${activeClientId}" prev was null? ${!activeClientId ? 'yes (still null)' : 'no'}`);
     if (activeClientId) {
+      console.log(`[TRACE] NutritionTabContent useEffect calling loadPlanForClient("${activeClientId}")`);
       planState.loadPlanForClient(activeClientId);
       setDailyMealPlan(null);
+    } else {
+      console.log(`[TRACE] NutritionTabContent useEffect activeClientId is null, skipping load`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeClientId]);

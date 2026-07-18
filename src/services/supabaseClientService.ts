@@ -282,7 +282,11 @@ export async function fetchClientById(clientId: string): Promise<{ client: Clien
  * invitations. The linked client keeps their auth account; the coach can
  * re-invite them later.
  */
+const RPC_TIMEOUT_MS = 15000;
+
 export async function archiveClient(clientId: string): Promise<{ success: boolean; error: string | null }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
   try {
     // `soft_delete_client` is a freshly added RPC; the generated
     // supabase-types don't include it yet. Cast to keep the call site
@@ -290,6 +294,7 @@ export async function archiveClient(clientId: string): Promise<{ success: boolea
     const { data, error } = await supabase.rpc(
       'soft_delete_client' as never,
       { p_client_id: clientId } as never,
+      { signal: controller.signal } as never,
     );
 
     if (error) {
@@ -311,7 +316,12 @@ export async function archiveClient(clientId: string): Promise<{ success: boolea
 
     return { success: true, error: null };
   } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { success: false, error: 'Request timed out. Please try again.' };
+    }
     console.error('Failed to archive client:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Failed to archive client' };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

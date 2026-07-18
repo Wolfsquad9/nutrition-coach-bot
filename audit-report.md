@@ -1,356 +1,311 @@
-# Production Architecture Audit Report
-## Date: 2026-07-09
-## Scope: Authentication, Authorization, Onboarding, Navigation
-## Addendum: Single Source of Truth Design
+# Production Bug-Fix Audit Report
+
+## Incident 1: Nutrition Plan Lock FK Violation
+
+### Error
+```
+insert or update on table "nutrition_plans" violates foreign key constraint
+"nutrition_plans_created_by_fkey"
+```
+
+### Root Cause
+
+**The FK constraint on `nutrition_plans.created_by` references `public.profiles(id)`, but the RPC inserts `auth.uid()` (an `auth.users` UUID).**
+
+When the `handle_new_user` trigger fails (due to `'coach'::app_role` not being in the `app_role` enum), no `profiles` row is created. The user exists in `auth.users` but not in `public.profiles`. The `lock_nutrition_plan` RPC (SECURITY DEFINER) sets `created_by = v_user_id` where `v_user_id = auth.uid()`. This UUID has no matching row in `public.profiles`, so the FK constraint fails.
+
+### Ownership Model Evidence
+
+The business model requires `created_by` to be an `auth.users` ID, NOT a `profiles` ID. Here is the proof:
+
+| Evidence | Location | What it shows |
+|----------|----------|---------------|
+| RLS policy checks `created_by = auth.uid()` | `20260530120000` line 147 | Policy treats `created_by` as auth.users ID |
+| RPC inserts `v_user_id := auth.uid()` | `20260530120000` line 521 | RPC writes auth.users UUID |
+| `clients.created_by` FK target | `20260129081000` line 14 | `REFERENCES auth.users(id)` — same business meaning |
+| `plan_versions.created_by` FK target | `20251120110128` line 83 | `REFERENCES auth.users(id)` — same table, same column name |
+| `plan_overrides.created_by` FK target | `20251120110128` line 107 | `REFERENCES auth.users(id)` — same pattern |
+
+**Conclusion**: The original FK to `public.profiles(id)` in migration `20251120110128` line 71 was a schema design error. Every subsequent migration treats `created_by` as an `auth.users` reference. The FK must be changed to `REFERENCES auth.users(id)`.
+
+### Exact Failing Path
+
+```
+NutritionTabContent.tsx:141  handleLockPlan()
+  → useNutritionPlanState.ts:279  lockPlan()
+    → supabasePlanService.ts:264  supabase.rpc('lock_nutrition_plan', ...)
+      → lock_nutrition_plan RPC (SECURITY DEFINER)
+        → INSERT INTO nutrition_plans (client_id, created_by, plan_data, status)
+          VALUES (p_client_id, v_user_id, ...)   -- v_user_id = auth.uid()
+          -- v_user_id has no profiles row → FK VIOLATION
+```
+
+### Files Affected
+
+| File | Line | Issue |
+|------|------|-------|
+| `supabase/migrations/20251120110128_8df2ce8c-85a8-4e93-b31d-9d731f883512.sql` | 71 | `nutrition_plans.created_by` FK → `profiles(id)` should be `auth.users(id)` |
+| `supabase/migrations/20251120110128_8df2ce8c-85a8-4e93-b31d-9d731f883512.sql` | 144 | `training_plans.created_by` FK → `profiles(id)` should be `auth.users(id)` (same bug) |
+
+### Database Fix Required
+
+```sql
+-- Migration: fix_nutrition_plan_ownership_fk.sql
+ALTER TABLE public.nutrition_plans
+  DROP CONSTRAINT IF EXISTS nutrition_plans_created_by_fkey;
+
+ALTER TABLE public.nutrition_plans
+  ADD CONSTRAINT nutrition_plans_created_by_fkey
+  FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.training_plans
+  DROP CONSTRAINT IF EXISTS training_plans_created_by_fkey;
+
+ALTER TABLE public.training_plans
+  ADD CONSTRAINT training_plans_created_by_fkey
+  FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
+```
+
+### Migration Impact
+
+- **Existing data**: All existing `nutrition_plans.created_by` values are valid `auth.users` UUIDs (they were inserted by the RPC which uses `auth.uid()`). No data migration needed.
+- **Existing data**: All existing `training_plans.created_by` values are valid `auth.users` UUIDs. No data migration needed.
+- **Rollback**: Revert to `REFERENCES public.profiles(id)` — but this would re-introduce the bug.
+- **Risk**: LOW. The FK target change is backward-compatible with all existing data.
 
 ---
 
-## SSOT Design: The Simplification
+## Incident 2: Client Management Actions Freeze
 
-### The Core Problem
-The current system has **four competing sources of truth** for role and clientId:
+### Symptom 2a: "Creating invite" never completes
 
-| Source | Role | ClientId | When Set | Trust Level |
-|--------|------|----------|----------|-------------|
-| `auth.users.raw_user_meta_data` | `'client'` or missing | Never set | Signup | LOW (stale) |
-| `profiles.role` | `'client'`, `'trainer'`, `'admin'` | N/A | Trigger + claim | MEDIUM (deprecated) |
-| `user_roles.role` | `'client'`, `'trainer'`, `'admin'` | N/A | Trigger + claim | HIGH (authoritative) |
-| `clients.user_profile_id` | N/A | client record UUID | Claim only | HIGH (authoritative) |
+### Root Cause
 
-The application attempts to read from all four, in sequence, creating race conditions, double renders, and stale state.
+**`supabase.rpc('create_client_invitation', ...)` has no timeout. If the RPC call hangs, the `finally` block that resets `isCreatingInvite` never executes.**
+
+The `handleInviteClient` function in `ClientPage.tsx` (line 112-133) has a proper `try/catch/finally` with `setIsCreatingInvite(false)` in the `finally` block. However, the `await createClientInvitation(...)` call on line 116 hangs because `supabase.rpc()` has no configurable timeout. The `await` never resolves, so the `finally` block never runs.
+
+### Exact Failing Path
+
+```
+ClientPage.tsx:112  handleInviteClient()
+  → setIsCreatingInvite(true)                    -- button shows spinner
+  → clientInvitationService.ts:30  supabase.rpc('create_client_invitation', ...)
+    → [RPC HANGS — no timeout, no abort signal]
+    → setIsCreatingInvite(false) in finally      -- NEVER REACHED
+    → button stays in "Creating..." state forever
+```
+
+### Symptom 2b: Delete client does nothing
+
+### Root Cause
+
+**`supabase.rpc('soft_delete_client', ...)` has no timeout. The `finally` block that resets `isDeleting` never executes.**
+
+Same pattern as 2a. The `handleConfirmDelete` function (line 149-170) calls `deleteClientFromHook(activeClientId)` which calls `archiveClient(clientId)` which calls `supabase.rpc('soft_delete_client', ...)`. If the RPC hangs, the entire promise chain hangs, and the `finally` block never runs.
+
+### Exact Failing Path
+
+```
+ClientPage.tsx:149  handleConfirmDelete()
+  → setIsDeleting(true)                          -- button shows spinner
+  → useSupabaseClients.ts:148  archiveClient(clientId)
+    → supabaseClientService.ts:290  supabase.rpc('soft_delete_client', ...)
+      → [RPC HANGS — no timeout, no abort signal]
+      → setIsDeleting(false) in finally          -- NEVER REACHED
+      → button stays in "Deleting..." state forever
+```
+
+### Files Affected
+
+| File | Line | Issue |
+|------|------|-------|
+| `src/services/clientInvitationService.ts` | 30 | `supabase.rpc('create_client_invitation', ...)` — no timeout, no abort signal |
+| `src/services/supabaseClientService.ts` | 290 | `supabase.rpc('soft_delete_client', ...)` — no timeout, no abort signal |
+| `src/pages/ClientPage.tsx` | 112-133 | `handleInviteClient` — no timeout guard on RPC call |
+| `src/pages/ClientPage.tsx` | 149-170 | `handleConfirmDelete` — no timeout guard on RPC call |
+
+### Frontend Fix Required
+
+Add `AbortController` with 15-second timeout to both RPC calls:
+
+**`src/services/clientInvitationService.ts`** (around line 30):
+```typescript
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 15000);
+try {
+  const { data, error } = await supabase.rpc('create_client_invitation', {
+    p_client_id: input.clientId,
+    p_invited_email: input.invitedEmail ?? null,
+    p_invite_token_hash: tokenHash,
+    p_expires_at: input.expiresAt ?? null,
+  }, { signal: controller.signal });
+  // ... existing code
+} catch (error) {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return { token: null, inviteUrl: null, invitationId: null, error: 'Request timed out' };
+  }
+  throw error;
+} finally {
+  clearTimeout(timeoutId);
+}
+```
+
+**`src/services/supabaseClientService.ts`** (around line 290):
+```typescript
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 15000);
+try {
+  const { data, error } = await supabase.rpc(
+    'soft_delete_client' as never,
+    { p_client_id: clientId } as never,
+    { signal: controller.signal } as never,
+  );
+  // ... existing code
+} catch (error) {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return { success: false, error: 'Request timed out' };
+  }
+  throw error;
+} finally {
+  clearTimeout(timeoutId);
+}
+```
+
+### Database Fix Required
+
+Add `statement_timeout` to both RPC functions to prevent server-side hangs:
+
+```sql
+-- In create_client_invitation RPC (migration 20260530120000):
+BEGIN
+  PERFORM set_config('statement_timeout', '10000', true); -- 10s
+  -- ... existing function body
+
+-- In soft_delete_client RPC (migration 20260710000000):
+BEGIN
+  PERFORM set_config('statement_timeout', '10000', true); -- 10s
+  -- ... existing function body
+```
 
 ---
 
-### Decision: Single Source of Truth = Database
+## Incident 3: Nutrition Generation Infinite Loading
 
-**Eliminate `user_metadata` as a role/clientId source entirely.**
+### Symptom
+"Loading plan from database" spinner never resolves. Other tabs work.
 
-The JWT is set at signup and never updated when the claim mutates the database. The `user_metadata.role` and `user_metadata.client_id` values are **always wrong** for invitation-based signups. There is no scenario where reading from metadata produces the correct answer and reading from the database produces the wrong answer. The converse is not true.
+### Root Cause
 
-| Value | SSOT | Location | Why |
-|-------|------|----------|-----|
-| **Role** | `user_roles.role` | Database | Only authoritative source; `profiles.role` is a stale copy |
-| **ClientId** | `clients.id` via `user_profile_id` | Database | Only set after claim; cannot be known at signup |
-| **Coach ID** | `clients.created_by` | Database | Set at client creation, never changes |
+**Race condition in `loadRequestIdRef` causes all concurrent load requests to return early without clearing the LOADING state.**
 
-**What belongs in JWT for performance (only):**
-- `email` — always correct, no DB query needed for display
-- `sub` (user ID) — always correct, set by Supabase auth
-- Nothing else. Two index lookups (user_roles + clients) cost <5ms each.
-
-**What must always be read from the database:**
-- `user_roles.role` — every auth state change
-- `clients.id` via `clients.user_profile_id` — every auth state change
-
-**What can be eliminated entirely:**
-1. `resolveFromMetadata()` in `useAuth.tsx` — delete the function
-2. `user_metadata.role` in `SignupPage.tsx` (line 41) — no longer needed
-3. `refreshFromDb()` in `useAuth.tsx` — not needed after simplification
-4. `isReady` state in `useAuth.tsx` — absorbed into `isLoading`
-5. `profileService.ts` — entire file is dead code (trigger handles creation)
-6. `ClientClaimPage.tsx` — entire file is unreachable
-7. `useEffect` navigation in `LoginPage.tsx` and `SignupPage.tsx` — replaced by immediate navigation
-
----
-
-### Simplified Flow
-
-```
-Auth State Change (SIGNED_IN / TOKEN_REFRESHED / session restored)
-    │
-    ▼
-useAuth.handleAuthChange(session)
-    │
-    ├─ setUser(session.user)
-    ├─ setSession(session)
-    │
-    ├─ Promise.all([
-    │     supabase.from('user_roles').select('role').eq('user_id', uid).maybeSingle(),
-    │     supabase.from('clients').select('id').eq('user_profile_id', uid).maybeSingle()
-    │   ])
-    │
-    ├─ setUserRole(role ?? 'trainer')    ← ONLY from DB, no metadata fallback
-    ├─ setClientId(clientId ?? null)     ← ONLY from DB, no metadata fallback
-    ├─ setIsLoading(false)               ← SINGLE loading gate
-    │
-    ▼
-ProtectedRoute sees resolved role + clientId
-    │
-    ├─ isLoading? → spinner
-    ├─ !isAuthenticated? → /login
-    ├─ role mismatch? → redirect
-    └─ render children
-```
-
-**Key simplification**: No two-phase resolution. No background refresh. No stale state window. `isLoading` is the only gate, and it stays `true` until BOTH DB queries complete.
-
----
-
-### The Invitation Claim Problem
-
-The claim RPC runs AFTER the initial auth state change. With the simplified model, the sequence is:
-
-```
-1. Auth state change (SIGNED_IN)
-2. useAuth queries DB → role='trainer', clientId=null  (pre-claim state)
-3. setIsLoading(false)
-4. LoginPage/SignupPage runs claimClientInvitation()
-5. DB updated: role='client', clientId=set
-6. useAuth still has old state
-```
-
-**Solution**: Expose a `refreshAuthState()` method from `useAuth` that re-runs the DB queries and updates state. LoginPage and SignupPage call this AFTER successful claim.
+The `loadPlanForClient` function in `usePlanFetch.ts` uses a request ID counter to invalidate stale concurrent calls:
 
 ```typescript
-// In useAuth:
-const refreshAuthState = useCallback(async () => {
-  const uid = user?.id;
-  if (!uid) return;
+// Line 109: Capture current request ID
+const currentRequestId = ++loadRequestIdRef.current;
+setUiState("LOADING");
 
-  const [{ data: roleData }, { data: clientData }] = await Promise.all([
-    supabase.from('user_roles').select('role').eq('user_id', uid).maybeSingle(),
-    supabase.from('clients').select('id').eq('user_profile_id', uid).maybeSingle(),
-  ]);
-
-  setUserRole((roleData?.role as 'trainer' | 'client') ?? 'trainer');
-  setClientId(clientData?.id ?? null);
-}, [user?.id]);
+// Line 120: If another call incremented the counter, this call is stale
+if (currentRequestId !== loadRequestIdRef.current) return;  // ← BUG: returns without setUiState("IDLE")
 ```
 
-This is called AFTER claim, not in the background. It's explicit, deterministic, and synchronous from the caller's perspective (async but awaited).
+When `loadPlanForClient` is called multiple times in quick succession (e.g., React StrictMode double-mount, rapid client switching, or the `useEffect` in `NutritionTabContent` re-firing):
 
----
+1. Call 1: `currentRequestId = 1`, `setUiState("LOADING")`, starts `await Promise.all(...)`
+2. Call 2: `currentRequestId = 2`, `setUiState("LOADING")`, starts `await Promise.all(...)`
+3. Call 1 resumes: `currentRequestId (1) !== loadRequestIdRef.current (2)` → **returns early, UI stays at LOADING**
+4. Call 2 resumes: `currentRequestId (2) === loadRequestIdRef.current (2)` → proceeds normally
 
-### Code Paths to Eliminate
+If a third call happens before call 2 completes, call 2 also returns early. This creates a cascade where ALL requests return early, and the UI is permanently stuck at "LOADING".
 
-#### In `src/hooks/useAuth.tsx`:
-
-| Current Code | Replace With |
-|-------------|--------------|
-| `resolveFromMetadata()` | DELETE entire function |
-| `refreshFromDb()` | REPLACE with `refreshAuthState()` (explicit, not automatic) |
-| `isReady` state | DELETE. `isLoading` is the only gate. |
-| `useEffect` with `onAuthStateChange` | Keep, but simplified to single DB query path |
-| Metadata derivation in `handleAuthChange` | Remove. Only use DB values. |
-
-#### In `src/components/ProtectedRoute.tsx`:
-
-| Current Code | Replace With |
-|-------------|--------------|
-| `isLoading` check (already correct) | Keep |
-| `isReady` (not currently used) | Not needed. Removed from useAuth. |
-
-ProtectedRoute becomes simpler: only check `isLoading` and `isAuthenticated`.
-
-#### In `src/pages/LoginPage.tsx`:
-
-| Current Code | Replace With |
-|-------------|--------------|
-| `useEffect` for navigation | DELETE entire effect |
-| `handleLogin` invite flow | Navigate to `/my-plan` after claim + `refreshAuthState()` |
-| `handleLogin` no invite | Navigate to `/` immediately |
-
-No more race between useEffect and AuthProvider.
-
-#### In `src/pages/SignupPage.tsx`:
-
-| Current Code | Replace With |
-|-------------|--------------|
-| `useEffect` for navigation | DELETE entire effect |
-| `handleSignup` invite flow | Navigate to `/my-plan` after claim + `refreshAuthState()` |
-| `handleSignup` no invite | Navigate to `/login` immediately |
-| `options.data.role = 'client'` | DELETE. Metadata is no longer used. |
-
-#### In `src/services/profileService.ts`:
-
-| Current Code | Replace With |
-|-------------|--------------|
-| Entire file | DELETE. The `handle_new_user` trigger creates profiles. `lockNutritionPlan` should not call `ensureProfileExists()`. |
-
-#### In `src/pages/ClientClaimPage.tsx`:
-
-| Current Code | Replace With |
-|-------------|--------------|
-| Entire file | DELETE. Routes don't reference it. Invitation flow uses LoginPage or SignupPage. |
-
-#### In `src/pages/ClientCheckinPage.tsx`:
-
-| Current Code | Replace With |
-|-------------|--------------|
-| `const currentUserId = userId ?? clientId` | CHANGE to `const currentUserId = userId`. If `userId` is null, the page should not render. |
-
----
-
-### Database Changes Required
-
-#### Fix the `handle_new_user` trigger:
-```sql
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_role app_role;
-BEGIN
-  -- Always default to 'trainer' for self-serve signups
-  -- client role is set by claim_client_invitation()
-  v_role := 'trainer'::app_role;
-
-  INSERT INTO public.profiles (id, role, email, full_name)
-  VALUES (NEW.id, v_role, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email))
-  ON CONFLICT (id) DO UPDATE
-    SET email = EXCLUDED.email,
-        full_name = COALESCE(public.profiles.full_name, EXCLUDED.full_name);
-
-  INSERT INTO public.user_roles (user_id, role)
-  VALUES (NEW.id, v_role)
-  ON CONFLICT (user_id) DO NOTHING;
-
-  RETURN NEW;
-END;
-$function$;
-```
-
-**Changes:**
-1. Hardcode `'trainer'::app_role` instead of casting metadata — eliminates the enum mismatch bug
-2. Remove the exception handler (no longer needed with hardcoded value)
-3. Metadata `role` field is ignored entirely
-
-#### Fix the `app_role` enum (add 'coach' for backward compatibility):
-```sql
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'coach';
-```
-This ensures any existing data with 'coach' doesn't break. New code uses only 'trainer' and 'client'.
-
-#### Add anonymous SELECT policy for `plan_versions`:
-```sql
-CREATE POLICY "Anyone can view locked plan versions"
-  ON public.plan_versions FOR SELECT
-  TO anon, authenticated
-  USING (locked_snapshot_json IS NOT NULL AND archived = false);
-```
-This fixes shared plan public access.
-
----
-
-### Complete File Change List
-
-| File | Action |
-|------|--------|
-| `supabase/migrations/...` (new) | Fix trigger, add 'coach' to enum, add anonymous policy |
-| `src/hooks/useAuth.tsx` | Rewrite: remove metadata resolution, remove isReady, add refreshAuthState() |
-| `src/components/ProtectedRoute.tsx` | Remove isReady dependency (no longer exists) |
-| `src/pages/LoginPage.tsx` | Remove useEffect navigation, add refreshAuthState() after claim |
-| `src/pages/SignupPage.tsx` | Remove useEffect navigation, add refreshAuthState() after claim, remove metadata role |
-| `src/pages/ClientCheckinPage.tsx` | Remove `userId ?? clientId` fallback |
-| `src/services/profileService.ts` | DELETE entire file |
-| `src/pages/ClientClaimPage.tsx` | DELETE entire file |
-| `src/services/supabasePlanService.ts` | Remove `ensureProfileExists()` call in `lockNutritionPlan` |
-
----
-
-### After Fix Architecture
+### Exact Failing Path
 
 ```
-                    ┌─────────────────────────────────────────┐
-                    │           AUTH STATE CHANGE             │
-                    │  (signin, signup, refresh, restore)     │
-                    └────────────────┬────────────────────────┘
-                                     │
-                                     ▼
-                    ┌─────────────────────────────────────────┐
-                    │         useAuth.handleAuthChange        │
-                    │                                         │
-                    │  1. Store session + user                │
-                    │  2. Query DB in parallel:               │
-                    │     ├─ user_roles.role                  │
-                    │     └─ clients.id (via user_profile_id) │
-                    │  3. Set role, clientId, isLoading=false │
-                    └────────────────┬────────────────────────┘
-                                     │
-                                     ▼
-                    ┌─────────────────────────────────────────┐
-                    │   ProtectedRoute checks:                │
-                    │   - isLoading → spinner                 │
-                    │   - !authenticated → /login             │
-                    │   - role mismatch → redirect            │
-                    │   - render children                     │
-                    └─────────────────────────────────────────┘
-                                     │
-              ┌──────────────────────┼──────────────────────┐
-              │                      │                      │
-              ▼                      ▼                      ▼
-    ┌─────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-    │ LoginPage/      │   │ Client Pages     │   │ Coach Pages      │
-    │ SignupPage      │   │ (my-plan, etc.)  │   │ (clients, etc.)  │
-    │                 │   │                  │   │                  │
-    │ After claim:    │   │ clientId is      │   │ role is          │
-    │ refreshAuthState│   │ always resolved  │   │ always resolved  │
-    │ navigate(/my-   │   │ before render    │   │ before render    │
-    │ plan)           │   │                  │   │                  │
-    └─────────────────┘   └──────────────────┘   └──────────────────┘
-
-    NO MORE:
-    ─────────
-    • Two-phase resolution
-    • Metadata vs DB conflicts
-    • Background refresh race conditions
-    • Double redirects
-    • Stale clientId
-    • isReady concept
-    • profileService.ts
-    • ClientClaimPage.tsx
-    • useEffect navigation in auth pages
-    • user_metadata.role as any kind of source
+NutritionTabContent.tsx:77  useEffect → loadPlanForClient(activeClientId)
+  → usePlanFetch.ts:109  currentRequestId = ++loadRequestIdRef.current  (e.g., 1)
+  → usePlanFetch.ts:111  setUiState("LOADING")
+  → usePlanFetch.ts:115  await Promise.all([fetchCurrentPlan, checkPlanLockStatus])
+    [React StrictMode double-mount triggers second call]
+  → usePlanFetch.ts:109  currentRequestId = ++loadRequestIdRef.current  (e.g., 2)
+  → usePlanFetch.ts:111  setUiState("LOADING")
+  → usePlanFetch.ts:115  await Promise.all([fetchCurrentPlan, checkPlanLockStatus])
+    [First call resumes]
+  → usePlanFetch.ts:120  currentRequestId (1) !== loadRequestIdRef.current (2)
+  → return  -- UI stays at "LOADING" forever
 ```
 
+### Files Affected
+
+| File | Line | Issue |
+|------|------|-------|
+| `src/hooks/usePlanFetch.ts` | 120 | Stale request returns without clearing LOADING state |
+| `src/hooks/usePlanFetch.ts` | 146 | Same bug in second `Promise.all` block |
+| `src/hooks/usePlanFetch.ts` | 107 | `!clientId` early return — no UI state reset (minor, only on empty clientId) |
+
+### Frontend Fix Required
+
+**`src/hooks/usePlanFetch.ts`** — Add `setUiState("IDLE")` before every early return:
+
+```typescript
+// Line 107: Early return for empty clientId
+if (!clientId) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+
+// Line 120: Stale request check after first Promise.all
+if (currentRequestId !== loadRequestIdRef.current) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+
+// Line 146: Stale request check after second Promise.all
+if (currentRequestId !== loadRequestIdRef.current) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+
+// Line 184: Stale request check in catch block
+if (currentRequestId !== loadRequestIdRef.current) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+```
+
+### No Database Fix Required
+
+This is a frontend-only race condition. No database changes needed.
+
 ---
 
-### What This Simplifies (Quantified)
+## Validation Steps
 
-| Metric | Before | After |
-|--------|--------|-------|
-| DB queries per auth change | 3-4 (clients, user_roles, profiles, metadata) | 2 (user_roles, clients) |
-| State variables in useAuth | 6 (user, session, isLoading, isReady, clientId, userRole) | 5 (user, session, isLoading, clientId, userRole) |
-| Code paths for role resolution | 3 (metadata, user_roles, profiles) | 1 (user_roles) |
-| Code paths for clientId resolution | 2 (metadata, clients) | 1 (clients) |
-| Files to maintain | 3 auth files (useAuth, ProtectedRoute, profileService) | 2 auth files (useAuth, ProtectedRoute) |
-| Race conditions | 3+ (metadata vs DB, claim vs refresh, useEffect vs ProtectedRoute) | 0 (explicit refreshAuthState after claim) |
-| Redirects per auth change | Up to 2 (metadata role → DB role) | 1 (after DB resolution) |
+### Incident 1 — FK Fix
 
----
+1. Run the migration to change FK targets
+2. Verify: `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.nutrition_plans'::regclass AND conname LIKE '%created_by%'` → shows `REFERENCES auth.users(id)`
+3. Verify: `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.training_plans'::regclass AND conname LIKE '%created_by%'` → shows `REFERENCES auth.users(id)`
+4. Test: Lock a nutrition plan for a coach who signed up during the broken trigger period → lock succeeds
+5. Test: Lock a nutrition plan for a coach with a valid profiles row → lock succeeds (regression check)
 
-### Risk Assessment for This Approach
+### Incident 2 — Timeout Fix
 
-**Risk: Initial load latency**
-- Before: metadata renders instantly, DB updates 5-50ms later
-- After: waits 5-50ms for DB before rendering
-- Mitigation: This is acceptable. The loading spinner already shows during auth initialization. Adding 5-50ms to account for DB queries is negligible compared to the network round-trip for the auth call itself (200-500ms).
+1. Test: Click "Invite Client" → invitation created or error returned within 15 seconds
+2. Test: Click "Delete Client" → client archived or error returned within 15 seconds
+3. Test: Disconnect network, click "Invite Client" → error returned within 15 seconds (not infinite hang)
+4. Test: Disconnect network, click "Delete Client" → error returned within 15 seconds (not infinite hang)
 
-**Risk: `refreshAuthState()` creates auth event loop**
-- Using `supabase.auth.updateUser()` to update metadata could trigger another `onAuthStateChange` event, causing a loop.
-- Mitigation: `refreshAuthState()` does NOT touch auth metadata. It only reads from the database. No auth event is triggered.
+### Incident 3 — Race Condition Fix
 
-**Risk: Claim runs before `refreshAuthState()` is called**
-- If the user navigates away before the claim completes, `refreshAuthState()` is never called.
-- Mitigation: This is the same risk as the current system. The navigation happens AFTER the claim + refreshAuthState complete, so this is safe.
+1. Test: Navigate to Nutrition tab for a client with a locked plan → plan loads, spinner resolves
+2. Test: Navigate to Nutrition tab for a client without a plan → "No nutrition plan" message shown
+3. Test: Rapidly switch between clients in the client selector → plan loads correctly for each client
+4. Test: Navigate away from Nutrition tab while loading → no console errors, no stuck state
+5. Test: Refresh page on Nutrition tab → plan loads on re-mount
 
-**Risk: Losing 'coach' role backward compatibility**
-- Existing users may have `user_roles.role = 'coach'` from the broken trigger.
-- Mitigation: Add 'coach' to the enum. New code writes 'trainer'. Old data with 'coach' still works with `has_role_v2` checks if we update that function to also check for 'coach'.
+### Integration Validation
 
----
-
-### Summary
-
-The simplification is:
-
-1. **Database is the ONLY source of truth** for role and clientId
-2. **JWT metadata is ignored** for role and clientId
-3. **`isLoading` is the only loading gate** — no isReady, no two-phase resolution
-4. **`refreshAuthState()` is explicit** — called only when the caller knows the DB changed
-5. **Four files are deleted** (profileService.ts, ClientClaimPage.tsx, resolveFromMetadata, refreshFromDb)
-6. **Two files are simplified** (ProtectedRoute removes isReady, useAuth removes 3 code paths)
-7. **The trigger is simplified** — hardcoded 'trainer', no metadata cast
+1. Full flow: Create client → generate plan → lock plan → verify no FK error
+2. Full flow: Create client → invite client → client claims invitation → client views plan
+3. Full flow: Create client → delete client → client removed from list, invitations revoked

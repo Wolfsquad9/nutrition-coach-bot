@@ -165,7 +165,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [handleAuthChange]);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      const timeoutMs = 5000;
+      const timeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('signOut timed out')), timeoutMs)
+      );
+      await Promise.race([supabase.auth.signOut(), timeoutPromise]);
+    } catch (err) {
+      console.error('signOut failed or timed out:', err);
+    }
     // Auth state change handler will clear all state
   };
 
