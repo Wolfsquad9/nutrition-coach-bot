@@ -78,11 +78,6 @@ export interface UsePlanFetchHelpers {
   clearState: () => void;
 }
 
-let _traceId = 0;
-function nextTraceId(): number {
-  return ++_traceId;
-}
-
 export function usePlanFetch(
   setters: UsePlanFetchSetters,
   refs: UsePlanFetchRefs,
@@ -109,48 +104,31 @@ export function usePlanFetch(
   });
 
   const loadPlanForClient = useCallback(async (clientId: string) => {
-    const traceId = nextTraceId();
-    console.log(`[TRACE:${traceId}] loadPlanForClient ENTERED clientId="${clientId}" planId=${planId} versionId=${versionId} timestamp=${Date.now()}`);
-
     if (!clientId) {
-      console.log(`[TRACE:${traceId}] loadPlanForClient EARLY RETURN: clientId is falsy, setting IDLE`);
       setUiState("IDLE");
       return;
     }
 
     const currentRequestId = ++loadRequestIdRef.current;
-    console.log(`[TRACE:${traceId}] loadPlanForClient requestId=${currentRequestId} setting LOADING`);
 
     setUiState("LOADING");
     setError(null);
 
-    // TIMEOUT GUARD: If promises don't resolve within 15s, log the hang
-    const timeoutHandle = setTimeout(() => {
-      console.log(`[TRACE:${traceId}] loadPlanForClient TIMEOUT after 15s! Request ${currentRequestId} still waiting for Promises. clientId="${clientId}"`);
-    }, 15000);
-
     try {
-      console.log(`[TRACE:${traceId}] loadPlanForClient starting fetchCurrentPlan + checkPlanLockStatus in parallel`);
       const fetchPromise = fetchCurrentPlan(clientId);
       const lockPromise = checkPlanLockStatus(clientId);
       
-      console.log(`[TRACE:${traceId}] loadPlanForClient awaiting Promise.all...`);
       const [planResult, lockResult] = await Promise.all([fetchPromise, lockPromise]);
-      clearTimeout(timeoutHandle);
-      console.log(`[TRACE:${traceId}] loadPlanForClient Promise.all RESOLVED plan=${!!planResult.plan} planId=${planResult.planId} versionId=${planResult.versionId}`);
 
       if (currentRequestId !== loadRequestIdRef.current) {
-        console.log(`[TRACE:${traceId}] loadPlanForClient STALE REQUEST: current=${currentRequestId} latest=${loadRequestIdRef.current} setting IDLE`);
         setUiState("IDLE");
         return;
       }
 
       if (!planResult.plan) {
-        console.log(`[TRACE:${traceId}] loadPlanForClient NO PLAN FOUND: calling clearState() then IDLE`);
         clearState();
         setUiState("IDLE");
         lastFailedActionRef.current = null;
-        console.log(`[TRACE:${traceId}] loadPlanForClient COMPLETE (no plan) uiState=IDLE`);
         return;
       }
 
@@ -162,7 +140,6 @@ export function usePlanFetch(
       let nextPendingOverrides: PlanOverride[] = [];
 
       if (planResult.versionId) {
-        console.log(`[TRACE:${traceId}] loadPlanForClient has versionId=${planResult.versionId}, fetching snapshot+overrides`);
         const snapshotPromise = nextSnapshot
           ? Promise.resolve({ snapshot: nextSnapshot, error: null })
           : fetchPersistedSnapshot(planResult.versionId);
@@ -171,10 +148,8 @@ export function usePlanFetch(
           snapshotPromise,
           fetchPendingOverrides(planResult.versionId),
         ]);
-        console.log(`[TRACE:${traceId}] loadPlanForClient snapshot+overrides RESOLVED snapshot=${!!snapshotResult.snapshot} overrides=${overridesResult.overrides?.length}`);
 
         if (currentRequestId !== loadRequestIdRef.current) {
-          console.log(`[TRACE:${traceId}] loadPlanForClient STALE REQUEST (after snapshot): setting IDLE`);
           setUiState("IDLE");
           return;
         }
@@ -199,7 +174,6 @@ export function usePlanFetch(
         }
       }
 
-      console.log(`[TRACE:${traceId}] loadPlanForClient setting all plan state`);
       setWeeklyPlan(payload.weeklyPlan);
       setMacroTargets(payload.macroTargets as MacroTargets);
       setLikedIngredients(payload.likedIngredients || []);
@@ -215,14 +189,8 @@ export function usePlanFetch(
       setLastPersistenceFailed(false);
       lastFailedActionRef.current = null;
       setUiState("IDLE");
-      console.log(`[TRACE:${traceId}] loadPlanForClient COMPLETE (plan loaded) uiState=IDLE`);
     } catch (err) {
-      console.log(`[TRACE:${traceId}] loadPlanForClient CAUGHT ERROR:`, err);
-      if (err instanceof Error) {
-        console.log(`[TRACE:${traceId}] loadPlanForClient ERROR stack:`, err.stack);
-      }
       if (currentRequestId !== loadRequestIdRef.current) {
-        console.log(`[TRACE:${traceId}] loadPlanForClient STALE REQUEST in catch: setting IDLE`);
         setUiState("IDLE");
         return;
       }
@@ -258,7 +226,6 @@ export function usePlanFetch(
       setError(runtimeError.message);
       lastFailedActionRef.current = runtimeError.retryable ? { type: "load", clientId } : null;
       setUiState("ERROR");
-      console.log(`[TRACE:${traceId}] loadPlanForClient COMPLETE (error) uiState=ERROR message="${runtimeError.message}"`);
     }
   }, [
     clearState, resetHydratedPlanState, planId, versionId,
