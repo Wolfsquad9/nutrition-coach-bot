@@ -52,8 +52,6 @@ export default function AppLayout() {
   const location = useLocation();
   const { clientId: routeClientId } = useParams<{ clientId: string }>();
 
-  console.log(`[TRACE] AppLayout RENDER isLoadingClients=${isAuthLoading || false} timestamp=${Date.now()}`);
-
   const {
     clients,
     activeClientId,
@@ -67,8 +65,6 @@ export default function AppLayout() {
     createNewClientDraft,
   } = useSupabaseClients();
   
-  console.log(`[TRACE] AppLayout clients=${clients.length} activeClientId="${activeClientId}" activeClient=${activeClient?.id || 'null'} isLoadingClients=${isLoadingClients} clientError="${clientError}"`);
-
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
 

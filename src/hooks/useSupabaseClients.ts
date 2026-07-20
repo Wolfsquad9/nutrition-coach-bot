@@ -68,19 +68,9 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Instrumented setActiveClientId
   const setActiveClientId = useCallback((id: string | null | ((prev: string | null) => string | null)) => {
-    if (typeof id === 'function') {
-      setActiveClientId_((prev) => {
-        const result = (id as (prev: string | null) => string | null)(prev);
-        console.log(`[TRACE] setActiveClientId: ${prev} -> ${result} timestamp=${Date.now()}`);
-        return result;
-      });
-    } else {
-      console.log(`[TRACE] setActiveClientId: ${activeClientId} -> ${id} timestamp=${Date.now()}`);
-      setActiveClientId_(id);
-    }
-  }, [activeClientId]);
+    setActiveClientId_(id);
+  }, []);
 
   // Derive activeClient from activeClientId and clients list
   const activeClient = activeClientId 

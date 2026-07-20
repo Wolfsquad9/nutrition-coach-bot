@@ -101,20 +101,9 @@ export function useNutritionPlanState() {
   const [error, setError] = useState<string | null>(null);
   const [lastPersistenceFailed, setLastPersistenceFailed] = useState(false);
 
-  // Instrumented setUiState that logs every transition
+  // Wrapped setUiState that delegates to the underlying state setter
   const setUiState = useCallback((next: UIState | ((prev: UIState) => UIState)) => {
-    if (typeof next === 'function') {
-      setUiState_((prev) => {
-        const result = (next as (prev: UIState) => UIState)(prev);
-        console.log(`[TRACE] setUiState transition: ${prev} -> ${result} timestamp=${Date.now()}`);
-        return result;
-      });
-    } else {
-      setUiState_((prev) => {
-        console.log(`[TRACE] setUiState transition: ${prev} -> ${next} timestamp=${Date.now()}`);
-        return next;
-      });
-    }
+    setUiState_(next);
   }, []);
 
   /* ---------------- PLAN DATA ---------------- */
