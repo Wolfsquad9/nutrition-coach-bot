@@ -10,10 +10,15 @@
     "lint": "eslint src/**/*.{ts,tsx}",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
+    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "test:snapshot": "npx tsc -p tsconfig.tests.json && echo '{\"type\":\"commonjs\"}' > .tmp-tests/package.json && node .tmp-tests/tests/planSnapshot.test.js",
     "test": "npm run test:snapshot",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:install": "playwright install --with-deps chromium",
     "db:verify": "node scripts/verify-production-bootstrap.mjs"
   },
   "dependencies": {
@@ -77,6 +82,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "^1.48.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
