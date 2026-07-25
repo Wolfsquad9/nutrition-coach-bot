@@ -34,6 +34,61 @@ export default function SignupPage() {
       });
     }
 
+    // Cross-role email uniqueness check
+    if (inviteToken) {
+      // If client signup via invite, verify email isn't already used by a coach account.
+      const { data: conflictData, error: conflictError } = await (supabase as any).rpc(
+        'check_email_role_conflict',
+        {
+          p_email: email,
+          p_intended_role: 'client',
+          p_exclude_user_id: null,
+        }
+      );
+
+      if (conflictError) {
+        setSubmitting(false);
+        toast({ title: 'Signup failed', description: conflictError.message, variant: 'destructive' });
+        return;
+      }
+
+      if (conflictData === true) {
+        setSubmitting(false);
+        toast({
+          title: 'Signup failed',
+          description: 'This email is already registered as a coach account. Please use a different email to accept this invitation.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else {
+      // If coach signup, verify email isn't already used by a client account.
+      const { data: conflictData, error: conflictError } = await (supabase as any).rpc(
+        'check_email_role_conflict',
+        {
+          p_email: email,
+          p_intended_role: 'coach',
+          p_exclude_user_id: null,
+        }
+      );
+
+      if (conflictError) {
+        setSubmitting(false);
+        toast({ title: 'Signup failed', description: conflictError.message, variant: 'destructive' });
+        return;
+      }
+
+      if (conflictData === true) {
+        setSubmitting(false);
+        toast({
+          title: 'Signup failed',
+          description: 'This email is already registered as a client account. Please use a different email or contact your coach.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {

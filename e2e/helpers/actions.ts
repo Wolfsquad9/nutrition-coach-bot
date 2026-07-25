@@ -78,7 +78,9 @@ export async function createClient(
 
   await page.getByRole('button', { name: /^Save$/i }).click();
   // "Client saved" toast confirms persist; the heading flips to "Client: <label>".
-  await expect(page.getByText('Client saved')).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByText('Client saved', { exact: true }).first()
+  ).toBeVisible({ timeout: 10_000 });
   await expect(
     page.getByRole('heading', { name: /^Client: /i })
   ).toBeVisible();
@@ -96,12 +98,13 @@ export async function deleteTestClient(page: Page): Promise<void> {
     page.getByRole('heading', { name: 'Delete client' })
   ).toBeVisible();
   await page.getByRole('button', { name: /Delete client/i }).click();
-  // Either the toast "Client deleted" appears, OR (if the test was on the
-  // create-new screen) the page returns to the empty state. Accept either.
+  // After deletion the app navigates to the client list. Since this test
+  // creates exactly one client per run, the page always reaches the empty
+  // state. The "Client deleted" toast is optional UI feedback and may
+  // disappear before the assertion fires — the "No clients" heading is
+  // the deterministic synchronization point.
   await expect(
-    page
-      .getByText('Client deleted')
-      .or(page.getByRole('heading', { name: 'No clients' }))
+    page.getByRole('heading', { name: 'No clients' })
   ).toBeVisible({ timeout: 10_000 });
 }
 
@@ -142,4 +145,122 @@ export async function preferFirstNIngredients(
     // locator query; robustness measure, not a real wait.
     await page.waitForTimeout(50);
   }
+}
+
+/**
+ * Full coach-side setup: sign up → create client → generate plan → lock plan
+ * → invite client. Returns the invite URL string.
+ *
+ * This is the shared helper that both coach-flow.spec.ts and
+ * client-invite-flow.spec.ts call, so the setup logic lives in one place.
+ */
+export async function setupLockedClientWithInvite(
+  page: Page,
+  coachEmail: string,
+  clientEmail: string,
+  clientData: NewClientInput
+): Promise<string> {
+  // ---------- 1. Sign up as coach ----------
+  await signUpAsCoach(page, coachEmail, TEST_PASSWORD);
+
+  // ---------- 2. Create a new client ----------
+  await createClient(page, clientData);
+
+  // ---------- 3. Generate complete plan ----------
+  await page.getByRole('button', { name: /Generate complete plan/i }).click();
+  await expect(
+    page.getByRole('button', { name: /^PDF$/i })
+  ).toBeVisible({ timeout: 30_000 });
+
+  // ---------- 4. Ingredients tab — prefer 5, then generate ----------
+  await page.getByRole('tab', { name: 'Ingredients' }).click();
+  await page.waitForURL(/\/ingredients$/);
+  await expect(
+    page.getByRole('heading', { name: 'Ingredient Manager' })
+  ).toBeVisible();
+  await preferFirstNIngredients(page, 5);
+  await page.getByRole('button', { name: /Generate Full Plan/i }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Generated Plans' })
+  ).toBeVisible({ timeout: 30_000 });
+
+  // ---------- 5. Nutrition tab — generate weekly plan ----------
+  await page.getByRole('tab', { name: 'Nutrition' }).click();
+  await page.waitForURL(/\/nutrition$/);
+  await expect(
+    page.getByRole('heading', { name: /Meal Plan Generation/i })
+  ).toBeVisible();
+
+  await expect(page.getByText('Loading plan from database...')).not.toBeVisible({ timeout: 10_000 });
+
+  await page
+    .getByRole('button', { name: /^(Weekly Plan|Regenerate)$/i })
+    .click();
+  await expect(
+    page.getByText('Breakfast', { exact: true }).first()
+  ).toBeVisible({ timeout: 30_000 });
+
+  // ---------- 6. Lock the plan ----------
+  await page.getByRole('button', { name: /^Lock Plan$/i }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Confirm lock' })
+  ).toBeVisible();
+  await page.getByRole('button', { name: /Confirm lock/i }).click();
+  await expect(page.getByText(/^Locked \(\d+d\)$/i)).toBeVisible({
+    timeout: 10_000,
+  });
+
+  // ---------- 7. Check-in tab — must not hang ----------
+  await page.getByRole('tab', { name: 'Check-in' }).click();
+  await page.waitForURL(/\/checkin$/);
+  await expect(
+    page.getByRole('heading', { name: 'Check-in & Follow-up' })
+  ).toBeVisible();
+  await waitForNoSpinner(page, 5_000);
+  await expect(
+    page.getByRole('tab', { name: 'Daily Check-in' })
+  ).toBeVisible();
+
+  // ---------- 8. Training tab — plan is shown ----------
+  await page.getByRole('tab', { name: 'Training' }).click();
+  await page.waitForURL(/\/training$/);
+  await expect(
+    page.getByRole('heading', { name: "Plan d'Entraînement" })
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Programme Hebdomadaire')).toBeVisible();
+
+  // ---------- 9. Progress tab — loads ----------
+  await page.getByRole('tab', { name: 'Progress' }).click();
+  await page.waitForURL(/\/progress$/);
+  await expect(
+    page.getByRole('heading', { name: 'Progress Tracking' })
+  ).toBeVisible();
+  await waitForNoSpinner(page, 5_000);
+  await expect(
+    page.getByText(
+      /^Track .*'s journey$|No progress entries yet/i
+    )
+  ).toBeVisible({ timeout: 10_000 });
+
+  // ---------- 10. Invite Client ----------
+  await page.getByRole('tab', { name: 'Client' }).click();
+  await page.waitForURL(/^http:\/\/localhost:8080\/clients\/[^/]+$/);
+  await expect(
+    page.getByRole('heading', { name: /^Client: /i })
+  ).toBeVisible();
+  await page.getByRole('button', { name: /Invite Client/i }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Invitation created' })
+  ).toBeVisible({ timeout: 15_000 });
+  const inviteLink = page
+    .locator('div.font-mono')
+    .filter({ hasText: /\/signup\?invite=/ });
+  await expect(inviteLink).toBeVisible();
+  const inviteText = await inviteLink.textContent();
+  expect(inviteText).toMatch(/\/signup\?invite=[^"\s]+/);
+
+  // Close the dialog so the Logout button is reachable.
+  await page.keyboard.press('Escape');
+
+  return inviteText!.trim();
 }
