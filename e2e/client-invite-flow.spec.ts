@@ -9,70 +9,9 @@ import {
   TEST_PASSWORD,
   NEW_CLIENT,
 } from './helpers/test-data';
+import { cleanupTest } from './helpers/fixtures';
 
-/**
- * Fixture: produces the tagged emails in setup, exposes them to the test,
- * and runs UI-driven cleanup in teardown (always — even on failure).
- *
- * Reuses the same fixture pattern (test.extend, coachEmail, clientEmail,
- * cleanup) as coach-flow.spec.ts.
- */
-const test = base.extend<{
-  coachEmail: string;
-  clientEmail: string;
-  clientPassword: string;
-  cleanup: { run: () => Promise<void> };
-}>({
-  coachEmail: async ({}, use) => {
-    await use(generateCoachEmail());
-  },
-  clientEmail: async ({}, use) => {
-    await use(generateClientEmail());
-  },
-  clientPassword: async ({}, use) => {
-    // Use the same globally defined test password for simplicity.
-    await use(TEST_PASSWORD);
-  },
-  cleanup: async ({ browser, coachEmail, clientEmail }, use) => {
-    let ran = false;
-    const run = async () => {
-      if (ran) return;
-      ran = true;
-      const ctx = await browser.newContext();
-      const page = await ctx.newPage();
-      try {
-        await loginAsCoach(page, coachEmail, TEST_PASSWORD);
-        await page.getByRole('tab', { name: 'Client' }).click();
-        await expect(
-          page.getByRole('heading', { name: /^Client: /i })
-        ).toBeVisible({ timeout: 10_000 }).catch(() => {
-          // If no client exists (e.g. test failed before creation), it's fine.
-        });
-        // Use deleteTestClient via the imported helper — it bails if no client.
-        const deleteButton = page.getByRole('button', { name: /^Delete$/i });
-        if (await deleteButton.isVisible().catch(() => false)) {
-          await deleteButton.click();
-          await expect(
-            page.getByRole('heading', { name: 'Delete client' })
-          ).toBeVisible();
-          await page.getByRole('button', { name: /Delete client/i }).click();
-          await expect(
-            page.getByRole('heading', { name: 'No clients' })
-          ).toBeVisible({ timeout: 10_000 }).catch(() => {});
-        }
-      } catch (err) {
-        // Cleanup must never mask the original test failure.
-        // eslint-disable-next-line no-console
-        console.warn('[e2e cleanup] could not delete test client:', err);
-      } finally {
-        await ctx.close();
-      }
-    };
-    await use({ run });
-    // Teardown: runs after the test body exits, regardless of pass/fail.
-    await run();
-  },
-});
+const test = cleanupTest;
 
 test('client accepts invite and views locked plan', async ({
   browser,
