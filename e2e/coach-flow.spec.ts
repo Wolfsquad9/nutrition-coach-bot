@@ -1,11 +1,8 @@
 import { test as base, expect } from '@playwright/test';
 import {
-  signUpAsCoach,
-  createClient,
   deleteTestClient,
-  waitForNoSpinner,
-  preferFirstNIngredients,
   loginAsCoach,
+  setupLockedClientWithInvite,
 } from './helpers/actions';
 import {
   generateCoachEmail,
@@ -44,10 +41,15 @@ const test = base.extend<{
       try {
         await loginAsCoach(page, coachEmail, TEST_PASSWORD);
         await page.getByRole('tab', { name: 'Client' }).click();
-        await page.waitForURL(
-          /^http:\/\/localhost:8080\/clients\/[^/]+$/,
-          { timeout: 10_000 }
-        );
+        // SPA: clicking the tab may not change the URL if already on the
+        // client detail page. Wait for the heading that confirms the client
+        // detail view is rendered, rather than waitForURL.
+        await expect(
+          page.getByRole('heading', { name: /^Client: /i })
+        ).toBeVisible({ timeout: 10_000 }).catch(() => {
+          // If no client exists (e.g. test failed before creation), the
+          // heading won't appear — that's fine, deleteTestClient handles it.
+        });
         await deleteTestClient(page);
       } catch (err) {
         // Cleanup must never mask the original test failure.
@@ -71,111 +73,8 @@ test('coach completes full client lifecycle', async ({
 }) => {
   const clientData = { ...NEW_CLIENT, email: clientEmail };
 
-  // ---------- 1. Sign up as coach ----------
-  await signUpAsCoach(page, coachEmail, TEST_PASSWORD);
-
-  // ---------- 2. Create a new client ----------
-  await createClient(page, clientData);
-
-  // ---------- 3. Generate complete plan ----------
-  await page.getByRole('button', { name: /Generate complete plan/i }).click();
-  // The PDF/JSON download buttons appear once the plan exists.
-  await expect(
-    page.getByRole('button', { name: /^PDF$/i })
-  ).toBeVisible({ timeout: 30_000 });
-
-  // ---------- 4. Ingredients tab — prefer 5, then generate ----------
-  await page.getByRole('tab', { name: 'Ingredients' }).click();
-  await page.waitForURL(/\/ingredients$/);
-  await expect(
-    page.getByRole('heading', { name: 'Ingredient Manager' })
-  ).toBeVisible();
-  await preferFirstNIngredients(page, 5);
-  await page.getByRole('button', { name: /Generate Full Plan/i }).click();
-  // The Generated Plans section appears on success.
-  await expect(
-    page.getByRole('heading', { name: 'Generated Plans' })
-  ).toBeVisible({ timeout: 30_000 });
-
-  // ---------- 5. Nutrition tab — generate weekly plan ----------
-  await page.getByRole('tab', { name: 'Nutrition' }).click();
-  await page.waitForURL(/\/nutrition$/);
-  await expect(
-    page.getByRole('heading', { name: /Meal Plan Generation/i })
-  ).toBeVisible();
-  await page
-    .getByRole('button', { name: /^(Weekly Plan|Regenerate)$/i })
-    .click();
-  // WeeklyMealPlanDisplay renders meal rows (Breakfast, Lunch, Dinner, Snack).
-  await expect(
-    page.getByText('Breakfast', { exact: true }).first()
-  ).toBeVisible({ timeout: 30_000 });
-
-  // ---------- 6. Lock the plan ----------
-  await page.getByRole('button', { name: /^Lock Plan$/i }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Confirm lock' })
-  ).toBeVisible();
-  await page.getByRole('button', { name: /Confirm lock/i }).click();
-  // PlanStateIndicator badge format: "Locked (Nd)".
-  await expect(page.getByText(/^Locked \(\d+d\)$/i)).toBeVisible({
-    timeout: 10_000,
-  });
-
-  // ---------- 7. Check-in tab — must not hang ----------
-  await page.getByRole('tab', { name: 'Check-in' }).click();
-  await page.waitForURL(/\/checkin$/);
-  await expect(
-    page.getByRole('heading', { name: 'Check-in & Follow-up' })
-  ).toBeVisible();
-  // Critical: spinner must clear within 5s. The default subtab is "Daily Check-in".
-  await waitForNoSpinner(page, 5_000);
-  await expect(
-    page.getByRole('tab', { name: 'Daily Check-in' })
-  ).toBeVisible();
-
-  // ---------- 8. Training tab — plan is shown ----------
-  await page.getByRole('tab', { name: 'Training' }).click();
-  await page.waitForURL(/\/training$/);
-  await expect(
-    page.getByRole('heading', { name: 'Plan d’Entraînement' })
-  ).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('Programme Hebdomadaire')).toBeVisible();
-
-  // ---------- 9. Progress tab — loads ----------
-  await page.getByRole('tab', { name: 'Progress' }).click();
-  await page.waitForURL(/\/progress$/);
-  await expect(
-    page.getByRole('heading', { name: 'Progress Tracking' })
-  ).toBeVisible();
-  // "Loading progress…" (single Unicode ellipsis) → "Track X's journey" or empty-state text.
-  await waitForNoSpinner(page, 5_000);
-  await expect(
-    page.getByText(
-      /^Track .*'s journey$|No progress entries yet/i
-    )
-  ).toBeVisible({ timeout: 10_000 });
-
-  // ---------- 10. Invite Client ----------
-  await page.getByRole('tab', { name: 'Client' }).click();
-  await page.waitForURL(/^http:\/\/localhost:8080\/clients\/[^/]+$/);
-  await expect(
-    page.getByRole('heading', { name: /^Client: /i })
-  ).toBeVisible();
-  await page.getByRole('button', { name: /Invite Client/i }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Invitation created' })
-  ).toBeVisible({ timeout: 15_000 });
-  // The link is rendered in a div with .font-mono and contains /signup?invite=.
-  const inviteLink = page
-    .locator('div.font-mono')
-    .filter({ hasText: /\/signup\?invite=/ });
-  await expect(inviteLink).toBeVisible();
-  const inviteText = await inviteLink.textContent();
-  expect(inviteText).toMatch(/\/signup\?invite=[^"\s]+/);
-
-  // Close the dialog so the Logout button is reachable.
-  await page.keyboard.press('Escape');
+  // Steps 1–10: delegate to the shared helper so the setup logic lives in one place.
+  await setupLockedClientWithInvite(page, coachEmail, clientEmail, clientData);
 
   // ---------- 11. Log out, verify redirect ----------
   await page.getByRole('button', { name: /^Logout$/i }).click();
