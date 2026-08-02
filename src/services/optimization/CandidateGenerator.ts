@@ -1,4 +1,5 @@
 import type { CandidateGenerator as CandidateGeneratorInterface, CandidatePlan, GenerationInput } from './types';
+import { DEFAULT_CANDIDATE_COUNT } from './types';
 import { createCandidateSeed } from './seedFactory';
 import { generateWeeklyMealPlan } from '@/services/recipe/weeklyPlanGenerator';
 
@@ -16,7 +17,7 @@ import { generateWeeklyMealPlan } from '@/services/recipe/weeklyPlanGenerator';
  * same CandidateGenerator interface with their own generation strategy.
  */
 export class SeededCandidateGenerator implements CandidateGeneratorInterface {
-  constructor(private readonly defaultCandidateCount = 10) {}
+  constructor(private readonly defaultCandidateCount = DEFAULT_CANDIDATE_COUNT) {}
 
   generateCandidates(input: GenerationInput): CandidatePlan[] {
     const candidateCount = input.candidateCount ?? this.defaultCandidateCount;

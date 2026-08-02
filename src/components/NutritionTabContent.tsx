@@ -2,7 +2,7 @@
  * NutritionTabContent - Nutrition tab with Draft → Lock lifecycle
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -23,7 +23,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanState';
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
 import { calculateNutritionMetrics } from '@/utils/calculations';
-import { generateWeeklyMealPlan, generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
+import { generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
+import { createDefaultOptimizationEngine } from '@/services/optimization/OptimizationEngine';
+import { DEFAULT_CANDIDATE_COUNT } from '@/services/optimization/types';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { GroceryListDisplay } from '@/components/GroceryListDisplay';
@@ -62,6 +64,9 @@ function PlanStateIndicator({ state, lockStatus }: { state: PlanState; lockStatu
 const getErrorMessage = (err: unknown, fallback: string): string =>
   err instanceof Error ? err.message : fallback;
 
+// Shared engine instance — created once, reused across renders.
+const optimizationEngine = createDefaultOptimizationEngine();
+
 export function NutritionTabContent({ activeClientId, activeClient, clientRestrictions }: NutritionTabContentProps) {
   const { toast } = useToast();
 
@@ -71,6 +76,9 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const [dailyMealPlan, setDailyMealPlan] = useState<FullDayMealPlanResult | null>(null);
   const [isGeneratingDaily, setIsGeneratingDaily] = useState(false);
   const [isGeneratingWeekly, setIsGeneratingWeekly] = useState(false);
+
+  // Increments on every regeneration click so each click yields a fresh seed population.
+  const regenerationCountRef = useRef(0);
 
   useEffect(() => {
     if (activeClientId) {
@@ -130,8 +138,19 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         carbs: metrics.carbsGrams,
         fat: metrics.fatGrams,
       };
-      const weeklyPlan = generateWeeklyMealPlan(likedFoods, macroTargets);
-      planState.setDraftPlan(weeklyPlan, macroTargets, likedFoods);
+
+      // Increment regeneration counter so each click produces a different seed population.
+      regenerationCountRef.current += 1;
+
+      const result = optimizationEngine.generate({
+        clientId: activeClientId,
+        likedFoods,
+        macroTargets,
+        regenerationCount: regenerationCountRef.current,
+        candidateCount: DEFAULT_CANDIDATE_COUNT,
+      });
+
+      planState.setDraftPlan(result.plan, macroTargets, likedFoods);
       toast({ title: 'Draft generated!', description: 'Plan is in draft mode. Click "Lock Plan" to save it.' });
     } finally {
       setIsGeneratingWeekly(false);

@@ -10,6 +10,9 @@ import type { WeeklyMealPlanResult } from '@/services/recipe/types';
  * (seed, candidate index) and scoring results.
  */
 
+/** Default number of candidate plans to generate per regeneration (MVP). */
+export const DEFAULT_CANDIDATE_COUNT = 10;
+
 /** Input required to generate a population of candidate plans. */
 export interface GenerationInput {
   clientId: string;
