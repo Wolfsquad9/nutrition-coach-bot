@@ -66,19 +66,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * This is the ONLY code path for resolving auth-derived state.
    */
   const resolveAuthState = useCallback(async (uid: string) => {
-    const [{ data: roleData }, { data: clientData }] = await Promise.all([
-      supabase
+    console.log('[DEBUG] resolveAuthState START, uid:', uid);
+
+    // SEQUENTIAL AWAITS: Each query is isolated so the browser Network tab
+    // shows exactly which HTTP request (if any) never completes.
+    console.log('[AUTH] ⏳ user_roles query START');
+    let roleData: { role: "client" | "trainer" | "admin" } | null = null;
+    try {
+      const roleResult = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', uid)
-        .maybeSingle(),
-      supabase
+        .maybeSingle();
+      console.log('[AUTH] ✅ user_roles query DONE', roleResult.data ? 'found' : 'not found', 'error:', roleResult.error?.message ?? 'none');
+      roleData = roleResult.data;
+    } catch (err) {
+      console.error('[AUTH] ❌ user_roles query REJECTED:', err);
+      throw err;
+    }
+
+    console.log('[AUTH] ⏳ clients query START');
+    let clientIdFromDb: string | null = null;
+    try {
+      const clientResult = await supabase
         .from('clients')
         .select('id')
         .eq('user_profile_id', uid)
-        .maybeSingle(),
-    ]);
+        .maybeSingle();
+      console.log('[AUTH] ✅ clients query DONE', clientResult.data ? 'found' : 'not found', 'error:', clientResult.error?.message ?? 'none');
+      clientIdFromDb = clientResult.data?.id ?? null;
+    } catch (err) {
+      console.error('[AUTH] ❌ clients query REJECTED:', err);
+      throw err;
+    }
 
+    console.log('[DEBUG] resolveAuthState PROMISE.ALL DONE');
     // Map DB role ('trainer') to frontend role ('coach')
     const dbRole = roleData?.role;
     const mappedRole: 'coach' | 'client' | null =
@@ -87,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       null;
 
     setUserRole(mappedRole);
-    setClientId(clientData?.id ?? null);
+    setClientId(clientIdFromDb);
   }, []);
 
   /**
@@ -116,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * session.
    */
   const handleAuthChange = useCallback(async (currentSession: Session | null) => {
+    console.log('[DEBUG] handleAuthChange CALLED, hasSession:', !!currentSession);
     try {
       setSession(currentSession);
       const currentUser = currentSession?.user ?? null;
@@ -144,35 +167,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    // DIAGNOSTIC: Track how many times the effect runs
+    console.log('[AUTH] useEffect MOUNT (mounted=' + mounted + ')');
+
     // Set up auth state listener BEFORE checking session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, currentSession) => {
+      (event, currentSession) => {
+        console.log('[AUTH] onAuthStateChange event:', event, 'hasSession:', !!currentSession);
         if (!mounted) return;
-        await handleAuthChange(currentSession);
+        // IMPORTANT: Do NOT await handleAuthChange here. The Supabase client's
+        // _notifyAllSubscribers awaits the callback, and it is called from
+        // within _acquireLock which holds an internal lockAcquired flag. If
+        // handleAuthChange makes any Supabase query (like resolveAuthState
+        // does), that query internally calls getSession() which tries to
+        // re-acquire the same lock. Since the lock is still held by the
+        // current _recoverAndRefresh call (which is waiting for this callback
+        // to return), the result is a deadlock — the query is queued forever
+        // because the lock holder is waiting for the callback which is waiting
+        // for the query.
+        //
+        // Deferring via queueMicrotask breaks the cycle: the callback returns
+        // immediately, _notifyAllSubscribers releases the lock, and
+        // handleAuthChange runs in a microtask *after* the lock is free. Any
+        // subsequent getSession() call from resolveAuthState will then be able
+        // to acquire the lock normally.
+        queueMicrotask(() => handleAuthChange(currentSession));
       }
     );
 
     // Check for existing session
     supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
+      console.log('[AUTH] getSession resolved, hasSession:', !!existingSession);
       if (!mounted) return;
       await handleAuthChange(existingSession);
     });
 
     return () => {
+      console.log('[AUTH] useEffect UNMOUNT');
       mounted = false;
       subscription.unsubscribe();
     };
   }, [handleAuthChange]);
 
   const signOut = async () => {
+    // Previously used Promise.race with a timeout, which does NOT cancel
+    // the underlying supabase.auth.signOut() call — it just stops waiting
+    // for it. With the navigator-lock strategy now disabled (see
+    // client.ts), an abandoned signOut() can no longer block every tab
+    // on the origin, but it can still silently fail. Just await it
+    // directly and log any real error; no artificial timeout needed.
     try {
-      const timeoutMs = 5000;
-      const timeoutPromise = new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error('signOut timed out')), timeoutMs)
-      );
-      await Promise.race([supabase.auth.signOut(), timeoutPromise]);
+      await supabase.auth.signOut();
     } catch (err) {
-      console.error('signOut failed or timed out:', err);
+      console.error('signOut failed:', err);
     }
     // Auth state change handler will clear all state
   };

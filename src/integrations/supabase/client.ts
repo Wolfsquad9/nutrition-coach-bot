@@ -35,6 +35,18 @@ function initializeClient(): ReturnType<typeof createClient<Database>> {
         storage: localStorage,
         persistSession: true,
         autoRefreshToken: true,
+        // Disable the default navigator.locks-based cross-tab auth
+        // coordination. Root cause of a confirmed production bug: if any
+        // auth call (e.g. signOut()) is abandoned client-side via a
+        // timeout/Promise.race while the underlying request is still
+        // in flight, the exclusive lock it holds
+        // (lock:sb-<project-ref>-auth-token) is never released — which
+        // then blocks EVERY subsequent auth-dependent call, in EVERY tab
+        // and browser, on this origin, until the browser process is fully
+        // restarted. Our own AuthProvider (useAuth.tsx) already manages
+        // auth state via onAuthStateChange + React context, so we don't
+        // rely on this library-level cross-tab lock for correctness.
+        lock: async (_name, _acquireTimeout, fn) => fn(),
       },
     });
   } catch (error) {
