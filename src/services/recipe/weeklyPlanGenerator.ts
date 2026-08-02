@@ -9,7 +9,8 @@ import type { WeeklyMealPlanResult } from './types';
  */
 export function generateWeeklyMealPlan(
   selectedFoods: string[],
-  macroTargets: MacroTargets
+  macroTargets: MacroTargets,
+  seed?: string
 ): WeeklyMealPlanResult {
   const days: WeeklyMealPlanResult['days'] = [];
   
@@ -20,7 +21,8 @@ export function generateWeeklyMealPlan(
     const shuffledFoods = shuffleForDay(selectedFoods, dayIndex);
     
     // Generate the daily plan with shuffled ingredients
-    const dailyResult = generateFullDayMealPlan(shuffledFoods, macroTargets);
+    // The seed (if provided) makes each candidate's recipe selection vary
+    const dailyResult = generateFullDayMealPlan(shuffledFoods, macroTargets, seed);
     
     days.push({
       dayNumber: dayIndex + 1,
