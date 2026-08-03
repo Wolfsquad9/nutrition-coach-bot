@@ -37,7 +37,7 @@ export default function SignupPage() {
     // Cross-role email uniqueness check
     if (inviteToken) {
       // If client signup via invite, verify email isn't already used by a coach account.
-      const { data: conflictData, error: conflictError } = await (supabase as any).rpc(
+      const { data: conflictData, error: conflictError } = await supabase.rpc(
         'check_email_role_conflict',
         {
           p_email: email,
@@ -63,7 +63,7 @@ export default function SignupPage() {
       }
     } else {
       // If coach signup, verify email isn't already used by a client account.
-      const { data: conflictData, error: conflictError } = await (supabase as any).rpc(
+      const { data: conflictData, error: conflictError } = await supabase.rpc(
         'check_email_role_conflict',
         {
           p_email: email,

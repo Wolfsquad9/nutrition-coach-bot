@@ -217,7 +217,7 @@ export function useNutritionPlanState() {
     setLastPersistenceFailed(false);
     lastFailedActionRef.current = null;
     setUiState("IDLE");
-  }, [resetHydratedPlanState]);
+  }, [resetHydratedPlanState, setUiState]);
 
   /* ---------------- LOAD PLAN (delegated to usePlanFetch) ---------------- */
 
@@ -407,7 +407,7 @@ export function useNutritionPlanState() {
       lockInFlightRef.current = lockRequest;
       return lockRequest;
     },
-    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient, planId, versionId]
+    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient, planId, versionId, setUiState]
   );
 
   /* ---------------- RETRY ---------------- */

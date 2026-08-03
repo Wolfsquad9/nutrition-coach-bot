@@ -103,7 +103,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
     } finally {
       setIsLoading(false);
     }
-  }, [activeClientId]);
+  }, [activeClientId, setActiveClientId]);
 
   useEffect(() => {
     loadClients();
@@ -127,7 +127,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       console.error('Error creating client:', err);
       return { success: false, client: null, error: getErrorMessage(err, 'Failed to create client') };
     }
-  }, []);
+  }, [setActiveClientId]);
 
   const handleUpdateClient = useCallback(async (clientId: string, updates: Partial<Client>): Promise<{ success: boolean; error: string | null }> => {
     try {
@@ -164,7 +164,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       console.error('Error deleting client:', err);
       return { success: false, error: getErrorMessage(err, 'Failed to delete client') };
     }
-  }, []);
+  }, [setActiveClientId]);
 
   return {
     clients,

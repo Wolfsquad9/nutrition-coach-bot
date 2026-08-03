@@ -1227,6 +1227,14 @@ export type Database = {
       }
     }
     Functions: {
+      check_email_role_conflict: {
+        Args: {
+          p_email: string
+          p_exclude_user_id?: string
+          p_intended_role: string
+        }
+        Returns: boolean
+      }
       claim_client_invitation: {
         Args: { p_invite_token_hash: string }
         Returns: string
