@@ -1,3 +1,22 @@
+// ============================================================================
+// Shared Plan Edge Function
+//
+// Architecture (see docs/architecture/shared-plan.md):
+//   - This endpoint is intentionally PUBLIC. Authentication is OPTIONAL.
+//   - The UUID is the authorization boundary. Possession of the link grants
+//     read-only access to the locked snapshot.
+//   - The RPC `get_shared_plan_snapshot` is the ENTIRE security boundary.
+//     It explicitly SELECTs only (snapshot, created_at) from plan_versions.
+//     No other column is reachable through this endpoint.
+//   - There is NO service_role key in this function. There is NO
+//     SELECT * against plan_versions. There is NO bearer-token branching.
+//
+// CORS:
+//   Access-Control-Allow-Origin: * is intentional. Sharing works across
+//   origins (email link, chat, etc.). This function returns a public
+//   snapshot — no private data leaves the database.
+// ============================================================================
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -5,6 +24,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -15,81 +37,66 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-    // Support BOTH authenticated (Bearer) and anonymous (apikey) access.
-    // Sprint 1.75 behavior: public shared plans work WITHOUT authentication.
-    const authHeader = req.headers.get('Authorization');
-    const apikeyHeader = req.headers.get('apikey');
-    
-    let supabase;
-    if (authHeader?.startsWith('Bearer ')) {
-      // Authenticated request — create client with JWT for RLS-enforced access
-      supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authHeader } }
-      });
-    } else if (apikeyHeader === supabaseAnonKey) {
-      // Anonymous request — create client with anon key (Sprint 1.75 behavior)
-      supabase = createClient(supabaseUrl, supabaseAnonKey);
-    } else {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized - Missing or invalid authentication' }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Single client. No branching on Authorization. The RPC is the boundary.
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     const url = new URL(req.url);
-    const versionId = url.searchParams.get("versionId");
+    const token = url.searchParams.get("token");
 
-    if (!versionId) {
+    if (!token) {
       return new Response(
-        JSON.stringify({ error: "Missing versionId parameter" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Missing token parameter" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
-    // UUID format validation
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(versionId)) {
+    if (!UUID_REGEX.test(token)) {
       return new Response(
-        JSON.stringify({ error: "Invalid versionId format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Invalid token format" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
-    // Fetch the plan version with its snapshot (RLS enforced for authenticated, 
-    // public access for anonymous via apikey)
-    const { data, error } = await supabase
-      .from("plan_versions")
-      .select("id, locked_snapshot_json, plan_payload, created_at")
-      .eq("id", versionId)
-      .maybeSingle();
+    // The RPC is the entire security boundary. It returns at most one row of
+    // (snapshot, created_at). It refuses to return plans that are not locked
+    // or that are archived. It refuses unknown UUIDs (empty result).
+    const { data, error } = await supabase.rpc("get_shared_plan_snapshot", {
+      p_token: token,
+    });
 
     if (error) {
-      console.error("DB error:", error);
+      console.error("RPC error:", error);
       return new Response(
         JSON.stringify({ error: "Failed to fetch plan" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
-    if (!data) {
+    // RPC returns a SETOF; we expect 0 or 1 rows.
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || !row.snapshot) {
       return new Response(
         JSON.stringify({ error: "Plan not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Only serve plans that have a locked snapshot (i.e. were actually locked)
-    if (!data.locked_snapshot_json) {
-      return new Response(
-        JSON.stringify({ error: "Plan not available for sharing" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
     return new Response(
       JSON.stringify({
-        snapshot: data.locked_snapshot_json,
-        createdAt: data.created_at,
+        snapshot: row.snapshot,
+        createdAt: row.created_at,
       }),
       {
         status: 200,
@@ -100,7 +107,10 @@ Deno.serve(async (req) => {
     console.error("Unexpected error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
     );
   }
 });

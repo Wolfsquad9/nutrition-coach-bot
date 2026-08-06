@@ -4,13 +4,16 @@
  * Generates shareable links for locked plans and fetches shared plan data
  * via the get-shared-plan edge function.
  *
- * RESTORED Sprint 1.75 behavior:
- *   - Public shared plans work WITHOUT authentication
- *   - Uses apikey header (no bearer required) for anonymous access
- *   - Authenticated users still get bearer token for RLS-enforced access
+ * Architecture (see docs/architecture/shared-plan.md):
+ *   - Public shared plans work WITHOUT authentication.
+ *   - The UUID in the URL is the authorization boundary. Possession of the
+ *     link grants read-only access to the locked snapshot.
+ *   - The endpoint is intentionally PUBLIC. We always use the anon apikey.
+ *     There is no bearer-token branching on this code path.
+ *   - This function never sends a JWT. It never touches an authenticated
+ *     client. There is no path from here into a coach workspace.
  */
 
-import { supabase } from '@/integrations/supabase/client';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -18,24 +21,18 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | und
 
 /**
  * Generate a shareable URL for a locked plan version.
- * The versionId itself acts as the share identifier.
+ * The versionId (UUID) is the share identifier and the authorization token.
  */
 export function generateShareLink(versionId: string): string {
   return `${window.location.origin}/plan/${versionId}`;
 }
 
 /**
- * Get the current session's access token for API calls.
- */
-async function getAccessToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
-}
-
-/**
- * Fetch a shared plan snapshot via edge function.
- * PUBLIC — does NOT require authentication (Sprint 1.75 behavior).
- * Uses apikey header for anonymous access.
+ * Fetch a shared plan snapshot via the edge function.
+ *
+ * Always anonymous. Always uses apikey (not bearer). Always passes the
+ * UUID as the `token` query parameter. The RPC is the entire security
+ * boundary — see get_shared_plan_snapshot.
  */
 export async function fetchSharedPlan(
   versionId: string
@@ -43,31 +40,20 @@ export async function fetchSharedPlan(
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return {
       snapshot: null,
-      error: 'Supabase env not configured: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.',
+      error:
+        'Supabase env not configured: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.',
     };
   }
 
-  const token = await getAccessToken();
-
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    // If authenticated, send bearer token for RLS-respected access
-    // If anonymous, use apikey header (Sprint 1.75 behavior)
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    } else {
-      // Sprint 1.75: anonymous access via apikey
-      headers['apikey'] = SUPABASE_ANON_KEY;
-    }
-
     const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/get-shared-plan?versionId=${encodeURIComponent(versionId)}`,
+      `${SUPABASE_URL}/functions/v1/get-shared-plan?token=${encodeURIComponent(versionId)}`,
       {
         method: 'GET',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+        },
       }
     );
 

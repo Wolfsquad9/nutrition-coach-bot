@@ -1252,6 +1252,13 @@ export type Database = {
         Args: { p_plan_id: string }
         Returns: number
       }
+      get_shared_plan_snapshot: {
+        Args: { p_token: string }
+        Returns: {
+          created_at: string
+          snapshot: Json
+        }[]
+      }
       get_trainer_client_ids: {
         Args: { _trainer_id: string }
         Returns: {
