@@ -5,10 +5,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Client } from '@/types';
-import { 
-  fetchClients, 
+import {
+  fetchClients,
   createClient as createSupabaseClient,
-  updateClient as updateSupabaseClient 
+  updateClient as updateSupabaseClient,
+  archiveClient,
 } from '@/services/supabaseClientService';
 
 // Default empty client for new client creation form
@@ -52,6 +53,7 @@ interface UseSupabaseClientsResult {
   setActiveClientId: (clientId: string | null) => void;
   handleCreateClient: (client: Client) => Promise<{ success: boolean; client: Client | null; error: string | null }>;
   handleUpdateClient: (clientId: string, updates: Partial<Client>) => Promise<{ success: boolean; error: string | null }>;
+  handleDeleteClient: (clientId: string) => Promise<{ success: boolean; error: string | null }>;
   refreshClients: () => Promise<void>;
   createNewClientDraft: () => Client;
 }
@@ -62,9 +64,13 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 
 export function useSupabaseClients(): UseSupabaseClientsResult {
   const [clients, setClients] = useState<Client[]>([]);
-  const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const [activeClientId, setActiveClientId_] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const setActiveClientId = useCallback((id: string | null | ((prev: string | null) => string | null)) => {
+    setActiveClientId_(id);
+  }, []);
 
   // Derive activeClient from activeClientId and clients list
   const activeClient = activeClientId 
@@ -97,7 +103,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
     } finally {
       setIsLoading(false);
     }
-  }, [activeClientId]);
+  }, [activeClientId, setActiveClientId]);
 
   useEffect(() => {
     loadClients();
@@ -121,25 +127,44 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
       console.error('Error creating client:', err);
       return { success: false, client: null, error: getErrorMessage(err, 'Failed to create client') };
     }
-  }, []);
+  }, [setActiveClientId]);
 
   const handleUpdateClient = useCallback(async (clientId: string, updates: Partial<Client>): Promise<{ success: boolean; error: string | null }> => {
     try {
       const result = await updateSupabaseClient(clientId, updates);
-      
+
       if (result.error || !result.client) {
         return { success: false, error: result.error || 'Failed to update client' };
       }
 
       // Update local state
       setClients(prev => prev.map(c => c.id === clientId ? result.client! : c));
-      
+
       return { success: true, error: null };
     } catch (err: unknown) {
       console.error('Error updating client:', err);
       return { success: false, error: getErrorMessage(err, 'Failed to update client') };
     }
   }, []);
+
+  const handleDeleteClient = useCallback(async (clientId: string): Promise<{ success: boolean; error: string | null }> => {
+    try {
+      const result = await archiveClient(clientId);
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to delete client' };
+      }
+
+      // Remove from local state immediately so the coach UI updates without
+      // a full refetch. RLS would hide the row on the next fetch anyway.
+      setClients(prev => prev.filter(c => c.id !== clientId));
+      setActiveClientId(prev => (prev === clientId ? null : prev));
+
+      return { success: true, error: null };
+    } catch (err: unknown) {
+      console.error('Error deleting client:', err);
+      return { success: false, error: getErrorMessage(err, 'Failed to delete client') };
+    }
+  }, [setActiveClientId]);
 
   return {
     clients,
@@ -150,6 +175,7 @@ export function useSupabaseClients(): UseSupabaseClientsResult {
     setActiveClientId,
     handleCreateClient,
     handleUpdateClient,
+    handleDeleteClient,
     refreshClients: loadClients,
     createNewClientDraft: createEmptyClient,
   };

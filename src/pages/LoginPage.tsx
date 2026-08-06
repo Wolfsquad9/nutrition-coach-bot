@@ -7,40 +7,62 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { claimClientInvitation } from '@/services/clientInvitationService';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
+  const { refreshAuthState, session } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setSubmitting(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // If a Supabase session is already active, sign it out before login so the
+    // invitation claim links the new account, not the existing one.
+    if (inviteToken && session) {
+      await supabase.auth.signOut();
+      toast({
+        title: 'Switching accounts',
+        description: 'You were already signed in. Switching to your client account.',
+      });
+    }
 
-    setIsLoading(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
+      setSubmitting(false);
       toast({ title: 'Login failed', description: error.message, variant: 'destructive' });
       return;
     }
 
-    if (inviteToken) {
+    if (inviteToken && data.session) {
+      // Claim invitation then refresh auth state and navigate to client portal
       const claimResult = await claimClientInvitation(inviteToken);
       if (claimResult.error) {
         toast({ title: 'Invitation link failed', description: claimResult.error, variant: 'destructive' });
+        setSubmitting(false);
         return;
       }
-      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/');
+      
+      // Re-fetch role and clientId from DB after claim mutation
+      await refreshAuthState();
+      
+      toast({ title: 'Plan linked!', description: 'Your client account is now linked.' });
+      setSubmitting(false);
+      // Navigate to client portal (not coach route)
+      navigate('/my-plan', { replace: true });
       return;
     }
 
-    navigate('/');
+    // No invite token — navigate to coach home (ProtectedRoute will redirect if wrong role)
+    setSubmitting(false);
+    navigate('/', { replace: true });
   };
 
   return (
@@ -77,8 +99,8 @@ export default function LoginPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign in'}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
 

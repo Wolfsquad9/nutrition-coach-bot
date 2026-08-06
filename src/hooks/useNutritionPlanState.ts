@@ -97,9 +97,14 @@ const createLockAttempt = (): LockAttempt => ({
 export function useNutritionPlanState() {
   /* ---------------- UI STATE ---------------- */
 
-  const [uiState, setUiState] = useState<UIState>("IDLE");
+  const [uiState, setUiState_] = useState<UIState>("IDLE");
   const [error, setError] = useState<string | null>(null);
   const [lastPersistenceFailed, setLastPersistenceFailed] = useState(false);
+
+  // Wrapped setUiState that delegates to the underlying state setter
+  const setUiState = useCallback((next: UIState | ((prev: UIState) => UIState)) => {
+    setUiState_(next);
+  }, []);
 
   /* ---------------- PLAN DATA ---------------- */
 
@@ -212,7 +217,7 @@ export function useNutritionPlanState() {
     setLastPersistenceFailed(false);
     lastFailedActionRef.current = null;
     setUiState("IDLE");
-  }, [resetHydratedPlanState]);
+  }, [resetHydratedPlanState, setUiState]);
 
   /* ---------------- LOAD PLAN (delegated to usePlanFetch) ---------------- */
 
@@ -402,7 +407,7 @@ export function useNutritionPlanState() {
       lockInFlightRef.current = lockRequest;
       return lockRequest;
     },
-    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient, planId, versionId]
+    [weeklyPlan, macroTargets, likedIngredients, lifecycleState, versionNumber, loadPlanForClient, planId, versionId, setUiState]
   );
 
   /* ---------------- RETRY ---------------- */

@@ -172,6 +172,12 @@ export async function createClient(client: Client): Promise<{ client: Client | n
 
     if (error) {
       console.error('Error creating client:', error);
+      // 23505 = unique_violation. The (created_by, lower(email)) index
+      // enforced by the 20260710001000_identity_uniqueness migration makes
+      // this safe and unambiguous.
+      if (error.code === '23505') {
+        return { client: null, error: 'You already have a client with this email.' };
+      }
       return { client: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 
@@ -268,5 +274,54 @@ export async function fetchClientById(clientId: string): Promise<{ client: Clien
   } catch (error: unknown) {
     console.error('Failed to fetch client:', error);
     return { client: null, error: error instanceof Error ? error.message : 'Failed to fetch client' };
+  }
+}
+
+/**
+ * Soft-delete a client. Marks the client archived and revokes any pending
+ * invitations. The linked client keeps their auth account; the coach can
+ * re-invite them later.
+ */
+const RPC_TIMEOUT_MS = 15000;
+
+export async function archiveClient(clientId: string): Promise<{ success: boolean; error: string | null }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+  try {
+    // `soft_delete_client` is a freshly added RPC; the generated
+    // supabase-types don't include it yet. Cast to keep the call site
+    // type-safe until the next typegen.
+    const { data, error } = await supabase.rpc(
+      'soft_delete_client' as never,
+      { p_client_id: clientId } as never,
+      { signal: controller.signal } as never,
+    );
+
+    if (error) {
+      console.error('Error archiving client:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+
+    // The RPC returns SETOF (success, error). Pull the first row.
+    // Cast through unknown because the generated supabase types don't yet
+    // know about `soft_delete_client`.
+    const result = data as unknown as
+      | { success?: boolean; error?: string | null }
+      | Array<{ success?: boolean; error?: string | null }>
+      | null;
+    const row = Array.isArray(result) ? result[0] : result;
+    if (!row || !row.success) {
+      return { success: false, error: row?.error || 'Failed to archive client' };
+    }
+
+    return { success: true, error: null };
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { success: false, error: 'Request timed out. Please try again.' };
+    }
+    console.error('Failed to archive client:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to archive client' };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

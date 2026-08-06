@@ -104,7 +104,10 @@ export function usePlanFetch(
   });
 
   const loadPlanForClient = useCallback(async (clientId: string) => {
-    if (!clientId) return;
+    if (!clientId) {
+      setUiState("IDLE");
+      return;
+    }
 
     const currentRequestId = ++loadRequestIdRef.current;
 
@@ -112,12 +115,15 @@ export function usePlanFetch(
     setError(null);
 
     try {
-      const [planResult, lockResult] = await Promise.all([
-        fetchCurrentPlan(clientId),
-        checkPlanLockStatus(clientId),
-      ]);
+      const fetchPromise = fetchCurrentPlan(clientId);
+      const lockPromise = checkPlanLockStatus(clientId);
+      
+      const [planResult, lockResult] = await Promise.all([fetchPromise, lockPromise]);
 
-      if (currentRequestId !== loadRequestIdRef.current) return;
+      if (currentRequestId !== loadRequestIdRef.current) {
+        setUiState("IDLE");
+        return;
+      }
 
       if (!planResult.plan) {
         clearState();
@@ -143,7 +149,10 @@ export function usePlanFetch(
           fetchPendingOverrides(planResult.versionId),
         ]);
 
-        if (currentRequestId !== loadRequestIdRef.current) return;
+        if (currentRequestId !== loadRequestIdRef.current) {
+          setUiState("IDLE");
+          return;
+        }
 
         nextSnapshot = snapshotResult.snapshot
           ? ensureValidSnapshotRef.current(
@@ -181,7 +190,10 @@ export function usePlanFetch(
       lastFailedActionRef.current = null;
       setUiState("IDLE");
     } catch (err) {
-      if (currentRequestId !== loadRequestIdRef.current) return;
+      if (currentRequestId !== loadRequestIdRef.current) {
+        setUiState("IDLE");
+        return;
+      }
       console.error(err);
       const runtimeError = classifyLoadRuntimeError(err, "Failed to load plan");
       const runtimeErrorWithDetails = runtimeError as { details?: string[] };

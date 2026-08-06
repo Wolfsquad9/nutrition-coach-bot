@@ -27,6 +27,7 @@ export interface AppLayoutContext {
   clientError: string | null;
   setActiveClientId: (id: string) => void;
   handleCreateClient: (client: Client) => Promise<{ success: boolean; client: Client | null; error: string | null }>;
+  handleDeleteClient: (clientId: string) => Promise<{ success: boolean; error: string | null }>;
   refreshClients: () => void;
   createNewClientDraft: () => Client;
   clientRestrictions: ClientIngredientRestrictions[];
@@ -59,10 +60,11 @@ export default function AppLayout() {
     error: clientError,
     setActiveClientId,
     handleCreateClient,
+    handleDeleteClient,
     refreshClients,
     createNewClientDraft,
   } = useSupabaseClients();
-
+  
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const [generatedPlan, setGeneratedPlan] = useState<CompletePlan | null>(null);
 
@@ -126,6 +128,7 @@ export default function AppLayout() {
       clientError,
       setActiveClientId,
       handleCreateClient,
+      handleDeleteClient,
       refreshClients,
       createNewClientDraft,
       clientRestrictions,
@@ -141,6 +144,7 @@ export default function AppLayout() {
       clientError,
       setActiveClientId,
       handleCreateClient,
+      handleDeleteClient,
       refreshClients,
       createNewClientDraft,
       clientRestrictions,

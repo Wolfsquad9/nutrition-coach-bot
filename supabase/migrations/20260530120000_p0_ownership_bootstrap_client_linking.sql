@@ -65,21 +65,37 @@ ALTER TABLE public.client_progress_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.macro_tolerance_rules ENABLE ROW LEVEL SECURITY;
 
 -- Self-serve signups are paying coaches by default. Client accounts are linked by invitation later.
+-- The initial role is derived from signup metadata when available, defaulting to 'coach' (the app_role enum value for coaches).
+-- This is fully compatible with the invitation workflow — claim_client_invitation() remains the authoritative
+-- step for linking a user to a client record and updating the role to 'client'.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
+DECLARE
+  v_role app_role;
 BEGIN
+  -- Derive initial role from signup metadata, default to 'coach' (self-serve signups are coaches)
+  -- Uses a safe cast to avoid errors if metadata contains an invalid app_role value
+  BEGIN
+    v_role := COALESCE(
+      (NEW.raw_user_meta_data->>'role')::app_role,
+      'coach'::app_role
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_role := 'coach'::app_role;
+  END;
+
   INSERT INTO public.profiles (id, role, email, full_name)
-  VALUES (NEW.id, 'trainer'::app_role, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email))
+  VALUES (NEW.id, v_role, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email))
   ON CONFLICT (id) DO UPDATE
     SET email = EXCLUDED.email,
         full_name = COALESCE(public.profiles.full_name, EXCLUDED.full_name);
 
   INSERT INTO public.user_roles (user_id, role)
-  VALUES (NEW.id, 'trainer'::app_role)
+  VALUES (NEW.id, v_role)
   ON CONFLICT (user_id) DO NOTHING;
 
   RETURN NEW;

@@ -48,4 +48,19 @@ describe('DailyCheckinForm (smoke)', () => {
     expect(screen.getByText(/meal adherence/i)).toBeInTheDocument();
     expect(screen.getByText(/sleep/i)).toBeInTheDocument();
   });
+
+  it('shows error state when getTodayCheckin and getStreak reject (network failure)', async () => {
+    const dailyCheckinModule = await import('@/services/checkin/dailyCheckinService');
+    const streakModule = await import('@/services/checkin/streakService');
+
+    vi.mocked(dailyCheckinModule.getTodayCheckin).mockRejectedValueOnce(new Error('Network error'));
+    vi.mocked(streakModule.getStreak).mockRejectedValueOnce(new Error('Network error'));
+
+    render(<DailyCheckinForm clientId="client-1" userId="user-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/error loading check-in/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/network error/i)).toBeInTheDocument();
+  });
 });

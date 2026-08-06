@@ -19,11 +19,15 @@ export function createInvitationToken(): string {
   return bytesToHex(bytes);
 }
 
+const RPC_TIMEOUT_MS = 15000;
+
 export async function createClientInvitation(input: {
   clientId: string;
   invitedEmail?: string | null;
   expiresAt?: string | null;
 }): Promise<{ token: string | null; inviteUrl: string | null; invitationId: string | null; error: string | null }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
   try {
     const token = createInvitationToken();
     const tokenHash = await hashInvitationToken(token);
@@ -32,7 +36,10 @@ export async function createClientInvitation(input: {
       p_invited_email: input.invitedEmail ?? null,
       p_invite_token_hash: tokenHash,
       p_expires_at: input.expiresAt ?? null,
-    });
+    }, {
+      signal: controller.signal,
+      count: undefined,
+    } as never);
 
     if (error) {
       return { token: null, inviteUrl: null, invitationId: null, error: error.message };
@@ -45,12 +52,17 @@ export async function createClientInvitation(input: {
       error: null,
     };
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { token: null, inviteUrl: null, invitationId: null, error: 'Request timed out. Please try again.' };
+    }
     return {
       token: null,
       inviteUrl: null,
       invitationId: null,
       error: error instanceof Error ? error.message : 'Failed to create client invitation',
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

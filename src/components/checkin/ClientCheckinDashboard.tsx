@@ -20,24 +20,44 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
   const [streak, setStreak] = useState<CheckinStreak | null>(null);
   const [reviews, setReviews] = useState<WeeklyReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     Promise.all([
       getCheckinHistory(clientId, { limit: 30 }),
       getStreak(clientId),
       getReviewHistory(clientId, { limit: 4 }),
-    ]).then(([checkinResult, streakResult, reviewResult]) => {
-      setCheckins(checkinResult.checkins);
-      setStreak(streakResult.streak);
-      setReviews(reviewResult.reviews);
-      setLoading(false);
-    });
+    ])
+      .then(([checkinResult, streakResult, reviewResult]) => {
+        setCheckins(checkinResult.checkins);
+        setStreak(streakResult.streak);
+        setReviews(reviewResult.reviews);
+      })
+      .catch((err) => {
+        console.error('Failed to load check-in dashboard data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load check-in dashboard data');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [clientId]);
 
   if (loading) {
     return (
       <Card className="p-6 shadow-card flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="p-6 shadow-card">
+        <div className="text-center py-8 text-destructive">
+          <p className="font-bold">Error loading dashboard</p>
+          <p className="text-sm mt-2">{error}</p>
+        </div>
       </Card>
     );
   }

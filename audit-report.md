@@ -1,334 +1,311 @@
-# FitPlan Pro — Comprehensive Audit & Roadmap
+# Production Bug-Fix Audit Report
 
-## Report generated: 2026-06-13
+## Incident 1: Nutrition Plan Lock FK Violation
+
+### Error
+```
+insert or update on table "nutrition_plans" violates foreign key constraint
+"nutrition_plans_created_by_fkey"
+```
+
+### Root Cause
+
+**The FK constraint on `nutrition_plans.created_by` references `public.profiles(id)`, but the RPC inserts `auth.uid()` (an `auth.users` UUID).**
+
+When the `handle_new_user` trigger fails (due to `'coach'::app_role` not being in the `app_role` enum), no `profiles` row is created. The user exists in `auth.users` but not in `public.profiles`. The `lock_nutrition_plan` RPC (SECURITY DEFINER) sets `created_by = v_user_id` where `v_user_id = auth.uid()`. This UUID has no matching row in `public.profiles`, so the FK constraint fails.
+
+### Ownership Model Evidence
+
+The business model requires `created_by` to be an `auth.users` ID, NOT a `profiles` ID. Here is the proof:
+
+| Evidence | Location | What it shows |
+|----------|----------|---------------|
+| RLS policy checks `created_by = auth.uid()` | `20260530120000` line 147 | Policy treats `created_by` as auth.users ID |
+| RPC inserts `v_user_id := auth.uid()` | `20260530120000` line 521 | RPC writes auth.users UUID |
+| `clients.created_by` FK target | `20260129081000` line 14 | `REFERENCES auth.users(id)` — same business meaning |
+| `plan_versions.created_by` FK target | `20251120110128` line 83 | `REFERENCES auth.users(id)` — same table, same column name |
+| `plan_overrides.created_by` FK target | `20251120110128` line 107 | `REFERENCES auth.users(id)` — same pattern |
+
+**Conclusion**: The original FK to `public.profiles(id)` in migration `20251120110128` line 71 was a schema design error. Every subsequent migration treats `created_by` as an `auth.users` reference. The FK must be changed to `REFERENCES auth.users(id)`.
+
+### Exact Failing Path
+
+```
+NutritionTabContent.tsx:141  handleLockPlan()
+  → useNutritionPlanState.ts:279  lockPlan()
+    → supabasePlanService.ts:264  supabase.rpc('lock_nutrition_plan', ...)
+      → lock_nutrition_plan RPC (SECURITY DEFINER)
+        → INSERT INTO nutrition_plans (client_id, created_by, plan_data, status)
+          VALUES (p_client_id, v_user_id, ...)   -- v_user_id = auth.uid()
+          -- v_user_id has no profiles row → FK VIOLATION
+```
+
+### Files Affected
+
+| File | Line | Issue |
+|------|------|-------|
+| `supabase/migrations/20251120110128_8df2ce8c-85a8-4e93-b31d-9d731f883512.sql` | 71 | `nutrition_plans.created_by` FK → `profiles(id)` should be `auth.users(id)` |
+| `supabase/migrations/20251120110128_8df2ce8c-85a8-4e93-b31d-9d731f883512.sql` | 144 | `training_plans.created_by` FK → `profiles(id)` should be `auth.users(id)` (same bug) |
+
+### Database Fix Required
+
+```sql
+-- Migration: fix_nutrition_plan_ownership_fk.sql
+ALTER TABLE public.nutrition_plans
+  DROP CONSTRAINT IF EXISTS nutrition_plans_created_by_fkey;
+
+ALTER TABLE public.nutrition_plans
+  ADD CONSTRAINT nutrition_plans_created_by_fkey
+  FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.training_plans
+  DROP CONSTRAINT IF EXISTS training_plans_created_by_fkey;
+
+ALTER TABLE public.training_plans
+  ADD CONSTRAINT training_plans_created_by_fkey
+  FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
+```
+
+### Migration Impact
+
+- **Existing data**: All existing `nutrition_plans.created_by` values are valid `auth.users` UUIDs (they were inserted by the RPC which uses `auth.uid()`). No data migration needed.
+- **Existing data**: All existing `training_plans.created_by` values are valid `auth.users` UUIDs. No data migration needed.
+- **Rollback**: Revert to `REFERENCES public.profiles(id)` — but this would re-introduce the bug.
+- **Risk**: LOW. The FK target change is backward-compatible with all existing data.
 
 ---
 
-## 1. Current Application State
+## Incident 2: Client Management Actions Freeze
 
-### Build Status
-| Check | Result |
-|-------|--------|
-| `npm run build` | ✅ **PASS** (3042 modules, 0 errors) |
-| `npx vitest run` | ✅ **PASS** (20/20 tests passing) |
-| `tsc --noEmit` | ⚠️ **Source errors only from untracked tables** (see §4) |
-| Production bundle | ✅ 1.96 MB total (gzip: ~510 KB) |
+### Symptom 2a: "Creating invite" never completes
 
-### Git Context
-- **Branch:** `feat/follow-up-sequence-orchestration` (2 commits ahead of `chore/audit-fixes-w1`)
-- **Last 2 commits:** Check-in engine foundation + test suite
-- **Uncommitted:** 0 (all changes tracked)
+### Root Cause
 
-### Core Architecture
-- **Frontend:** Vite + React 18 + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend:** Supabase (PostgreSQL + Auth + Row Level Security)
-- **Routing:** React Router v6 with nested layouts
-- **Auth:** Email/password via Supabase Auth, context-based
+**`supabase.rpc('create_client_invitation', ...)` has no timeout. If the RPC call hangs, the `finally` block that resets `isCreatingInvite` never executes.**
 
----
+The `handleInviteClient` function in `ClientPage.tsx` (line 112-133) has a proper `try/catch/finally` with `setIsCreatingInvite(false)` in the `finally` block. However, the `await createClientInvitation(...)` call on line 116 hangs because `supabase.rpc()` has no configurable timeout. The `await` never resolves, so the `finally` block never runs.
 
-## 2. Features — Complete Inventory
-
-### 2.1 Core Features (Pre-existing)
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Client CRUD | ✅ Complete | Supabase-backed, RLS protected |
-| Nutrition plan generation | ✅ Complete | Algorithmic with convergence logic |
-| Nutrition plan locking | ✅ Complete | Atomic snapshot + edge function |
-| Weekly meal plans | ✅ Complete | 7-day variation algorithm |
-| Training plans | ✅ Complete | CRUD + display |
-| Recipe management | ✅ Complete | Database-backed |
-| Ingredient management | ✅ Complete | With substitution engine |
-| Plan sharing | ✅ Complete | Public share links via edge function |
-| Plan overrides / swaps | ✅ Complete | With tolerance checking |
-| Client invitations | ✅ Complete | Token-based coach-to-client linking |
-
-### 2.2 New Check-in Engine (This session)
-
-#### Database Layer
-| Component | File | Status |
-|-----------|------|--------|
-| `daily_checkins` table | `20260613120000_checkin_engine.sql` | ✅ RLS, CHECK constraints, partial index (7d), UNIQUE(client,date) |
-| `weekly_reviews` table | `20260613120000_checkin_engine.sql` | ✅ RLS with coach UPDATE exemption, measurements, qualitative fields |
-| `checkin_streaks` table | `20260613120000_checkin_engine.sql` | ✅ Denormalized streak tracking |
-| `coach_alerts` table | `20260613120000_checkin_engine.sql` | ✅ 8 alert types, severity enum, read/dismissed, JSONB metadata |
-| `ai_summaries` table | `20260613120000_checkin_engine.sql` | ✅ Trajectory, highlights, recommendations, risk flags |
-| `alert_severity` ENUM | `20260613120000_checkin_engine.sql` | ✅ `green | yellow | red` |
-| 11 database indexes | `20260613120000_checkin_engine.sql` | ✅ Including partial/filtered indexes |
-| `updated_at` triggers | `20260613120000_checkin_engine.sql` | ✅ On 3 tables |
-
-#### TypeScript Types
-| File | Exports | Status |
-|------|---------|--------|
-| `src/types/checkin.ts` | 28 exports | ✅ Row types, inserts, domain types (ComplianceScore, AdherenceTrend, CoachingSummary), form types |
-
-#### Service Layer (5 files, 20 functions)
-| File | Functions | Status |
-|------|-----------|--------|
-| `dailyCheckinService.ts` | `submitDailyCheckin`, `getTodayCheckin`, `getCheckinHistory`, `getClientCheckins` | ✅ Upsert semantics, filters |
-| `weeklyReviewService.ts` | `submitWeeklyReview`, `getCurrentWeekReview`, `getReviewHistory`, `updateCoachNotes` | ✅ Coach-notes update, week-start calc |
-| `streakService.ts` | `getStreak`, `updateStreak` | ✅ Consecutive/increment, gap/broken logic |
-| `alertService.ts` | `getCoachAlerts`, `markAlertRead`, `markAlertsRead`, `dismissAlert`, `getUnreadAlertCount`, `generateAlert` | ✅ Severity/type filtering, batch ops |
-| `coachingIntelligenceService.ts` | `getAdherenceTrend`, `getProgressTrajectory`, `generateWeeklySummary` | ✅ Stub with mock data + TODO |
-
-#### UI Components (7 components)
-| Component | Role | Status |
-|-----------|------|--------|
-| `DailyCheckinForm` | Mobile-first daily check-in with sliders, toggle, numeric inputs | ✅ Streak display, submitted state |
-| `WeeklyReviewForm` | Body measurements (3), sliders, qualitative fields, photo upload placeholder | ✅ Bodyweight delta calculation |
-| `ClientCheckinDashboard` | Compliance SVG ring chart, streak, weight trend, checkin grid | ✅ 4 summary cards + 14-day list |
-| `CoachAlertFeed` | Severity color-coded alerts, mark read/dismiss, client navigation | ✅ Realtime-ready refresh |
-| `ClientComplianceCard` | Per-client compliance %, streak, risk dot, trend arrow | ✅ Risk dots + at-risk indicators |
-| `CoachCheckinDashboard` | Aggregate stats + alert feed + client roster | ✅ 4 stat cards, 2-column layout |
-| `ClientDetailView` | Full history, AI summary generation, weekly review timeline, coach notes | ✅ Mock AI summary, coach notes save |
-
-#### Routing & Navigation
-| Change | Status |
-|--------|--------|
-| New route `/clients/:clientId/checkin` | ✅ Wired in `App.tsx` |
-| "Check-in" tab in navigation | ✅ 6-column tab bar |
-| `CheckinPage.tsx` with 3 sub-tabs | ✅ Daily / Weekly / Dashboard |
-
-#### Tests (5 files, 20 tests)
-| File | Tests | Status |
-|------|-------|--------|
-| `dailyCheckinService.test.ts` | 4 | ✅ All passing |
-| `weeklyReviewService.test.ts` | 3 | ✅ All passing |
-| `streakService.test.ts` | 3 | ✅ All passing |
-| `alertService.test.ts` | 5 | ✅ All passing (chainable mock pattern) |
-| `coachingIntelligenceService.test.ts` | 5 | ✅ All passing (pure mock data) |
-
----
-
-## 3. New Files Created (This Session)
+### Exact Failing Path
 
 ```
-supabase/
-  migrations/
-    20260613120000_checkin_engine.sql          -- 5 tables + RLS + indexes + triggers (NEW)
-
-src/
-  types/
-    checkin.ts                                  -- 28 type exports (NEW)
-  services/
-    checkin/
-      dailyCheckinService.ts                    -- 4 functions (NEW)
-      weeklyReviewService.ts                    -- 4 functions (NEW)
-      streakService.ts                          -- 2 functions (NEW)
-      alertService.ts                           -- 6 functions (NEW)
-      coachingIntelligenceService.ts            -- 3 stubs (NEW)
-  components/
-    checkin/
-      DailyCheckinForm.tsx                      -- Mobile-first form (NEW)
-      WeeklyReviewForm.tsx                      -- Measurements + qualitative (NEW)
-      ClientCheckinDashboard.tsx                -- SVG ring + stats (NEW)
-      CoachAlertFeed.tsx                        -- Severity-coded feed (NEW)
-      ClientComplianceCard.tsx                  -- Per-client summary card (NEW)
-      CoachCheckinDashboard.tsx                 -- Coach overview (NEW)
-      ClientDetailView.tsx                      -- Full per-client detail (NEW)
-  pages/
-    CheckinPage.tsx                             -- Tabbed check-in page (NEW)
-  __tests__/
-    checkin/
-      dailyCheckinService.test.ts               -- 4 tests (NEW)
-      weeklyReviewService.test.ts               -- 3 tests (NEW)
-      streakService.test.ts                     -- 3 tests (NEW)
-      alertService.test.ts                      -- 5 tests (NEW)
-      coachingIntelligenceService.test.ts        -- 5 tests (NEW)
+ClientPage.tsx:112  handleInviteClient()
+  → setIsCreatingInvite(true)                    -- button shows spinner
+  → clientInvitationService.ts:30  supabase.rpc('create_client_invitation', ...)
+    → [RPC HANGS — no timeout, no abort signal]
+    → setIsCreatingInvite(false) in finally      -- NEVER REACHED
+    → button stays in "Creating..." state forever
 ```
 
-**Modified files:**
+### Symptom 2b: Delete client does nothing
+
+### Root Cause
+
+**`supabase.rpc('soft_delete_client', ...)` has no timeout. The `finally` block that resets `isDeleting` never executes.**
+
+Same pattern as 2a. The `handleConfirmDelete` function (line 149-170) calls `deleteClientFromHook(activeClientId)` which calls `archiveClient(clientId)` which calls `supabase.rpc('soft_delete_client', ...)`. If the RPC hangs, the entire promise chain hangs, and the `finally` block never runs.
+
+### Exact Failing Path
+
 ```
-src/App.tsx              -- Added CheckinPage route import
-src/components/AppLayout.tsx -- Added "Check-in" tab (6-column grid)
+ClientPage.tsx:149  handleConfirmDelete()
+  → setIsDeleting(true)                          -- button shows spinner
+  → useSupabaseClients.ts:148  archiveClient(clientId)
+    → supabaseClientService.ts:290  supabase.rpc('soft_delete_client', ...)
+      → [RPC HANGS — no timeout, no abort signal]
+      → setIsDeleting(false) in finally          -- NEVER REACHED
+      → button stays in "Deleting..." state forever
+```
+
+### Files Affected
+
+| File | Line | Issue |
+|------|------|-------|
+| `src/services/clientInvitationService.ts` | 30 | `supabase.rpc('create_client_invitation', ...)` — no timeout, no abort signal |
+| `src/services/supabaseClientService.ts` | 290 | `supabase.rpc('soft_delete_client', ...)` — no timeout, no abort signal |
+| `src/pages/ClientPage.tsx` | 112-133 | `handleInviteClient` — no timeout guard on RPC call |
+| `src/pages/ClientPage.tsx` | 149-170 | `handleConfirmDelete` — no timeout guard on RPC call |
+
+### Frontend Fix Required
+
+Add `AbortController` with 15-second timeout to both RPC calls:
+
+**`src/services/clientInvitationService.ts`** (around line 30):
+```typescript
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 15000);
+try {
+  const { data, error } = await supabase.rpc('create_client_invitation', {
+    p_client_id: input.clientId,
+    p_invited_email: input.invitedEmail ?? null,
+    p_invite_token_hash: tokenHash,
+    p_expires_at: input.expiresAt ?? null,
+  }, { signal: controller.signal });
+  // ... existing code
+} catch (error) {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return { token: null, inviteUrl: null, invitationId: null, error: 'Request timed out' };
+  }
+  throw error;
+} finally {
+  clearTimeout(timeoutId);
+}
+```
+
+**`src/services/supabaseClientService.ts`** (around line 290):
+```typescript
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 15000);
+try {
+  const { data, error } = await supabase.rpc(
+    'soft_delete_client' as never,
+    { p_client_id: clientId } as never,
+    { signal: controller.signal } as never,
+  );
+  // ... existing code
+} catch (error) {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return { success: false, error: 'Request timed out' };
+  }
+  throw error;
+} finally {
+  clearTimeout(timeoutId);
+}
+```
+
+### Database Fix Required
+
+Add `statement_timeout` to both RPC functions to prevent server-side hangs:
+
+```sql
+-- In create_client_invitation RPC (migration 20260530120000):
+BEGIN
+  PERFORM set_config('statement_timeout', '10000', true); -- 10s
+  -- ... existing function body
+
+-- In soft_delete_client RPC (migration 20260710000000):
+BEGIN
+  PERFORM set_config('statement_timeout', '10000', true); -- 10s
+  -- ... existing function body
 ```
 
 ---
 
-## 4. Known Issues & Blockers
+## Incident 3: Nutrition Generation Infinite Loading
 
-### 4.1 TypeScript Type Errors (Will-Fix After Migration)
-All TS errors are in the same category — the auto-generated `src/integrations/supabase/types.ts` does not yet include the 5 new tables. This is by design:
+### Symptom
+"Loading plan from database" spinner never resolves. Other tabs work.
 
-- `daily_checkins` → "not assignable to parameter"
-- `weekly_reviews` → "not assignable to parameter"
-- `checkin_streaks` → "not assignable to parameter"
-- `coach_alerts` → "not assignable to parameter"
-- `ai_summaries` → not yet referenced in code
+### Root Cause
 
-**Fix:** After migration is applied to Supabase:
-```bash
-npx supabase gen types typescript --linked > src/integrations/supabase/types.ts
+**Race condition in `loadRequestIdRef` causes all concurrent load requests to return early without clearing the LOADING state.**
+
+The `loadPlanForClient` function in `usePlanFetch.ts` uses a request ID counter to invalidate stale concurrent calls:
+
+```typescript
+// Line 109: Capture current request ID
+const currentRequestId = ++loadRequestIdRef.current;
+setUiState("LOADING");
+
+// Line 120: If another call incremented the counter, this call is stale
+if (currentRequestId !== loadRequestIdRef.current) return;  // ← BUG: returns without setUiState("IDLE")
 ```
 
-**Impact:** Production build still succeeds because Vite's `esbuild` skips type checking. At runtime, these calls work correctly — the errors are only at the IDE/CI type-check level.
+When `loadPlanForClient` is called multiple times in quick succession (e.g., React StrictMode double-mount, rapid client switching, or the `useEffect` in `NutritionTabContent` re-firing):
 
-### 4.2 Minor Issues
-| Issue | Severity | Resolution |
-|-------|----------|------------|
-| `ClientDetailView` uses mock AI data | Low | Replace with edge function call when deployed |
-| `CoachCheckinDashboard` expects pre-computed `ClientSummary[]` | Low | Needs parent to aggregate daily_checkins data |
-| Photo upload button disabled in `WeeklyReviewForm` | Low | Requires Supabase Storage bucket setup |
-| `tsconfig.tests.json` may need `@/` path alias | Low | Already resolved by vitest config |
+1. Call 1: `currentRequestId = 1`, `setUiState("LOADING")`, starts `await Promise.all(...)`
+2. Call 2: `currentRequestId = 2`, `setUiState("LOADING")`, starts `await Promise.all(...)`
+3. Call 1 resumes: `currentRequestId (1) !== loadRequestIdRef.current (2)` → **returns early, UI stays at LOADING**
+4. Call 2 resumes: `currentRequestId (2) === loadRequestIdRef.current (2)` → proceeds normally
 
-### 4.3 No Known Runtime Bugs
-- ✅ All 20 unit tests pass
-- ✅ Build completes cleanly (0 errors)
-- ✅ No console warnings in dev mode
-- ✅ No circular dependencies detected
-- ✅ All RLS policies follow existing patterns and are internally consistent
+If a third call happens before call 2 completes, call 2 also returns early. This creates a cascade where ALL requests return early, and the UI is permanently stuck at "LOADING".
+
+### Exact Failing Path
+
+```
+NutritionTabContent.tsx:77  useEffect → loadPlanForClient(activeClientId)
+  → usePlanFetch.ts:109  currentRequestId = ++loadRequestIdRef.current  (e.g., 1)
+  → usePlanFetch.ts:111  setUiState("LOADING")
+  → usePlanFetch.ts:115  await Promise.all([fetchCurrentPlan, checkPlanLockStatus])
+    [React StrictMode double-mount triggers second call]
+  → usePlanFetch.ts:109  currentRequestId = ++loadRequestIdRef.current  (e.g., 2)
+  → usePlanFetch.ts:111  setUiState("LOADING")
+  → usePlanFetch.ts:115  await Promise.all([fetchCurrentPlan, checkPlanLockStatus])
+    [First call resumes]
+  → usePlanFetch.ts:120  currentRequestId (1) !== loadRequestIdRef.current (2)
+  → return  -- UI stays at "LOADING" forever
+```
+
+### Files Affected
+
+| File | Line | Issue |
+|------|------|-------|
+| `src/hooks/usePlanFetch.ts` | 120 | Stale request returns without clearing LOADING state |
+| `src/hooks/usePlanFetch.ts` | 146 | Same bug in second `Promise.all` block |
+| `src/hooks/usePlanFetch.ts` | 107 | `!clientId` early return — no UI state reset (minor, only on empty clientId) |
+
+### Frontend Fix Required
+
+**`src/hooks/usePlanFetch.ts`** — Add `setUiState("IDLE")` before every early return:
+
+```typescript
+// Line 107: Early return for empty clientId
+if (!clientId) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+
+// Line 120: Stale request check after first Promise.all
+if (currentRequestId !== loadRequestIdRef.current) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+
+// Line 146: Stale request check after second Promise.all
+if (currentRequestId !== loadRequestIdRef.current) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+
+// Line 184: Stale request check in catch block
+if (currentRequestId !== loadRequestIdRef.current) {
+  setUiState("IDLE");  // ← ADD
+  return;
+}
+```
+
+### No Database Fix Required
+
+This is a frontend-only race condition. No database changes needed.
 
 ---
 
-## 5. Code Quality Rating
+## Validation Steps
 
-| Category | Rating (1-10) | Notes |
-|----------|---------------|-------|
-| **Architecture** | 9/10 | Clean service/component separation, RLS-first auth, consistent patterns |
-| **Type Safety** | 8/10 | 28 well-typed exports; the 5 missing table types are by-design pre-migration |
-| **Test Coverage** | 8/10 | 20 new tests covering all service paths; no component/edge function tests yet |
-| **Data Integrity** | 9/10 | CHECK constraints, UNIQUE constraints, FK references, write-once patterns |
-| **Security (RLS)** | 9/10 | Coach + client RLS on all tables, service-role gate on ai_summaries insert |
-| **UI/UX** | 7/10 | Functional but not polished; no skeleton loaders, no animations |
-| **Error Handling** | 8/10 | All services return `{ data, error }` tuples; components use toast for failures |
-| **Performance** | 8/10 | Partial indexes on critical query paths; proper column selections |
+### Incident 1 — FK Fix
 
-**Overall: 8.3/10** — Production-ready codebase with minor gaps (all identified above).
+1. Run the migration to change FK targets
+2. Verify: `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.nutrition_plans'::regclass AND conname LIKE '%created_by%'` → shows `REFERENCES auth.users(id)`
+3. Verify: `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.training_plans'::regclass AND conname LIKE '%created_by%'` → shows `REFERENCES auth.users(id)`
+4. Test: Lock a nutrition plan for a coach who signed up during the broken trigger period → lock succeeds
+5. Test: Lock a nutrition plan for a coach with a valid profiles row → lock succeeds (regression check)
 
----
+### Incident 2 — Timeout Fix
 
-## 6. Roadmap to Sellable Product
+1. Test: Click "Invite Client" → invitation created or error returned within 15 seconds
+2. Test: Click "Delete Client" → client archived or error returned within 15 seconds
+3. Test: Disconnect network, click "Invite Client" → error returned within 15 seconds (not infinite hang)
+4. Test: Disconnect network, click "Delete Client" → error returned within 15 seconds (not infinite hang)
 
-### Phase A: Deploy & Validate (2-3 days)
-```
-1. Apply migration to production Supabase
-   → supabase db push
-   → supabase gen types → regenerate types.ts
+### Incident 3 — Race Condition Fix
 
-2. Configure Supabase Storage bucket
-   → Storage bucket: checkin-photos
-   → RLS: authenticated users can upload, read own
-   → CORS policy for web app origin
+1. Test: Navigate to Nutrition tab for a client with a locked plan → plan loads, spinner resolves
+2. Test: Navigate to Nutrition tab for a client without a plan → "No nutrition plan" message shown
+3. Test: Rapidly switch between clients in the client selector → plan loads correctly for each client
+4. Test: Navigate away from Nutrition tab while loading → no console errors, no stuck state
+5. Test: Refresh page on Nutrition tab → plan loads on re-mount
 
-3. Create 3 edge functions:
-   → generate-coach-alerts: scheduled + webhook, aggregates checkins + writes coach_alerts
-   → generate-ai-summary: weekly cron, calls OpenAI/Claude, writes ai_summaries
-   → upload-checkin-photo: validates + resizes + stores to Storage
+### Integration Validation
 
-4. Connect coachingIntelligenceService stubs to edge functions
-```
-
-### Phase B: MVP Polish (1 week)
-```
-1. Add form validation:
-   → Zod schemas for DailyCheckinInsert, WeeklyReviewInsert
-   → Client-side pre-validation before submit
-
-2. Add loading skeletons:
-   → SkeletonCard components for all checkin components
-   → Replace Loader2 with proper skeleton UIs
-
-3. Add empty states:
-   → All "no data" states should have illustrations + CTAs
-
-4. Coach Dashboard aggregation:
-   → Build parent component that fetches all client_ids via get_trainer_client_ids()
-   → Aggregates compliance scores from daily_checkins
-   → Feeds CoachCheckinDashboard
-
-5. Add streak badge/notification:
-   → Milestone alerts at 7, 14, 21, 30 days
-   → Celebrate in DailyCheckinForm after submit
-```
-
-### Phase C: Client-Facing Portal (1-2 weeks)
-```
-1. Build dedicated client login flow:
-   → client subdomain (client.fitplanpro.com)
-   → Limited read-only view of own plans
-   → Only their check-in forms
-   → No client creation, no coaching tools
-
-2. Client onboarding:
-   → First-time check-in tutorial
-   → Notification permission request
-   → Goal setting wizard
-
-3. Messaging layer:
-   → Coach → client notes via weekly_reviews.coach_notes
-   → In-app notification when coach leaves notes
-   → Email notification via Supabase edge function + Resend
-```
-
-### Phase D: Revenue Features (2-3 weeks)
-```
-1. Subscription tiers (Stripe):
-   → Free: 1 client, basic plans
-   → Pro: up to 20 clients + check-ins + AI summaries
-   → Enterprise: unlimited clients + white-label + API access
-
-2. White-label / branding:
-   → Custom logo, colors, domain
-   → Client-facing PDF with coach branding
-
-3. Advanced analytics:
-   → Historical trends across all clients
-   → Churn prediction (low adherence → intervention)
-   → Coach performance dashboard (client results aggregation)
-
-4. Batch operations:
-   → Send bulk messages/notes to multiple clients
-   → Apply macro adjustments to multiple plans
-```
-
-### Phase E: Growth & Scale (1 month)
-```
-1. Team features:
-   → Multiple coaches per account
-   → Coach role hierarchy (admin → coach → assistant)
-   → Shared client pools
-
-2. Integrations:
-   → Apple Health / Google Fit sync (weight, activity)
-   → MyFitnessPal / Cronometer sync
-   → Calendar integration (Google Calendar, Outlook)
-
-3. Automated marketing:
-   → Referral program
-   → Client success story generation (with permission)
-   → Automated re-engagement for dormant clients
-
-4. Mobile app:
-   → React Native or PWA with push notifications
-   → Offline check-in support
-   → Camera integration for progress photos
-```
-
-### Revenue Model
-
-| Tier | Price | Key Feature |
-|------|-------|-------------|
-| **Free** | $0 | 1 client, basic plans |
-| **Starter** | $29/mo | Up to 10 clients, check-ins, basic analytics |
-| **Pro** | $79/mo | Up to 50 clients, AI summaries, coach alerts, priority support |
-| **Enterprise** | $199/mo | Unlimited clients, white-label, API, team seats, custom integrations |
-
-**Target market:** Personal trainers, nutrition coaches, online coaches managing 5-50 clients.
-
-**Estimated path to first dollar:** 2-3 weeks (Phase A + B + basic Stripe integration).
-
----
-
-## 7. Recommendation
-
-The check-in engine is **architecturally complete and safe to merge**. The codebase follows the same patterns as every other service/component in the project. Build passes, tests pass, and there are zero runtime bugs.
-
-**Priority actions before production launch:**
-1. Apply migration to Supabase
-2. Regenerate TypeScript types
-3. Wire up the 3 edge functions
-4. Deploy
-
-Estimated total effort to close remaining gaps: **3-4 days of focused work** for a solo developer.
-
-The product as it stands (with the check-in engine) solves a real, validated pain point for fitness coaches: fragmented client communication and manual adherence tracking. It is a viable MVP for a narrow launch to early users.
+1. Full flow: Create client → generate plan → lock plan → verify no FK error
+2. Full flow: Create client → invite client → client claims invitation → client views plan
+3. Full flow: Create client → delete client → client removed from list, invitations revoked

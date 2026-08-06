@@ -167,6 +167,62 @@ export async function getUnreadAlertCount(
   }
 }
 
+/**
+ * Get alerts for a client (client-facing).
+ * Filters by client_id so clients can only see their own alerts (enforced by RLS).
+ */
+export async function getClientAlerts(
+  clientId: string,
+  options?: {
+    severity?: AlertSeverity;
+    alertType?: AlertType;
+    includeRead?: boolean;
+    includeDismissed?: boolean;
+    limit?: number;
+  }
+): Promise<{ alerts: CoachAlert[]; error: string | null }> {
+  try {
+    let query = supabase
+      .from('coach_alerts')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+
+    if (options?.severity) {
+      query = query.eq('severity', options.severity);
+    }
+
+    if (options?.alertType) {
+      query = query.eq('alert_type', options.alertType);
+    }
+
+    // Default: show non-dismissed alerts
+    if (options?.includeRead !== true) {
+      query = query.eq('read', false);
+    }
+    if (options?.includeDismissed !== true) {
+      query = query.eq('dismissed', false);
+    }
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return { alerts: [], error: error.message };
+    }
+
+    return { alerts: (data ?? []) as unknown as CoachAlert[], error: null };
+  } catch (err: unknown) {
+    return {
+      alerts: [],
+      error: err instanceof Error ? err.message : 'Failed to fetch alerts',
+    };
+  }
+}
+
 import type { Json } from '@/integrations/supabase/types';
 
 export interface GenerateAlertInput {

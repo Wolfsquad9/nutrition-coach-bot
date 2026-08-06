@@ -18,7 +18,8 @@ import type { FullDayMealPlanResult, MacroVariance, ToleranceCheckResult } from 
  */
 export function generateFullDayMealPlan(
   selectedFoods: string[],
-  macroTargets: MacroTargets
+  macroTargets: MacroTargets,
+  seed?: string
 ): FullDayMealPlanResult {
   const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
   
@@ -40,7 +41,8 @@ export function generateFullDayMealPlan(
     
     try {
       // Generate recipe for this meal using existing logic
-      const recipe = generateRecipe(selectedFoods, mealType);
+      // The seed (if provided) makes the recipe selection vary per candidate
+      const recipe = generateRecipe(selectedFoods, mealType, seed);
       
       // Scale ingredients to meet calorie target for this meal
       const scaleFactor = recipe.macrosPerServing.calories > 0 

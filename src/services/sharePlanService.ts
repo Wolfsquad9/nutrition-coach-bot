@@ -2,7 +2,12 @@
  * Share Plan Service
  *
  * Generates shareable links for locked plans and fetches shared plan data
- * via the get-shared-plan edge function (no auth required for viewing).
+ * via the get-shared-plan edge function.
+ *
+ * RESTORED Sprint 1.75 behavior:
+ *   - Public shared plans work WITHOUT authentication
+ *   - Uses apikey header (no bearer required) for anonymous access
+ *   - Authenticated users still get bearer token for RLS-enforced access
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -20,7 +25,17 @@ export function generateShareLink(versionId: string): string {
 }
 
 /**
- * Fetch a shared plan snapshot via edge function (no auth required).
+ * Get the current session's access token for API calls.
+ */
+async function getAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+/**
+ * Fetch a shared plan snapshot via edge function.
+ * PUBLIC — does NOT require authentication (Sprint 1.75 behavior).
+ * Uses apikey header for anonymous access.
  */
 export async function fetchSharedPlan(
   versionId: string
@@ -32,15 +47,27 @@ export async function fetchSharedPlan(
     };
   }
 
+  const token = await getAccessToken();
+
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // If authenticated, send bearer token for RLS-respected access
+    // If anonymous, use apikey header (Sprint 1.75 behavior)
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    } else {
+      // Sprint 1.75: anonymous access via apikey
+      headers['apikey'] = SUPABASE_ANON_KEY;
+    }
+
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/get-shared-plan?versionId=${encodeURIComponent(versionId)}`,
       {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-        },
+        headers,
       }
     );
 

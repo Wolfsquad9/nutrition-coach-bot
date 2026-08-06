@@ -7,51 +7,124 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { claimClientInvitation } from '@/services/clientInvitationService';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const inviteToken = searchParams.get('invite');
+  const { refreshAuthState, session } = useAuth();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setSubmitting(true);
+
+    // If a Supabase session is already active (e.g., a coach opened this invite
+    // link in the same browser), sign it out before signup so the new account
+    // does not silently replace the existing localStorage session.
+    if (inviteToken && session) {
+      await supabase.auth.signOut();
+      toast({
+        title: 'Switching accounts',
+        description: 'You were already signed in. Switching to your client account.',
+      });
+    }
+
+    // Cross-role email uniqueness check
+    if (inviteToken) {
+      // If client signup via invite, verify email isn't already used by a coach account.
+      const { data: conflictData, error: conflictError } = await supabase.rpc(
+        'check_email_role_conflict',
+        {
+          p_email: email,
+          p_intended_role: 'client',
+          p_exclude_user_id: null,
+        }
+      );
+
+      if (conflictError) {
+        setSubmitting(false);
+        toast({ title: 'Signup failed', description: conflictError.message, variant: 'destructive' });
+        return;
+      }
+
+      if (conflictData === true) {
+        setSubmitting(false);
+        toast({
+          title: 'Signup failed',
+          description: 'This email is already registered as a coach account. Please use a different email to accept this invitation.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else {
+      // If coach signup, verify email isn't already used by a client account.
+      const { data: conflictData, error: conflictError } = await supabase.rpc(
+        'check_email_role_conflict',
+        {
+          p_email: email,
+          p_intended_role: 'coach',
+          p_exclude_user_id: null,
+        }
+      );
+
+      if (conflictError) {
+        setSubmitting(false);
+        toast({ title: 'Signup failed', description: conflictError.message, variant: 'destructive' });
+        return;
+      }
+
+      if (conflictData === true) {
+        setSubmitting(false);
+        toast({
+          title: 'Signup failed',
+          description: 'This email is already registered as a client account. Please use a different email or contact your coach.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
 
     const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
-      setIsLoading(false);
+      setSubmitting(false);
       toast({ title: 'Signup failed', description: error.message, variant: 'destructive' });
       return;
     }
 
     if (inviteToken && data.session) {
+      // Claim the invitation immediately after signup
       const claimResult = await claimClientInvitation(inviteToken);
-      setIsLoading(false);
+      setSubmitting(false);
 
       if (claimResult.error) {
         toast({ title: 'Account created', description: claimResult.error, variant: 'destructive' });
-        navigate('/login');
         return;
       }
 
+      // Re-fetch role and clientId from DB after claim mutation
+      await refreshAuthState();
+
       toast({ title: 'Client access linked', description: 'Your account is linked to your plan.' });
-      navigate(claimResult.clientId ? `/clients/${claimResult.clientId}/nutrition` : '/');
+      // Navigate to client portal (not coach route)
+      navigate('/my-plan', { replace: true });
       return;
     }
 
-    setIsLoading(false);
+    setSubmitting(false);
     toast({
       title: 'Account created',
       description: inviteToken
         ? 'Please confirm your email, then use the invitation link again to finish linking your plan.'
         : 'Please check your email to confirm your account.',
     });
-    navigate('/login');
+    // Navigate to login after non-invite signup
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -89,8 +162,8 @@ export default function SignupPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Creating account...' : 'Sign up'}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Creating account...' : 'Sign up'}
           </Button>
         </form>
 
