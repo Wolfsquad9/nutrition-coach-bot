@@ -38,3 +38,5 @@ ts_errors.txt
 /test-results/
 /blob-report/
 /playwright/.cache/
+.vercel
+.env*
