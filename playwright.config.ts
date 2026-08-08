@@ -1,6 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
-dotenv.config();
+
+// Load `.env` FIRST so canonical project config (URLs + anon/publishable
+// keys) takes precedence. Then supplement with local-only secrets from
+// `.env.local` (e.g. SUPABASE_SERVICE_ROLE_KEY, Postgres creds). dotenv
+// never overrides variables it has already set, so no precedence mismatch
+// can occur — `.env` is authoritative for the Supabase project identity.
+dotenv.config({ path: '.env' });
+dotenv.config({ path: '.env.local' });
 
 /**
  * Playwright E2E config for the coach flow.

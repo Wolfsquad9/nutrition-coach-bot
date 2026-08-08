@@ -30,6 +30,7 @@
 
 import { test, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
 import { uniqueTag } from './helpers/test-data';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -67,45 +68,61 @@ async function seedLockedPlanVersion(supabase: ReturnType<typeof createClient>):
   if (coachErr || !coachAuth.user) throw new Error(`coach create failed: ${coachErr?.message}`);
   const coachId = coachAuth.user.id;
 
-  // 2. Insert user_profile row + role
-  const { error: profileErr } = await supabase.from('user_profiles').insert({
-    id: coachId,
-    email: coachEmail,
-    first_name: 'E2E',
-    last_name: 'Coach',
-  });
-  if (profileErr) throw new Error(`profile insert failed: ${profileErr.message}`);
-  const { error: roleErr } = await supabase.from('user_roles').insert({
-    user_id: coachId,
-    role: 'trainer',
-  });
-  if (roleErr) throw new Error(`role insert failed: ${roleErr.message}`);
+  // 2. Upsert profiles row + role. NOTE: the on_auth_user_created trigger
+  //    (handle_new_user) normally creates these rows for us, so we upsert
+  //    idempotently instead of insert — a plain insert would hit the PK on
+  //    profiles.id / the unique user_id on user_roles. The profile row uses
+  //    `full_name` (the actual column; there is no first_name/last_name).
+  const { error: profileErr } = await supabase
+    .from('profiles')
+    .upsert(
+      { id: coachId, email: coachEmail, full_name: 'E2E Coach' },
+      { onConflict: 'id' }
+    );
+  if (profileErr) throw new Error(`profile upsert failed: ${profileErr.message}`);
+  const { error: roleErr } = await supabase
+    .from('user_roles')
+    .upsert(
+      { user_id: coachId, role: 'trainer' },
+      { onConflict: 'user_id' }
+    );
+  if (roleErr) throw new Error(`role upsert failed: ${roleErr.message}`);
 
-  // 3. Create a client row owned by this coach
+  // 3. Create a client row owned by this coach. clients requires these
+  //    NOT NULL columns: birth_date, gender, weight, height, primary_goal,
+  //    activity_level (plus first_name/last_name).
   const { data: client, error: clientErr } = await supabase
     .from('clients')
     .insert({
       user_profile_id: coachId,
       first_name: 'E2E',
       last_name: 'Client',
+      birth_date: '1995-06-15',
+      gender: 'male',
+      weight: 75,
+      height: 175,
       primary_goal: 'maintenance',
+      activity_level: 'moderately_active',
     })
     .select('id')
     .single();
   if (clientErr || !client) throw new Error(`client insert failed: ${clientErr?.message}`);
 
-  // 4. Create a nutrition_plan for the client
+  // 4. Create a nutrition_plan for the client (plan_data is NOT NULL)
   const { data: plan, error: planErr } = await supabase
     .from('nutrition_plans')
     .insert({
       client_id: client.id,
       created_by: coachId,
+      plan_data: {},
     })
     .select('id')
     .single();
   if (planErr || !plan) throw new Error(`plan insert failed: ${planErr?.message}`);
 
-  // 5. Create a LOCKED plan_version with a real locked_snapshot_json
+  // 5. Create a LOCKED plan_version with a real locked_snapshot_json.
+  //    plan_versions has plan_payload (NOT NULL), payload_hash (NOT NULL),
+  //    locked_snapshot_json and idempotency_key (UUID type — hence randomUUID).
   const snapshot = {
     identifier: { versionId: 'will-be-overwritten', lockedAt: new Date().toISOString() },
     weeklyPlan: { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] },
@@ -117,9 +134,10 @@ async function seedLockedPlanVersion(supabase: ReturnType<typeof createClient>):
       plan_id: plan.id,
       created_by: coachId,
       version_number: 1,
+      plan_payload: snapshot,
       locked_snapshot_json: snapshot,
       payload_hash: 'e2e-test-hash',
-      idempotency_key: `e2e-${tag}`,
+      idempotency_key: randomUUID(),
     })
     .select('id')
     .single();
@@ -141,50 +159,70 @@ async function seedDraftPlanVersion(supabase: ReturnType<typeof createClient>): 
   if (coachErr || !coachAuth.user) throw new Error(`coach create failed: ${coachErr?.message}`);
   const coachId = coachAuth.user.id;
 
-  await supabase.from('user_profiles').insert({
-    id: coachId, email: coachEmail, first_name: 'E2E', last_name: 'Coach',
-  });
-  await supabase.from('user_roles').insert({ user_id: coachId, role: 'trainer' });
+  // profiles uses `full_name` (actual column). Upsert to stay idempotent
+  // with the on_auth_user_created trigger. idempotency_key must be UUID.
+  await supabase
+    .from('profiles')
+    .upsert(
+      { id: coachId, email: coachEmail, full_name: 'E2E Coach' },
+      { onConflict: 'id' }
+    );
+  await supabase
+    .from('user_roles')
+    .upsert(
+      { user_id: coachId, role: 'trainer' },
+      { onConflict: 'user_id' }
+    );
 
-  const { data: client } = await supabase
+  const { data: client, error: clientErr } = await supabase
     .from('clients')
     .insert({
       user_profile_id: coachId,
       first_name: 'E2E',
       last_name: 'DraftClient',
+      birth_date: '1995-06-15',
+      gender: 'male',
+      weight: 75,
+      height: 175,
       primary_goal: 'maintenance',
+      activity_level: 'moderately_active',
     })
     .select('id')
     .single();
-  if (!client) throw new Error('client insert failed');
+  if (clientErr || !client) throw new Error(`client insert failed: ${clientErr?.message}`);
 
-  const { data: plan } = await supabase
+  const { data: plan, error: planErr } = await supabase
     .from('nutrition_plans')
-    .insert({ client_id: client.id, created_by: coachId })
+    .insert({
+      client_id: client.id,
+      created_by: coachId,
+      plan_data: {},
+    })
     .select('id')
     .single();
-  if (!plan) throw new Error('plan insert failed');
+  if (planErr || !plan) throw new Error(`plan insert failed: ${planErr?.message}`);
 
-  const { data: pv } = await supabase
+  const { data: pv, error: pvErr } = await supabase
     .from('plan_versions')
     .insert({
       plan_id: plan.id,
       created_by: coachId,
       version_number: 1,
+      plan_payload: {},
       locked_snapshot_json: null, // <-- THIS is the test condition
       payload_hash: 'e2e-test-draft-hash',
-      idempotency_key: `e2e-draft-${tag}`,
+      idempotency_key: randomUUID(),
     })
     .select('id')
     .single();
-  if (!pv) throw new Error('draft plan_version insert failed');
+  if (pvErr || !pv) throw new Error(`draft plan_version insert failed: ${pvErr?.message}`);
   return pv.id;
 }
 
 async function cleanupSeededData(supabase: ReturnType<typeof createClient>, versionId: string): Promise<void> {
   // Best-effort: delete by version_id. We don't have a coach email/UUID
   // at hand for the fallback RPC from here; cleanup at the spec level
-  // can target the user_profiles by `email like 'e2e-test-%'` separately.
+  // can target the profiles by `email like 'e2e-test-%'` separately.
   await supabase.from('plan_versions').delete().eq('id', versionId);
 }
 
