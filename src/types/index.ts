@@ -147,12 +147,58 @@ export interface Exercise {
 
 export interface WorkoutSession {
   id: string;
+  weekNumber: number;
   dayNumber: number; // 1-7
   sessionType: 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body' | 'cardio' | 'rest';
   name: string;
   duration: number; // minutes
   exercises: WorkoutExercise[];
   notes?: string;
+}
+
+export type LoadUnit = 'kg' | 'lb' | 'bodyweight' | 'machine' | 'cable' | 'unknown';
+
+export type EquipmentType = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'other';
+
+export interface ExerciseResult {
+  exerciseId: string;
+  exerciseName: string;
+  actualLoad?: number;
+  actualReps: number[];
+  actualSets: number;
+  rpe: number;
+  completed: boolean;
+  notes?: string;
+  timestamp: string;
+}
+
+export interface SessionResult {
+  sessionId: string;
+  weekNumber: number;
+  sessionIndex: number;
+  completed: boolean;
+  actualDuration?: number;
+  notes?: string;
+  exercises: ExerciseResult[];
+  timestamp: string;
+}
+
+export interface TrainingForecast {
+  sessionId: string;
+  summary: string;
+  targetLoad?: number;
+  loadUnit: LoadUnit;
+  repRange: string;
+  targetRPE: string;
+  notes?: string;
+}
+
+export interface TrainingProgressionState {
+  currentWeek: number;
+  currentSessionIndex: number;
+  sessionHistory: SessionResult[];
+  nextSessionId?: string;
+  futureForecast?: TrainingForecast[];
 }
 
 export interface WorkoutExercise {
@@ -163,18 +209,44 @@ export interface WorkoutExercise {
   intensity?: string; // RPE or %1RM
   tempo?: string; // "2-0-2-0"
   notes?: string;
+  targetRPE?: string;
+  targetLoad?: number;
+  loadUnit?: LoadUnit;
+  equipmentType?: EquipmentType;
+  progressionHint?: string;
+  progressionRule?: string;
+}
+
+export interface TrainingPhase {
+  key: string;
+  name: string;
+  objective: string;
+  startWeek: number;
+  endWeek: number;
+}
+
+export interface TrainingWeek {
+  weekNumber: number;
+  phase: string;
+  objective: string;
+  sessions: WorkoutSession[];
 }
 
 export interface TrainingPlan {
   id: string;
   clientId: string;
   name: string;
+  objective: string;
   duration: number; // weeks
   frequency: number; // days per week
   split: 'upper_lower' | 'push_pull_legs' | 'full_body' | 'body_part' | 'custom';
   phase: 'strength' | 'hypertrophy' | 'power' | 'endurance' | 'deload';
+  phases: TrainingPhase[];
+  weeks: TrainingWeek[];
   workouts: WorkoutSession[];
   progressionScheme: string;
+  programDescription: string;
+  progressionState?: TrainingProgressionState;
   createdAt: string;
 }
 

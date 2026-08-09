@@ -1,120 +1,186 @@
-import { Client, TrainingPlan, WorkoutSession, WorkoutExercise } from './types';
+import { Client, TrainingPlan, WorkoutSession, WorkoutExercise, TrainingWeek } from '@/types';
 import { GOAL_TRAINING_PARAMS, EXPERIENCE_ADJUSTMENTS } from './constants';
 import { selectExercisesForSession } from './exerciseSelectors';
+import { buildWorkoutPrescription } from './progressionEngine';
+import { createSeededRng } from '@/utils/random';
 
-/**
- * Generate a workout session with dynamic parameters
- */
-export function generateDynamicWorkoutSession(
-  sessionType: 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body',
-  dayNumber: number,
-  client: Client
-): WorkoutSession {
-  const goalParams = GOAL_TRAINING_PARAMS[client.primaryGoal] || GOAL_TRAINING_PARAMS.maintenance;
-  const expConfig = EXPERIENCE_ADJUSTMENTS[client.trainingExperience] || EXPERIENCE_ADJUSTMENTS.intermediate;
-  
-  const exercises = selectExercisesForSession(
-    sessionType, 
-    client.trainingExperience,
-    client.equipmentAvailable || []
-  );
-  
-  const workoutExercises: WorkoutExercise[] = exercises.map((exercise, idx) => {
-    let sets = Math.max(2, goalParams.sets + expConfig.setModifier);
-    let reps = goalParams.reps;
-    let rest = goalParams.rest;
-    let intensity = goalParams.intensity;
-    
-    // Adjust for compound movements
-    if (exercise.name.toLowerCase().includes('squat') || 
-        exercise.name.toLowerCase().includes('deadlift') ||
-        exercise.name.toLowerCase().includes('bench press')) {
-      sets = Math.min(sets + 1, 5);
-      reps = client.primaryGoal === 'fat_loss' ? '8-10' : '5-8';
-      rest = 120;
-      intensity = 'RPE 8-9';
-    }
-    
+const WEEK_OPTIONS = [4, 5, 6, 7, 8] as const;
+
+const trainingObjective = (goal: Client['primaryGoal']): TrainingPlan['objective'] => {
+  switch (goal) {
+    case 'fat_loss': return 'Lose body fat while preserving strength.';
+    case 'muscle_gain': return 'Build lean muscle with structured volume and progression.';
+    case 'recomposition': return 'Improve body composition through strength and metabolic training.';
+    case 'maintenance': return 'Maintain strength and build consistency without excess fatigue.';
+    default: return 'Build consistency and strength safely.';
+  }
+};
+
+const phasePlan = (goal: Client['primaryGoal'], duration: number) => {
+  const breakPoint = Math.ceil(duration / 2);
+  return [
+    {
+      key: 'foundation',
+      name: 'Foundation',
+      objective: goal === 'fat_loss'
+        ? 'Build movement quality, prepare tendons, and raise baseline calorie burn.'
+        : 'Build strength, technique, and consistent training habits.',
+      startWeek: 1,
+      endWeek: breakPoint,
+    },
+    {
+      key: 'build',
+      name: 'Build',
+      objective: goal === 'fat_loss'
+        ? 'Increase training demand with controlled volume and short rests.'
+        : 'Progress strength and muscle through targeted overload.',
+      startWeek: breakPoint + 1,
+      endWeek: duration,
+    },
+  ];
+};
+
+const chooseDuration = (frequency: number): number => {
+  if (frequency <= 3) return 4;
+  if (frequency === 4) return 6;
+  if (frequency === 5) return 7;
+  return 8;
+};
+
+const sessionPatternForFrequency = (daysPerWeek: number) => {
+  if (daysPerWeek <= 3) return Array(daysPerWeek).fill('full_body');
+  if (daysPerWeek === 4) return ['upper', 'lower', 'upper', 'lower'];
+  if (daysPerWeek === 5) return ['upper', 'lower', 'upper', 'lower', 'full_body'];
+  if (daysPerWeek === 6) return ['push', 'pull', 'legs', 'push', 'pull', 'legs'];
+  return ['full_body', 'upper', 'lower', 'push', 'pull', 'legs'].slice(0, daysPerWeek);
+};
+
+const phaseTypeForGoal = (goal: Client['primaryGoal']): TrainingPlan['phase'] => {
+  switch (goal) {
+    case 'fat_loss': return 'endurance';
+    case 'muscle_gain': return 'hypertrophy';
+    case 'recomposition': return 'hypertrophy';
+    case 'maintenance': return 'strength';
+    default: return 'strength';
+  }
+};
+
+const mapSessionLabel = (sessionType: WorkoutSession['sessionType']) => {
+  switch (sessionType) {
+    case 'upper': return 'Upper Body';
+    case 'lower': return 'Lower Body';
+    case 'push': return 'Push Day';
+    case 'pull': return 'Pull Day';
+    case 'legs': return 'Leg Day';
+    case 'full_body': return 'Full Body';
+    case 'cardio': return 'Conditioning';
+    case 'rest': return 'Recovery';
+    default: return 'Workout';
+  }
+};
+
+const buildWeek = (
+  weekNumber: number,
+  sessionPattern: readonly ('upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body')[],
+  client: Client,
+  phaseName: string,
+  phaseObjective: string,
+): TrainingWeek => {
+  const sessions: WorkoutSession[] = sessionPattern.map((sessionType, idx) => {
+    const dayNumber = idx + 1;
+    const exercises = selectExercisesForSession(
+      sessionType,
+      client.trainingExperience,
+      client.equipmentAvailable ?? client.equipment,
+      createSeededRng(`${client.id}-${weekNumber}-${sessionType}`),
+    );
+
+    const workoutExercises: WorkoutExercise[] = exercises.map((exercise, exerciseIndex) => {
+      const goalParams = GOAL_TRAINING_PARAMS[client.primaryGoal] || GOAL_TRAINING_PARAMS.maintenance;
+      const prescription = buildWorkoutPrescription(
+        exercise,
+        client.preferredTrainingStyle,
+        client.trainingExperience,
+        client.equipmentAvailable ?? client.equipment,
+        goalParams.reps,
+        goalParams.intensity,
+        exerciseIndex === 0 ? 0 : undefined,
+      );
+
+      const isCompound = ['squat', 'deadlift', 'bench', 'row', 'press', 'pull-up', 'dip'].some(token => exercise.name.toLowerCase().includes(token));
+      const sets = Math.max(3, goalParams.sets + (isCompound ? 1 : 0));
+      const rest = isCompound ? Math.max(90, goalParams.rest) : goalParams.rest;
+
+      return {
+        exercise,
+        sets,
+        reps: goalParams.reps,
+        rest,
+        intensity: prescription.targetRPE,
+        tempo: client.trainingExperience === 'beginner' ? '3-1-2-0' : '2-0-2-0',
+        notes: client.trainingExperience === 'beginner'
+          ? 'Focus on clean setup, controlled descent, and stable position.'
+          : 'Move with control and use the full rep range. Log RPE for each set.',
+        targetRPE: prescription.targetRPE,
+        targetLoad: prescription.targetLoad,
+        loadUnit: prescription.loadUnit,
+        equipmentType: exercise.equipment.length === 0 ? 'bodyweight' : 'barbell',
+        progressionHint: prescription.progressionHint,
+        progressionRule: 'Use RPE and rep completion to guide the next session load.',
+      };
+    });
+
+    const weekGoal = GOAL_TRAINING_PARAMS[client.primaryGoal] || GOAL_TRAINING_PARAMS.maintenance;
     return {
-      exercise,
-      sets,
-      reps,
-      rest,
-      intensity,
-      tempo: client.trainingExperience === 'beginner' ? '3-1-2-0' : '2-0-2-0',
-      notes: client.trainingExperience === 'beginner' ? 'Focus on form and controlled movement' : undefined,
+      id: `${client.id}-w${weekNumber}-s${dayNumber}`,
+      weekNumber,
+      dayNumber,
+      sessionType,
+      name: `${mapSessionLabel(sessionType)} • Week ${weekNumber}`,
+      duration: client.sessionDuration,
+      exercises: workoutExercises,
+      notes: `Complete this workout with a strong warm-up. Track RPE for each set and keep the final set within ${weekGoal.reps} at ${weekGoal.intensity}.`,
     };
   });
-  
-  const sessionName = {
-    upper: 'Upper Body',
-    lower: 'Lower Body',
-    push: 'Push Day',
-    pull: 'Pull Day',
-    legs: 'Leg Day',
-    full_body: 'Full Body',
-  }[sessionType];
-  
-  return {
-    id: `session-${dayNumber}`,
-    dayNumber,
-    sessionType,
-    name: `${sessionName} - Day ${dayNumber}`,
-    duration: client.sessionDuration || 60,
-    exercises: workoutExercises,
-    notes: `Warm up 5-10 minutes. Rest ${goalParams.rest}s between sets. Cool down and stretch after.`,
-  };
-}
 
-/**
- * Generate a complete training plan based on client data
- */
-export function generateDynamicTrainingPlan(client: Client): TrainingPlan {
-  const daysPerWeek = client.trainingDaysPerWeek || 3;
-  const workouts: WorkoutSession[] = [];
-  
-  // Select split based on training frequency
-  let split: 'full_body' | 'upper_lower' | 'push_pull_legs';
-  let sessionPattern: ('upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body')[];
-  
-  if (daysPerWeek <= 3) {
-    split = 'full_body';
-    sessionPattern = Array(daysPerWeek).fill('full_body');
-  } else if (daysPerWeek === 4) {
-    split = 'upper_lower';
-    sessionPattern = ['upper', 'lower', 'upper', 'lower'];
-  } else {
-    split = 'push_pull_legs';
-    const pplPattern: ('push' | 'pull' | 'legs')[] = ['push', 'pull', 'legs'];
-    sessionPattern = [];
-    for (let i = 0; i < daysPerWeek; i++) {
-      sessionPattern.push(pplPattern[i % 3]);
-    }
-  }
-  
-  // Generate each workout session
-  sessionPattern.forEach((sessionType, idx) => {
-    workouts.push(generateDynamicWorkoutSession(sessionType, idx + 1, client));
-  });
-  
-  // Determine training phase based on goal
-  const phase: 'strength' | 'hypertrophy' | 'power' | 'endurance' = 
-    client.primaryGoal === 'muscle_gain' ? 'hypertrophy' :
-    client.primaryGoal === 'fat_loss' ? 'endurance' :
-    'strength';
-  
   return {
-    id: `training-${Date.now()}`,
+    weekNumber,
+    phase: phaseName,
+    objective: phaseObjective,
+    sessions,
+  };
+};
+
+export function generateDynamicTrainingPlan(client: Client): TrainingPlan {
+  const daysPerWeek = Math.min(Math.max(client.trainingDaysPerWeek, 3), 6);
+  const duration = chooseDuration(daysPerWeek);
+  const split = daysPerWeek <= 3 ? 'full_body' : daysPerWeek === 4 ? 'upper_lower' : 'push_pull_legs';
+  const phase = phaseTypeForGoal(client.primaryGoal);
+  const phases = phasePlan(client.primaryGoal, duration);
+  const sessionPattern = sessionPatternForFrequency(daysPerWeek);
+
+  const weeks: TrainingWeek[] = Array.from({ length: duration }, (_, index) => {
+    const weekNumber = index + 1;
+    const currentPhase = phases.find(p => weekNumber >= p.startWeek && weekNumber <= p.endWeek) ?? phases[phases.length - 1];
+    return buildWeek(weekNumber, sessionPattern, client, currentPhase.name, currentPhase.objective);
+  });
+
+  const workouts = weeks.flatMap(week => week.sessions);
+
+  return {
+    id: `training-${client.id}-${Date.now()}`,
     clientId: client.id,
     name: `${client.primaryGoal.replace('_', ' ')} ${split.replace('_', '/')} Program`,
-    duration: 4, // 4-week cycles
+    objective: trainingObjective(client.primaryGoal),
+    duration,
     frequency: daysPerWeek,
     split,
     phase,
+    phases,
+    weeks,
     workouts,
-    progressionScheme: client.trainingExperience === 'beginner' 
-      ? 'Add 2.5kg when completing all sets with good form'
-      : 'Progressive overload: Increase weight 2.5-5kg or add 1-2 reps per week',
+    progressionScheme: 'Autoregulated progression using double progression and RPE-based load decisions.',
+    programDescription: `A ${duration}-week training block designed for ${client.primaryGoal.replace('_', ' ')} with ${daysPerWeek}-day frequency and equipment-aware loading.`,
     createdAt: new Date().toISOString(),
   };
 }
