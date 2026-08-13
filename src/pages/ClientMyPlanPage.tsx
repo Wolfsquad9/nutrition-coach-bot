@@ -18,61 +18,12 @@ import { fetchActiveTrainingPlan } from '@/services/supabaseTrainingPlanService'
 import { TrainingPlanDisplay } from '@/components/TrainingPlanDisplay';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import type { PlanPayload } from '@/services/supabasePlanService';
-import type { Exercise, TrainingPlan as PersistedTrainingPlan, WorkoutSession } from '@/types';
-
-interface TrainingPlanData {
-  split: string;
-  sessions: number;
-  workouts: Array<{
-    day: number;
-    name: string;
-    exercises: Array<{
-      name: string;
-      sets: number;
-      reps: string;
-    }>;
-  }>;
-}
-
-const getExerciseName = (ex: Exercise | unknown): string => {
-  if (!ex || typeof ex !== 'object') return 'Exercise';
-  const obj = ex as Record<string, unknown>;
-  const exercise = obj.exercise;
-  if (exercise && typeof exercise === 'object') {
-    const name = (exercise as Record<string, unknown>).name;
-    if (typeof name === 'string') return name;
-  }
-  if (typeof obj.name === 'string') return obj.name;
-  return 'Exercise';
-};
-
-const normalizeTrainingPlan = (plan: PersistedTrainingPlan | null): TrainingPlanData | null => {
-  if (!plan) return null;
-  const workouts: WorkoutSession[] = Array.isArray(plan.workouts) ? plan.workouts : [];
-  return {
-    split: plan.split || 'Custom',
-    sessions:
-      plan.frequency ??
-      workouts.length ??
-      3,
-    workouts: workouts.map((w, idx) => ({
-      day: (w as unknown as { day?: number; dayNumber?: number }).day
-        ?? (w as unknown as { dayNumber?: number }).dayNumber
-        ?? idx + 1,
-      name: w.name || `Workout ${idx + 1}`,
-      exercises: (w.exercises || []).map((ex) => ({
-        name: getExerciseName(ex),
-        sets: ex.sets ?? 3,
-        reps: ex.reps || '10-12',
-      })),
-    })),
-  };
-};
+import type { TrainingPlan as PersistedTrainingPlan } from '@/types';
 
 export default function ClientMyPlanPage() {
   const { clientId, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [plan, setPlan] = useState<PlanPayload | null>(null);
-  const [trainingPlan, setTrainingPlan] = useState<TrainingPlanData | null>(null);
+  const [trainingPlan, setTrainingPlan] = useState<PersistedTrainingPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,7 +57,7 @@ export default function ClientMyPlanPage() {
       }
 
       if (!cancelled) {
-        setTrainingPlan(normalizeTrainingPlan(trainingResult.plan));
+        setTrainingPlan(trainingResult.plan);
       }
       setLoading(false);
     }

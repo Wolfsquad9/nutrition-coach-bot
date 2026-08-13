@@ -2,169 +2,175 @@
  * Training tab page — displays the persisted training plan and workout logging.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useAppLayout } from '@/hooks/useAppLayout';
 import { fetchActiveTrainingPlan, saveTrainingPlan } from '@/services/supabaseTrainingPlanService';
-import { applySessionResult } from '@/services/plan/progressionEngine';
-import type { TrainingPlan, WorkoutExercise, SessionResult } from '@/types';
+import { fetchSessionLogs } from '@/services/supabaseSessionLogService';
+import { generateDynamicTrainingPlan } from '@/services/plan/workoutGenerator';
+import { selectClientProgress } from '@/services/plan/progressSelector';
+import { SessionExecutionForm } from '@/components/training/SessionExecutionForm';
+import {
+  buildTrainingPlanInput,
+  EQUIPMENT_OPTIONS,
+  TRAINING_DAYS_OPTIONS,
+  TRAINING_STYLE_OPTIONS,
+} from '@/services/plan/trainingInput';
+import type { TrainingPlan, SessionLog, Client } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Calendar, ClipboardCheck, Sparkles } from 'lucide-react';
-
-type ExerciseLog = {
-  exerciseId: string;
-  load: number;
-  sets: number;
-  reps: string;
-  rpe: number;
-  notes: string;
-};
-
-const DEFAULT_EXERCISE_LOG = (exerciseId: string): ExerciseLog => ({
-  exerciseId,
-  load: 0,
-  sets: 0,
-  reps: '',
-  rpe: 7,
-  notes: '',
-});
-
-const parseRepString = (value: string): number[] =>
-  value
-    .split(',')
-    .map(item => Number(item.trim()))
-    .filter(Number.isFinite)
-    .map(Number);
+import { Loader2, Calendar, Sparkles, RefreshCw } from 'lucide-react';
 
 export default function TrainingPage() {
   const { clientId } = useParams<{ clientId: string }>();
+  const { activeClientId: activeClientIdFromContext, activeClient } = useAppLayout();
+  const clientIdToUse = clientId ?? activeClientIdFromContext;
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
+  const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [exerciseLogs, setExerciseLogs] = useState<Record<string, ExerciseLog>>({});
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const { toast } = useToast();
+  const canGeneratePlan = Boolean(clientIdToUse && activeClient);
+
+  // ---- Training questionnaire state. sessionDuration, preferredTrainingStyle
+  // and equipment belong to the Training questionnaire (not the persistent
+  // client profile), so they live only here. Missing values are never
+  // silently replaced with arbitrary training defaults. ----
+  const [trainingExperience, setTrainingExperience] = useState<Client['trainingExperience'] | undefined>(undefined);
+  const [trainingDaysPerWeek, setTrainingDaysPerWeek] = useState<number | undefined>(undefined);
+  const [sessionDuration, setSessionDuration] = useState<number | undefined>(undefined);
+  const [preferredTrainingStyle, setPreferredTrainingStyle] = useState<Client['preferredTrainingStyle'] | undefined>(undefined);
+  const [equipment, setEquipment] = useState<string[]>([]);
+
+  // Load persisted training-profile values into the questionnaire once per
+  // client. Fields with no persisted value stay empty until completed.
+  const loadedClientId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeClient) return;
+    if (loadedClientId.current === activeClient.id) return;
+    loadedClientId.current = activeClient.id;
+    setTrainingExperience(activeClient.trainingExperience ?? undefined);
+    setTrainingDaysPerWeek(activeClient.trainingDaysPerWeek ?? undefined);
+    setSessionDuration(activeClient.sessionDuration ?? undefined);
+    setPreferredTrainingStyle(activeClient.preferredTrainingStyle ?? undefined);
+    setEquipment(activeClient.equipment ?? []);
+  }, [activeClient]);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientIdToUse) return;
     let cancelled = false;
 
     async function loadPlan() {
       setLoading(true);
       setError(null);
-      const result = await fetchActiveTrainingPlan(clientId);
+      const [planResult, logsResult] = await Promise.all([
+        fetchActiveTrainingPlan(clientIdToUse),
+        fetchSessionLogs(clientIdToUse),
+      ]);
       if (cancelled) return;
-      if (result.error) {
-        setError(result.error);
-      } else if (!result.plan) {
+      if (planResult.error) {
+        setError(planResult.error);
+      } else if (!planResult.plan) {
         setError('No active training plan found for this client. Generate and save a plan first.');
       } else {
-        setPlan(result.plan);
-        setExerciseLogs(
-          Object.fromEntries(
-            result.plan.workouts.flatMap(workout => workout.exercises.map(ex => [
-              ex.exercise.id,
-              DEFAULT_EXERCISE_LOG(ex.exercise.id),
-            ])),
-          ),
-        );
+        setPlan(planResult.plan);
+        // Reload keeps the existing active plan and its saved execution history.
+        // Progress is derived from session_logs (scoped by plan_id), never from
+        // a regenerated plan or stale cached progression bookkeeping.
+        setSessionLogs(logsResult.logs ?? []);
+        if (logsResult.error) {
+          console.warn('[TrainingPage] failed to load saved execution data:', logsResult.error);
+        }
       }
       setLoading(false);
     }
 
     loadPlan();
     return () => { cancelled = true; };
-  }, [clientId]);
+  }, [clientIdToUse]);
 
-  const currentWeekNumber = useMemo(() => {
-    if (!plan) return 1;
-    const stateWeek = plan.progressionState?.currentWeek;
-    return stateWeek && stateWeek >= 1 && stateWeek <= plan.duration ? stateWeek : 1;
-  }, [plan]);
-
-  const currentSessionIndex = useMemo(() => {
-    if (!plan) return 1;
-    const stateIndex = plan.progressionState?.currentSessionIndex;
-    return stateIndex && stateIndex >= 1 ? stateIndex : 1;
-  }, [plan]);
-
-  const currentWeek = useMemo(() => {
-    if (!plan) return null;
-    return plan.weeks.find(week => week.weekNumber === currentWeekNumber) ?? plan.weeks[0];
-  }, [plan, currentWeekNumber]);
-
-  const currentSession = useMemo(() => {
-    if (!currentWeek) return null;
-    return currentWeek.sessions[currentSessionIndex - 1] ?? currentWeek.sessions[0];
-  }, [currentWeek, currentSessionIndex]);
-
-  const nextSession = useMemo(() => {
-    if (!plan || !currentSession) return null;
-    const allSessions = plan.weeks.flatMap(week => week.sessions);
-    const currentIndex = allSessions.findIndex(session => session.id === currentSession.id);
-    return allSessions[currentIndex + 1] ?? null;
-  }, [plan, currentSession]);
-
-  const updateLog = (exerciseId: string, patch: Partial<ExerciseLog>) => {
-    setExerciseLogs(prev => ({
-      ...prev,
-      [exerciseId]: {
-        ...prev[exerciseId],
-        ...patch,
-      },
-    }));
+  const toggleEquipment = (item: string) => {
+    setEquipment(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
   };
 
-  const handleSubmit = async () => {
-    if (!plan || !currentSession || !clientId) return;
-    setSaving(true);
-
-    const exerciseResults = currentSession.exercises.map(ex => {
-      const log = exerciseLogs[ex.exercise.id] ?? DEFAULT_EXERCISE_LOG(ex.exercise.id);
-      const actualReps = parseRepString(log.reps);
-      return {
-        exerciseId: ex.exercise.id,
-        exerciseName: ex.exercise.name,
-        actualLoad: log.load,
-        actualReps,
-        actualSets: log.sets,
-        rpe: log.rpe,
-        completed: log.sets > 0 && actualReps.length > 0,
-        notes: log.notes,
-        timestamp: new Date().toISOString(),
-      };
-    });
-
-    const sessionResult: SessionResult = {
-      sessionId: currentSession.id,
-      weekNumber: currentWeek?.weekNumber ?? 1,
-      sessionIndex: currentSession.dayNumber,
-      completed: true,
-      actualDuration: currentSession.duration,
-      notes: 'Logged via training workspace.',
-      exercises: exerciseResults,
-      timestamp: new Date().toISOString(),
-    };
+  const handleGeneratePlan = async () => {
+    if (!clientIdToUse || !activeClient) return;
+    setIsGeneratingPlan(true);
+    setError(null);
 
     try {
-      const updatedPlan = applySessionResult(plan, currentSession, sessionResult);
-      const saveResult = await saveTrainingPlan(clientId, updatedPlan);
-      if (!saveResult.success) {
-        toast({ title: 'Save failed', description: saveResult.error || 'Unable to persist training progress.', variant: 'destructive' });
-      } else {
-        setPlan(updatedPlan);
-        toast({ title: 'Session logged', description: 'Next prescription has been updated.' });
+      const { input, missing } = buildTrainingPlanInput(activeClient, {
+        trainingExperience,
+        trainingDaysPerWeek,
+        sessionDuration,
+        preferredTrainingStyle,
+        equipment,
+      });
+      if (!input) {
+        setError(`Complete the training questionnaire to generate a plan. Missing: ${missing.join(', ')}.`);
+        return;
       }
+
+      const generatedPlan = generateDynamicTrainingPlan(input);
+      const saveResult = await saveTrainingPlan(clientIdToUse, generatedPlan);
+      if (!saveResult.success) {
+        setError(saveResult.error || 'Failed to save generated training plan.');
+        return;
+      }
+
+      // `save_training_plan` generates the authoritative `training_plans.id`
+      // UUID and returns it as `planId`. OVERRIDE the generated placeholder so
+      // the in-memory plan references the real persisted FK — otherwise the fake
+      // `plan.id` would be sent as `p_plan_id` (a UUID column) when logging a
+      // session, and PostgreSQL rejects it (22P02 invalid UUID).
+      const savedPlan = saveResult.planId
+        ? { ...generatedPlan, id: saveResult.planId }
+        : generatedPlan;
+
+      setPlan(savedPlan);
+      setShowQuestionnaire(false);
+      // A freshly generated plan has no execution history yet — progress starts
+      // at the first prescribed session. The plan itself is never rewritten when
+      // the client later logs sessions.
+      setSessionLogs([]);
+      toast({
+        title: 'Training plan generated',
+        description: 'The training plan is saved and ready in the training workspace.',
+      });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unexpected error saving session result';
-      toast({ title: 'Error', description: message, variant: 'destructive' });
+      setError(err instanceof Error ? err.message : 'Unable to generate training plan.');
     } finally {
-      setSaving(false);
+      setIsGeneratingPlan(false);
     }
+  };
+
+  // Client progress is DERIVED from the prescription + session_logs (scoped by
+  // plan_id). It never reads stale cached progression bookkeeping.
+  const progress = useMemo(
+    () => (plan ? selectClientProgress(plan, sessionLogs) : null),
+    [plan, sessionLogs],
+  );
+  const activeSession = progress?.activeSession ?? null;
+  const nextSession = progress?.nextSession ?? null;
+  const currentWeekNumber = progress?.currentWeek ?? 1;
+
+  const currentWeek = useMemo(
+    () => plan?.weeks.find(week => week.weekNumber === currentWeekNumber) ?? plan?.weeks[0] ?? null,
+    [plan, currentWeekNumber],
+  );
+
+  const handleLogged = (log: Omit<SessionLog, 'clientId'>) => {
+    // Optimistically record the saved execution; progress re-derives and the UI
+    // advances to the next workout in the same render (no plan regeneration).
+    setSessionLogs(prev => [...prev, { ...log, clientId: clientIdToUse ?? '' }]);
   };
 
   if (loading) {
@@ -178,16 +184,137 @@ export default function TrainingPage() {
     );
   }
 
-  if (error || !plan) {
+  if (error || !plan || showQuestionnaire) {
     return (
       <Card className="p-6 shadow-card">
-        <h2 className="text-2xl font-bold text-primary">Training</h2>
-        <p className="text-muted-foreground mt-2">{error ?? 'No training plan is available.'}</p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-primary">Training</h2>
+              <p className="text-muted-foreground mt-2">
+                {error ?? (plan ? 'Update the questionnaire, then regenerate the plan.' : 'No active training plan for this client. Complete the questionnaire to generate one.')}
+              </p>
+            </div>
+            {plan && !showQuestionnaire && (
+              <Button variant="outline" onClick={() => setShowQuestionnaire(true)}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Regenerate Plan
+              </Button>
+            )}
+          </div>
+
+          {/* Training questionnaire — the Training tab owns these inputs. */}
+          <div className="mt-2 space-y-5 rounded-2xl border border-border bg-card p-5">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Training questionnaire</h3>
+              <p className="text-sm text-muted-foreground">Complete the inputs below. Generation only happens when you press Generate.</p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <Label htmlFor="q-session-duration">Session duration (minutes)</Label>
+                <Input
+                  id="q-session-duration"
+                  type="number"
+                  min={15}
+                  max={180}
+                  value={sessionDuration ?? ''}
+                  onChange={e => setSessionDuration(e.target.value === '' ? undefined : parseInt(e.target.value, 10) || undefined)}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="q-training-days">Training days / week</Label>
+                <Select value={trainingDaysPerWeek ? String(trainingDaysPerWeek) : ''} onValueChange={v => setTrainingDaysPerWeek(parseInt(v, 10))}>
+                  <SelectTrigger id="q-training-days" className="mt-1"><SelectValue placeholder="Select days" /></SelectTrigger>
+                  <SelectContent className="bg-background border border-border z-50">
+                    {TRAINING_DAYS_OPTIONS.map(days => (
+                      <SelectItem key={days} value={String(days)}>{days} days</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="q-experience">Training experience</Label>
+                <Select value={trainingExperience ?? ''} onValueChange={v => setTrainingExperience(v as Client['trainingExperience'])}>
+                  <SelectTrigger id="q-experience" className="mt-1"><SelectValue placeholder="Select experience" /></SelectTrigger>
+                  <SelectContent className="bg-background border border-border z-50">
+                    <SelectItem value="beginner">Beginner</SelectItem>
+                    <SelectItem value="intermediate">Intermediate</SelectItem>
+                    <SelectItem value="advanced">Advanced</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="q-style">Training style</Label>
+                <Select value={preferredTrainingStyle ?? ''} onValueChange={v => setPreferredTrainingStyle(v as Client['preferredTrainingStyle'])}>
+                  <SelectTrigger id="q-style" className="mt-1"><SelectValue placeholder="Select style" /></SelectTrigger>
+                  <SelectContent className="bg-background border border-border z-50">
+                    {TRAINING_STYLE_OPTIONS.map(style => (
+                      <SelectItem key={style} value={style} className="capitalize">{style}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="q-goal">Primary goal</Label>
+                <div id="q-goal" className="mt-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground capitalize">
+                  {activeClient?.primaryGoal ? activeClient.primaryGoal.replace('_', ' ') : 'Not set on client profile'}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Label>Available equipment</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {EQUIPMENT_OPTIONS.map(item => (
+                  <label key={item} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground">
+                    <Checkbox
+                      checked={equipment.includes(item)}
+                      onCheckedChange={() => toggleEquipment(item)}
+                      className="border-border"
+                    />
+                    <span className="capitalize">{item.replace('-', ' ')}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex items-center justify-end gap-3">
+              {plan && showQuestionnaire && (
+                <Button type="button" variant="ghost" onClick={() => { setShowQuestionnaire(false); setError(null); }}>
+                  Cancel
+                </Button>
+              )}
+              <Button onClick={handleGeneratePlan} disabled={!canGeneratePlan || isGeneratingPlan}>
+                {isGeneratingPlan ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generate Plan
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
       </Card>
     );
   }
 
-  if (!currentSession) {
+  if (!plan.weeks.some(week => week.sessions.length > 0)) {
     return (
       <Card className="p-6 shadow-card">
         <h2 className="text-2xl font-bold text-primary">Training</h2>
@@ -231,149 +358,31 @@ export default function TrainingPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
         <section className="space-y-6">
-          <Card className="p-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Today's Workout</p>
-                <h2 className="mt-2 text-2xl font-semibold text-foreground">{currentSession.name}</h2>
-              </div>
-              <div className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">{currentSession.duration} min</div>
-            </div>
-
-            <div className="mt-6 space-y-4">
-              {currentSession.exercises.map((exercise) => (
-                <div key={exercise.exercise.id} className="rounded-3xl border border-border bg-card p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-base font-semibold text-foreground">{exercise.exercise.name}</p>
-                      <p className="text-sm text-muted-foreground">{exercise.exercise.primaryMuscles.join(', ')}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                      <div>
-                        <p className="text-muted-foreground">Sets</p>
-                        <p className="font-semibold text-foreground">{exercise.sets}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Reps</p>
-                        <p className="font-semibold text-foreground">{exercise.reps}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Load</p>
-                        <p className="font-semibold text-foreground">
-                          {exercise.targetLoad ?? '-'} {exercise.loadUnit ?? 'kg'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">RPE</p>
-                        <p className="font-semibold text-foreground">{exercise.targetRPE ?? 'RPE 7-8'}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-muted/10 p-3 text-sm text-muted-foreground">
-                      <strong className="text-foreground">Rest:</strong> {exercise.rest}s
-                    </div>
-                    <div className="rounded-2xl bg-muted/10 p-3 text-sm text-muted-foreground">
-                      <strong className="text-foreground">Progression:</strong> {exercise.progressionHint}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Session log</p>
-                <h2 className="mt-2 text-xl font-semibold text-foreground">Enter actual performance</h2>
-              </div>
-              <div className="flex items-center gap-2 rounded-full bg-secondary/10 px-3 py-1 text-xs uppercase tracking-wide text-secondary">
-                <ClipboardCheck className="h-4 w-4" /> Fast logging
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-4">
-              {currentSession.exercises.map((exercise) => {
-                const log = exerciseLogs[exercise.exercise.id] ?? DEFAULT_EXERCISE_LOG(exercise.exercise.id);
-                return (
-                  <div key={exercise.exercise.id} className="rounded-3xl border border-border bg-background p-4">
-                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{exercise.exercise.name}</p>
-                        <p className="text-xs text-muted-foreground">{exercise.sets} sets × {exercise.reps} @ {exercise.targetRPE}</p>
-                      </div>
-                      <div className="space-y-2 text-right text-xs text-muted-foreground sm:text-left">
-                        <div>Target: {exercise.targetLoad} {exercise.loadUnit}</div>
-                        <div>Rest {exercise.rest}s</div>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-4">
-                      <div className="space-y-2">
-                        <Label htmlFor={`load-${exercise.exercise.id}`}>Load</Label>
-                        <Input
-                          id={`load-${exercise.exercise.id}`}
-                          type="number"
-                          value={log.load || ''}
-                          onChange={(event) => updateLog(exercise.exercise.id, { load: Number(event.target.value) })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`sets-${exercise.exercise.id}`}>Sets</Label>
-                        <Input
-                          id={`sets-${exercise.exercise.id}`}
-                          type="number"
-                          value={log.sets || ''}
-                          onChange={(event) => updateLog(exercise.exercise.id, { sets: Number(event.target.value) })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`reps-${exercise.exercise.id}`}>Reps</Label>
-                        <Input
-                          id={`reps-${exercise.exercise.id}`}
-                          value={log.reps}
-                          placeholder="10,10,8"
-                          onChange={(event) => updateLog(exercise.exercise.id, { reps: event.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`rpe-${exercise.exercise.id}`}>RPE</Label>
-                        <Input
-                          id={`rpe-${exercise.exercise.id}`}
-                          type="number"
-                          step="0.5"
-                          min={1}
-                          max={10}
-                          value={log.rpe}
-                          onChange={(event) => updateLog(exercise.exercise.id, { rpe: Number(event.target.value) })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      <Label htmlFor={`notes-${exercise.exercise.id}`}>Notes</Label>
-                      <Textarea
-                        id={`notes-${exercise.exercise.id}`}
-                        value={log.notes}
-                        rows={2}
-                        onChange={(event) => updateLog(exercise.exercise.id, { notes: event.target.value })}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm text-muted-foreground">
-                Enter the completed load, completed sets, and set-by-set reps. Use the RPE field to capture how the final set felt.
-              </div>
-              <Button onClick={handleSubmit} disabled={saving}>
-                {saving ? 'Saving...' : 'Log Session'}
-              </Button>
-            </div>
-          </Card>
+          {activeSession ? (
+            <SessionExecutionForm
+              key={activeSession.id}
+              clientId={clientIdToUse || ''}
+              plan={plan}
+              session={activeSession}
+              sessionLogs={sessionLogs}
+              onLogged={handleLogged}
+            />
+          ) : (
+            <Card className="p-8 text-center">
+              <h2 className="text-xl font-bold text-foreground">
+                {nextSession ? 'Next workout is not due yet' : 'Program complete'}
+              </h2>
+              {nextSession ? (
+                <p className="mt-2 text-muted-foreground">
+                  Next workout: {nextSession.name} — it becomes active on its scheduled day.
+                </p>
+              ) : (
+                <p className="mt-2 text-muted-foreground">
+                  You have logged every prescribed session in this plan.
+                </p>
+              )}
+            </Card>
+          )}
         </section>
 
         <aside className="space-y-6">

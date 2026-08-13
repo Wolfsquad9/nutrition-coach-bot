@@ -19,6 +19,7 @@ import SignupPage from "@/pages/SignupPage";
 import NotFound from "./pages/NotFound";
 import PlanViewerPage from "./pages/PlanViewerPage";
 import ClientMyPlanPage from "./pages/ClientMyPlanPage";
+import ClientTrainingSessionPage from "./pages/ClientTrainingSessionPage";
 import ClientProgressPage from "./pages/ClientProgressPage";
 import ClientAlertsPage from "./pages/ClientAlertsPage";
 import ClientCheckinPage from "./pages/ClientCheckinPage";
@@ -54,6 +55,7 @@ const App = () => (
               {/* Client-facing protected routes — client only */}
               <Route element={<ProtectedRoute role="client"><ClientLayout /></ProtectedRoute>}>
                 <Route path="my-plan" element={<ClientMyPlanPage />} />
+                <Route path="train" element={<ClientTrainingSessionPage />} />
                 <Route path="checkin" element={<ClientCheckinPage />} />
                 <Route path="progress" element={<ClientProgressPage />} />
                 <Route path="alerts" element={<ClientAlertsPage />} />

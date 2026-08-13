@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Search, Check, X, Download, Upload, FileJson, Printer, Send, Loader2, Sparkles, Clock, Utensils, Flame } from 'lucide-react';
+import { Search, Check, X, Download, Upload, FileJson, Loader2, Sparkles, Clock, Utensils, Flame, Printer } from 'lucide-react';
 import { coreIngredients, type IngredientData } from '@/data/ingredientDatabase';
 import { Client } from '@/types';
 import {
@@ -20,7 +20,6 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { MacroDonutChart } from './MacroDonutChart';
 import { DietPlanDisplay } from './DietPlanDisplay';
-import { TrainingPlanDisplay } from './TrainingPlanDisplay';
 import { formatMacro, formatCalories } from '@/utils/formatters';
 import { type GeneratedRecipe, type MealType } from '@/services/recipeService';
 import { getClientLabel } from '@/utils/clientHelpers';
@@ -31,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { GeneratedDietPlan, GeneratedTrainingPlan } from './ingredient-manager/types';
+import type { GeneratedDietPlan } from './ingredient-manager/types';
 import { CATEGORIES, useFilteredIngredients } from './ingredient-manager/ingredientFilterUtils';
 import { useRestrictionManager } from './ingredient-manager/restrictionManager';
 import { useMacroSummary } from './ingredient-manager/macroSummarizer';
@@ -54,10 +53,8 @@ export default function EnhancedIngredientManager({
   const [clientRestrictions, setClientRestrictions] = useState<ClientIngredientRestrictions[]>([]);
   const [autoSubstitute, setAutoSubstitute] = useState(false);
   const [substitutionMatrix, setSubstitutionMatrix] = useState<Map<string, SubstitutionRule[]>>(new Map());
-  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
   const [generatedDietPlan, setGeneratedDietPlan] = useState<GeneratedDietPlan | null>(null);
-  const [generatedTrainingPlan, setGeneratedTrainingPlan] = useState<GeneratedTrainingPlan | null>(null);
   const [generatedRecipe, setGeneratedRecipe] = useState<GeneratedRecipe | null>(null);
   const [selectedMealType, setSelectedMealType] = useState<MealType>('lunch');
   const { toast } = useToast();
@@ -99,8 +96,6 @@ export default function EnhancedIngredientManager({
     exportRestrictions,
     importRestrictions,
     handlePrintPlan,
-    handleExportPDF,
-    handleSendWhatsApp,
   } = useIngredientExporter({
     clientRestrictions,
     setClientRestrictions,
@@ -108,19 +103,16 @@ export default function EnhancedIngredientManager({
     toast,
     activeClient,
     generatedDietPlan,
-    generatedTrainingPlan,
   });
 
-  const { handleGenerateRecipe, generateAIPlan } = useRecipeActionHandler({
+  const { handleGenerateRecipe } = useRecipeActionHandler({
     activeClientId,
     activeClient,
     getClientRestriction,
     selectedMealType,
     setIsGeneratingRecipe,
     setGeneratedRecipe,
-    setIsGeneratingPlan,
     setGeneratedDietPlan,
-    setGeneratedTrainingPlan,
     toast,
   });
 
@@ -360,20 +352,11 @@ export default function EnhancedIngredientManager({
             <div className="flex gap-4">
               <Button
                 onClick={handleGenerateRecipe}
-                disabled={isGeneratingRecipe || isGeneratingPlan}
+                disabled={isGeneratingRecipe}
                 className="flex-1"
               >
                 {isGeneratingRecipe ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Generate Recipe
-              </Button>
-              <Button
-                onClick={() => generateAIPlan('full')}
-                disabled={isGeneratingPlan || isGeneratingRecipe}
-                variant="secondary"
-                className="flex-1"
-              >
-                {isGeneratingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Generate Full Plan
               </Button>
             </div>
           </div>
@@ -481,37 +464,26 @@ export default function EnhancedIngredientManager({
       </Card>
 
       {/* Generated Plans Display */}
-      {generatedDietPlan && generatedTrainingPlan && (
+      {generatedDietPlan && (
         <div className="space-y-6">
           <Card className="bg-card shadow-card border-border">
             <CardHeader className="border-b border-border">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xl font-bold text-foreground">Generated Plans</CardTitle>
+                <CardTitle className="text-xl font-bold text-foreground">Generated Nutrition Plan</CardTitle>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handlePrintPlan}>
                     <Printer className="mr-2 h-4 w-4" />
                     Print
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleExportPDF}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export PDF
-                  </Button>
                   <Button variant="outline" size="sm" onClick={exportRestrictions}>
                     <FileJson className="mr-2 h-4 w-4" />
                     Export JSON
-                  </Button>
-                  <Button variant="default" size="sm" onClick={handleSendWhatsApp} className="bg-success text-success-foreground">
-                    <Send className="mr-2 h-4 w-4" />
-                    WhatsApp
                   </Button>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <DietPlanDisplay plan={generatedDietPlan} />
-                <TrainingPlanDisplay plan={generatedTrainingPlan} />
-              </div>
+              <DietPlanDisplay plan={generatedDietPlan} />
             </CardContent>
           </Card>
         </div>

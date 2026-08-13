@@ -22,13 +22,13 @@ export interface Client {
   weeklyWeightChange?: number; // kg per week (-1 to +0.5)
   
   // Training
-  trainingExperience: 'beginner' | 'intermediate' | 'advanced';
-  trainingDaysPerWeek: number; // 3-6
-  sessionDuration: number; // minutes
-  preferredTrainingStyle: 'strength' | 'hypertrophy' | 'powerlifting' | 'crossfit' | 'bodybuilding';
-  equipment: string[]; // Available equipment
+  trainingExperience?: 'beginner' | 'intermediate' | 'advanced';
+  trainingDaysPerWeek?: number; // 3-6
+  sessionDuration?: number; // minutes
+  preferredTrainingStyle?: 'strength' | 'hypertrophy' | 'powerlifting' | 'crossfit' | 'bodybuilding';
+  equipment?: string[]; // Available equipment
   equipmentAvailable?: string[]; // Alternative name for equipment
-  
+
   // Nutrition preferences
   dietType: 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian' | 'keto' | 'paleo';
   mealsPerDay: 3 | 4 | 5 | 6;
@@ -160,45 +160,42 @@ export type LoadUnit = 'kg' | 'lb' | 'bodyweight' | 'machine' | 'cable' | 'unkno
 
 export type EquipmentType = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'other';
 
-export interface ExerciseResult {
+/**
+ * Per-exercise execution data for a logged session. `sets` and `reps` are a
+ * read-only snapshot taken from the training-plan prescription (they are NOT
+ * user-editable). The user-entered execution fields are `load` and `rpe`, plus
+ * an optional `failed`/completion flag.
+ */
+export interface ExerciseExecution {
   exerciseId: string;
   exerciseName: string;
-  actualLoad?: number;
-  actualReps: number[];
-  actualSets: number;
+  sets: number; // from the generated prescription (read-only)
+  reps: string; // from the generated prescription (read-only)
+  load: number;
   rpe: number;
   completed: boolean;
+  failed: boolean;
   notes?: string;
-  timestamp: string;
 }
 
-export interface SessionResult {
+/**
+ * An independent session log. Persisted separately from the training-plan
+ * prescription so logging a session never mutates the plan. Maps 1:1 to a row
+ * in the `session_logs` table.
+ */
+export interface SessionLog {
+  id?: string;
+  clientId: string;
+  planId?: string | null;
   sessionId: string;
+  sessionName?: string;
   weekNumber: number;
   sessionIndex: number;
   completed: boolean;
-  actualDuration?: number;
+  failedToComplete: boolean;
   notes?: string;
-  exercises: ExerciseResult[];
-  timestamp: string;
-}
-
-export interface TrainingForecast {
-  sessionId: string;
-  summary: string;
-  targetLoad?: number;
-  loadUnit: LoadUnit;
-  repRange: string;
-  targetRPE: string;
-  notes?: string;
-}
-
-export interface TrainingProgressionState {
-  currentWeek: number;
-  currentSessionIndex: number;
-  sessionHistory: SessionResult[];
-  nextSessionId?: string;
-  futureForecast?: TrainingForecast[];
+  exercises: ExerciseExecution[];
+  loggedAt: string;
 }
 
 export interface WorkoutExercise {
@@ -246,9 +243,31 @@ export interface TrainingPlan {
   workouts: WorkoutSession[];
   progressionScheme: string;
   programDescription: string;
-  progressionState?: TrainingProgressionState;
+  /**
+   * Coach-owned scheduling anchor: ISO date (YYYY-MM-DD) of Week 1 / Day 1.
+   * Used by `selectClientProgress` for calendar-gated progression (Option B).
+   * Optional — when absent, progress is sequence-only.
+   */
+  startDate?: string;
   createdAt: string;
 }
+
+/**
+ * The single, complete, validated input the workout generator requires.
+ * Built by the Training tab from the persisted client profile plus the
+ * training questionnaire. Every field is required — the generator must
+ * never receive partial training data.
+ */
+export type TrainingPlanInput = {
+  id: string;
+  primaryGoal: Client['primaryGoal'];
+  trainingExperience: NonNullable<Client['trainingExperience']>;
+  trainingDaysPerWeek: number;
+  sessionDuration: number;
+  preferredTrainingStyle: NonNullable<Client['preferredTrainingStyle']>;
+  equipment: string[];
+  equipmentAvailable?: Client['equipmentAvailable'];
+};
 
 export interface NutritionPlan {
   id: string;

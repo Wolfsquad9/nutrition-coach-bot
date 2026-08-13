@@ -6,4 +6,4 @@ export * from './exerciseSelectors';
 export * from './workoutGenerator';
 export * from './recommendations';
 export * from './mealGenerator';
-export * from './planOrchestrator';
+export * from './trainingInput';

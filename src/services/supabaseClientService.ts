@@ -62,13 +62,13 @@ export function supabaseRowToClient(row: SupabaseClientRow): Client {
     weight: Number(row.weight),
     activityLevel: row.activity_level as Client['activityLevel'],
     primaryGoal: row.primary_goal as Client['primaryGoal'],
-    trainingExperience: (row.training_experience || 'intermediate') as Client['trainingExperience'],
-    trainingDaysPerWeek: row.training_frequency || 4,
-    sessionDuration: 60, // Default
-    preferredTrainingStyle: 'hypertrophy', // Default
-    equipment: [],
+    trainingExperience: row.training_experience as Client['trainingExperience'] | undefined,
+    trainingDaysPerWeek: row.training_frequency ?? undefined,
+    sessionDuration: undefined,
+    preferredTrainingStyle: undefined,
+    equipment: undefined,
     dietType: (row.diet_type || 'omnivore') as Client['dietType'],
-    mealsPerDay: 4, // Default
+    mealsPerDay: 4,
     intolerances: row.dietary_restrictions || [],
     allergies: row.allergies || [],
     dislikedFoods: row.disliked_foods || [],
