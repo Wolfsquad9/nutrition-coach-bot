@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { selectClientProgress, getSessionDate } from './progressSelector';
+import { selectClientProgress, getSessionDate, adaptExerciseLoad, adaptSessionPrescription, parseTargetRPE } from './progressSelector';
 import type { TrainingPlan, WorkoutSession, SessionLog } from '@/types';
 
 const PLAN_ID = 'a3f1d2c4-9e2b-4a6d-8c5f-0e7b9a1d3c5e';
@@ -180,6 +180,130 @@ describe('getSessionDate', () => {
     const plan = makePlan();
     delete plan.startDate;
     expect(getSessionDate(plan, makeSession('x', 1, 1))).toBeNull();
+  });
+});
+
+// --- RPE-driven progression -------------------------------------------------
+
+function makeExercisedSession(id: string, week: number, day: number, targetLoad: number, targetRPE = 'RPE 7-8'): WorkoutSession {
+  return {
+    id,
+    weekNumber: week,
+    dayNumber: day,
+    sessionType: 'full_body',
+    name: `Session ${id}`,
+    duration: 60,
+    exercises: [
+      {
+        exercise: {
+          id: 'ex-bench',
+          name: 'Barbell Bench Press',
+          category: 'chest',
+          equipment: ['barbell'],
+          difficulty: 'intermediate',
+          primaryMuscles: ['chest'],
+          secondaryMuscles: [],
+          instructions: [],
+        },
+        sets: 4,
+        reps: '8-10',
+        rest: 90,
+        targetRPE,
+        targetLoad,
+        loadUnit: 'kg',
+      },
+    ],
+  };
+}
+
+function makeExecLog(sessionId: string, rpe: number, load = 60, failed = false, planId = PLAN_ID): SessionLog {
+  return {
+    clientId: 'client-1',
+    planId,
+    sessionId,
+    sessionName: sessionId,
+    weekNumber: Number(sessionId[1]),
+    sessionIndex: Number(sessionId[2]),
+    completed: !failed,
+    failedToComplete: failed,
+    exercises: [
+      { exerciseId: 'ex-bench', exerciseName: 'Bench', sets: 4, reps: '8-10', load, rpe, completed: !failed, failed },
+    ],
+    loggedAt: '2026-01-06T00:00:00.000Z',
+  };
+}
+
+describe('parseTargetRPE', () => {
+  it('parses a range and a single value to a numeric midpoint', () => {
+    expect(parseTargetRPE('RPE 7-8')).toBe(7.5);
+    expect(parseTargetRPE('7-8')).toBe(7.5);
+    expect(parseTargetRPE('RPE 8')).toBe(8);
+    expect(parseTargetRPE('8')).toBe(8);
+  });
+  it('falls back to a safe 7.5 midpoint when unparseable', () => {
+    expect(parseTargetRPE(undefined)).toBe(7.5);
+    expect(parseTargetRPE('autoregulated')).toBe(7.5);
+  });
+});
+
+describe('adaptExerciseLoad (deterministic RPE progression)', () => {
+  it('easy session (actual RPE 6, target 7-8) progresses load up', () => {
+    expect(adaptExerciseLoad(60, 'RPE 7-8', 6, false, 'kg')).toBe(62.5);
+  });
+
+  it('hard-but-achieved session (actual RPE 8) holds — conservative', () => {
+    expect(adaptExerciseLoad(60, 'RPE 7-8', 8, false, 'kg')).toBe(60);
+  });
+
+  it('very hard session (actual RPE 9 / 9.5) blocks aggressive progression', () => {
+    expect(adaptExerciseLoad(60, 'RPE 7-8', 9, false, 'kg')).toBe(60);
+    expect(adaptExerciseLoad(60, 'RPE 7-8', 9.5, false, 'kg')).toBe(60);
+  });
+
+  it('failed session reduces load by one increment', () => {
+    expect(adaptExerciseLoad(60, 'RPE 7-8', 10, true, 'kg')).toBe(57.5);
+  });
+
+  it('no execution signal yet keeps the coach prescription', () => {
+    expect(adaptExerciseLoad(60, 'RPE 7-8', null, false, 'kg')).toBe(60);
+  });
+
+  it('is units-aware (bodyweight increments by one, machine by five)', () => {
+    expect(adaptExerciseLoad(60, 'RPE 7-8', 6, false, 'bodyweight')).toBe(61);
+    expect(adaptExerciseLoad(60, 'RPE 7-8', 6, false, 'machine')).toBe(65);
+  });
+});
+
+describe('adaptSessionPrescription (next prescription reflects prior RPE)', () => {
+  it('easy prior session lifts the next session target load', () => {
+    const session = makeExercisedSession('s12', 1, 2, 60);
+    const plan = { ...makePlan(), weeks: [{ weekNumber: 1, phase: 'foundation', objective: 'base', sessions: [makeSession('s11', 1, 1), session] }] };
+    const adapted = adaptSessionPrescription(plan, [makeExecLog('s11', 6)], session);
+    expect(adapted.exercises[0].targetLoad).toBe(62.5);
+  });
+
+  it('hard prior session holds the next session target load', () => {
+    const session = makeExercisedSession('s12', 1, 2, 60);
+    const plan = { ...makePlan(), weeks: [{ weekNumber: 1, phase: 'foundation', objective: 'base', sessions: [makeSession('s11', 1, 1), session] }] };
+    const adapted = adaptSessionPrescription(plan, [makeExecLog('s11', 8)], session);
+    expect(adapted.exercises[0].targetLoad).toBe(60);
+  });
+
+  it('immutability: the plan prescription is never mutated', () => {
+    const session = makeExercisedSession('s12', 1, 2, 60);
+    const plan = { ...makePlan(), weeks: [{ weekNumber: 1, phase: 'foundation', objective: 'base', sessions: [makeSession('s11', 1, 1), session] }] };
+    adaptSessionPrescription(plan, [makeExecLog('s11', 6)], session);
+    expect(session.exercises[0].targetLoad).toBe(60);
+    expect(plan.weeks[0].sessions[1].exercises[0].targetLoad).toBe(60);
+  });
+
+  it('selectClientProgress exposes an adapted ACTIVE session after an easy prior session', () => {
+    const s1 = makeSession('s11', 1, 1);
+    const s2 = makeExercisedSession('s12', 1, 2, 60);
+    const plan = { ...makePlan(), weeks: [{ weekNumber: 1, phase: 'foundation', objective: 'base', sessions: [s1, s2] }] };
+    const p = selectClientProgress(plan, [makeExecLog('s11', 6)], day('2026-01-06'));
+    expect(p.activeSession?.id).toBe('s12');
+    expect(p.activeSession?.exercises[0].targetLoad).toBe(62.5);
   });
 });
 

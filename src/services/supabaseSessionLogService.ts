@@ -32,24 +32,74 @@ const TABLE = 'session_logs';
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
+export type SessionValidation = { ok: true } | { ok: false; error: string };
+
+/**
+ * Deterministic, frontend-local validation of a session-log payload. Mirrors
+ * the `save_session_log` RPC guards so an invalid/empty payload is rejected
+ * before it ever reaches the database (the backend also enforces these).
+ *
+ * "Complete session" (per the execution model): the execution array is
+ * non-empty and, when the session is logged as completed, every exercise
+ * carries a valid load (>= 0) and a valid RPE (1-10). Failed sessions still
+ * require non-empty execution — an empty session can never be logged.
+ */
+export function validateSessionLog(
+  clientId: string,
+  log: Omit<SessionLog, 'clientId'>,
+): SessionValidation {
+  if (!clientId) return { ok: false, error: 'clientId is required' };
+  if (!log) return { ok: false, error: 'Session log is required' };
+  if (!log.sessionId) return { ok: false, error: 'sessionId is required' };
+  if (!log.planId) return { ok: false, error: 'planId is required' };
+  if (typeof log.weekNumber !== 'number') return { ok: false, error: 'weekNumber is required' };
+  if (typeof log.sessionIndex !== 'number') return { ok: false, error: 'sessionIndex is required' };
+
+  const exercises = log.exercises ?? [];
+  if (!Array.isArray(exercises) || exercises.length === 0) {
+    return { ok: false, error: 'Cannot log a session with no exercise execution' };
+  }
+
+  if (log.completed) {
+    for (const ex of exercises) {
+      const load = ex.load;
+      const rpe = ex.rpe;
+      if (typeof load !== 'number' || !Number.isFinite(load) || load < 0) {
+        return { ok: false, error: `Exercise "${ex.exerciseName ?? ex.exerciseId}" requires a valid load` };
+      }
+      if (typeof rpe !== 'number' || !Number.isFinite(rpe) || rpe < 1 || rpe > 10) {
+        return { ok: false, error: `Exercise "${ex.exerciseName ?? ex.exerciseId}" requires an RPE between 1 and 10` };
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
 /** Serialize an execution-data array into a JSON value for the DB. */
 const serializeExecutions = (executions: ExerciseExecution[]): unknown =>
   JSON.parse(JSON.stringify(executions ?? []));
 
 /**
  * Persist a single session log. The insert is authorized and atomic via the
- * `save_session_log` SECURITY DEFINER RPC (mirrors save_training_plan's client
- * authorization). Column names in the RPC args are snake_case.
+ * `save_session_log` SECURITY DEFINER RPC, which allows ONLY the authenticated
+ * client linked to the client record to log their own session execution.
+ * Column names in the RPC args are snake_case.
  */
 export async function saveSessionLog(
   clientId: string,
   log: Omit<SessionLog, 'clientId'>,
 ): Promise<{ success: boolean; error: string | null; sessionLogId: string | null }> {
+  // Reject invalid/empty payloads before touching the network. The backend RPC
+  // enforces the same rules, but failing fast avoids wasted requests and gives
+  // deterministic, testable validation feedback.
+  const validation = validateSessionLog(clientId, log);
+  if (validation.ok === false) {
+    return { success: false, error: validation.error, sessionLogId: null };
+  }
+
   try {
-    if (!clientId) {
-      return { success: false, error: 'clientId is required', sessionLogId: null };
-    }
-    if (!log || !log.sessionId) {
+    if (!log.sessionId) {
       return { success: false, error: 'sessionId is required', sessionLogId: null };
     }
 

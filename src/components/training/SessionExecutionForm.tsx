@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ClipboardCheck } from 'lucide-react';
 import { saveSessionLog } from '@/services/supabaseSessionLogService';
 import { useToast } from '@/hooks/use-toast';
-import type { TrainingPlan, WorkoutSession, SessionLog, ExerciseExecution } from '@/types';
+import type { TrainingPlan, WorkoutSession, SessionLog, ExerciseExecution, WorkoutExercise } from '@/types';
 
 type ExerciseLog = {
   exerciseId: string;
@@ -83,8 +83,36 @@ export function SessionExecutionForm({
     }));
   };
 
+  /**
+   * An exercise is "filled" when the client either records a valid RPE and a
+   * real load (bodyweight exempts the load), or explicitly marks it failed.
+   * A session is loggable only when EVERY prescribed exercise is filled — an
+   * empty / partially-entered session can never be logged as complete or saved.
+   */
+  const isFilled = (exercise: WorkoutExercise): boolean => {
+    const log = exerciseLogs[exercise.exercise.id];
+    if (!log) return false;
+    const rpeValid = typeof log.rpe === 'number' && log.rpe >= 1 && log.rpe <= 10;
+    if (!rpeValid) return false;
+    if (log.failedToComplete) return true; // explicitly failed counts as recorded
+    if (exercise.loadUnit === 'bodyweight') return true; // bodyweight needs no load entry
+    return Number(log.load) > 0;
+  };
+
+  const isSessionValid = session.exercises.every(isFilled);
+
   const handleSubmit = async () => {
     if (saving) return;
+    // Never allow an empty / partially-entered session to be submitted. Both the
+    // frontend and the backend enforce this; this guard fails fast client-side.
+    if (!isSessionValid) {
+      toast({
+        title: 'Session incomplete',
+        description: 'Enter valid load and RPE for every exercise (or mark it failed) before logging.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSaving(true);
 
     // Sets/reps come exclusively from the prescription (read-only). The only
@@ -127,8 +155,8 @@ export function SessionExecutionForm({
       } else {
         onLogged(sessionLog);
         toast({
-          title: 'Session logged successfully',
-          description: 'Execution saved. Plan prescription untouched.',
+          title: 'Session completed',
+          description: 'Well done — consistent execution builds durable progress. Your next session is ready when you are.',
         });
       }
     } catch (err: unknown) {
@@ -289,9 +317,13 @@ export function SessionExecutionForm({
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
-            Sets and reps are fixed by the plan. Enter the completed load and RPE for each exercise, and mark any you failed to complete.
+            {isSessionValid ? (
+              <>Sets and reps are fixed by the plan. Enter the completed load and RPE for each exercise, and mark any you failed to complete.</>
+            ) : (
+              <span className="text-destructive">Complete every exercise — enter a valid load and RPE (or mark it failed) before you can log this session.</span>
+            )}
           </div>
-          <Button onClick={handleSubmit} disabled={saving}>
+          <Button onClick={handleSubmit} disabled={!isSessionValid || saving}>
             {saving ? 'Saving...' : 'Log Session'}
           </Button>
         </div>

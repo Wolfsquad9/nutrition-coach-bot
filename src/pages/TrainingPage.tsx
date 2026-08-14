@@ -16,7 +16,6 @@ import { fetchActiveTrainingPlan, saveTrainingPlan } from '@/services/supabaseTr
 import { fetchSessionLogs } from '@/services/supabaseSessionLogService';
 import { generateDynamicTrainingPlan } from '@/services/plan/workoutGenerator';
 import { selectClientProgress } from '@/services/plan/progressSelector';
-import { SessionExecutionForm } from '@/components/training/SessionExecutionForm';
 import {
   buildTrainingPlanInput,
   EQUIPMENT_OPTIONS,
@@ -25,7 +24,7 @@ import {
 } from '@/services/plan/trainingInput';
 import type { TrainingPlan, SessionLog, Client } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Calendar, Sparkles, RefreshCw } from 'lucide-react';
+import { Loader2, Calendar, Sparkles, RefreshCw, ClipboardList, TrendingUp } from 'lucide-react';
 
 export default function TrainingPage() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -167,11 +166,11 @@ export default function TrainingPage() {
     [plan, currentWeekNumber],
   );
 
-  const handleLogged = (log: Omit<SessionLog, 'clientId'>) => {
-    // Optimistically record the saved execution; progress re-derives and the UI
-    // advances to the next workout in the same render (no plan regeneration).
-    setSessionLogs(prev => [...prev, { ...log, clientId: clientIdToUse ?? '' }]);
-  };
+  // Order completed execution history newest-first for the coach review panel.
+  const history = useMemo(
+    () => [...sessionLogs].sort((a, b) => (a.loggedAt > b.loggedAt ? -1 : a.loggedAt < b.loggedAt ? 1 : 0)),
+    [sessionLogs],
+  );
 
   if (loading) {
     return (
@@ -358,31 +357,80 @@ export default function TrainingPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
         <section className="space-y-6">
-          {activeSession ? (
-            <SessionExecutionForm
-              key={activeSession.id}
-              clientId={clientIdToUse || ''}
-              plan={plan}
-              session={activeSession}
-              sessionLogs={sessionLogs}
-              onLogged={handleLogged}
-            />
-          ) : (
-            <Card className="p-8 text-center">
-              <h2 className="text-xl font-bold text-foreground">
-                {nextSession ? 'Next workout is not due yet' : 'Program complete'}
-              </h2>
-              {nextSession ? (
-                <p className="mt-2 text-muted-foreground">
-                  Next workout: {nextSession.name} — it becomes active on its scheduled day.
+          {/* Prescription — read-only. The coach prescribes; the client executes. */}
+          <Card className="p-6">
+            <div className="flex items-center gap-3">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Prescription</h2>
+            </div>
+            {activeSession ? (
+              <div className="mt-4 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Current workout (client's next to log): <span className="font-medium text-foreground">{activeSession.name}</span>
                 </p>
-              ) : (
-                <p className="mt-2 text-muted-foreground">
-                  You have logged every prescribed session in this plan.
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  {activeSession.exercises.map(ex => (
+                    <div key={ex.exercise.id} className="flex items-center justify-between gap-3 border-b border-border last:border-0 py-2">
+                      <p className="font-medium text-foreground">{ex.exercise.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {ex.sets} × {ex.reps} @ {ex.targetLoad} {ex.loadUnit ?? 'kg'} · target {ex.targetRPE}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : nextSession ? (
+              <div className="mt-4">
+                <p className="text-sm text-muted-foreground">
+                  No session is currently due. Next prescribed session: <span className="font-medium text-foreground">{nextSession.name}</span>
                 </p>
-              )}
-            </Card>
-          )}
+              </div>
+            ) : (
+              <div className="mt-4">
+                <p className="text-sm text-muted-foreground">This plan is complete. Generate a new plan when it's time for the next block.</p>
+              </div>
+            )}
+          </Card>
+
+          {/* Session history — read-only execution review from session_logs. */}
+          <Card className="p-6">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="h-5 w-5 text-emerald-500" />
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Session history</h2>
+                <p className="text-xs text-muted-foreground">
+                  {progress?.completedCount ?? 0} completed / {plan.weeks.length * plan.weeks[0].sessions.length} sessions
+                </p>
+              </div>
+            </div>
+            {history.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No sessions logged yet. The client records their execution from their own Training tab; this is read-only review for you.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {history.map(log => (
+                  <div key={log.id ?? `${log.sessionId}-${log.loggedAt}`} className="rounded-2xl border border-border bg-card p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-foreground">{log.sessionName || log.sessionId}</p>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${log.completed ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'}`}>
+                        {log.completed ? 'Completed' : 'Failed'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Week {log.weekNumber} · Day {log.sessionIndex} · {new Date(log.loggedAt).toLocaleDateString()}</p>
+                    <div className="mt-3 space-y-1.5">
+                      {log.exercises.map((ex, i) => (
+                        <div key={`${log.sessionId}-${ex.exerciseId}-${i}`} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-foreground">{ex.exerciseName || ex.exerciseId}</span>
+                          <span className="text-muted-foreground">load {ex.load} · RPE {ex.rpe} {ex.failed ? '(failed)' : ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </section>
 
         <aside className="space-y-6">

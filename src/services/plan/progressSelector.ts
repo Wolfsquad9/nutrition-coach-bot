@@ -17,8 +17,148 @@
  * - No `startDate` anchor => every session is treated as due (sequence-only, fully
  *   backwards compatible).
  */
-import type { TrainingPlan, WorkoutSession, SessionLog } from '@/types';
+import type { TrainingPlan, WorkoutSession, SessionLog, WorkoutExercise } from '@/types';
 import { addDays, toISODate } from './trainingSchedule';
+
+/**
+ * --- RPE-driven prescription adaptation -----------------------------------
+ * The plan is the immutable coach-owned prescription; session_logs are the
+ * immutable execution record. RPE adaptation is DERIVED each render from those
+ * two inputs and never mutates either. It therefore lives alongside the
+ * progress selector and keeps a single authoritative progression path:
+ *
+ *     training_plans.plan_data + session_logs
+ *         → progressSelector / adaptSessionPrescription
+ *         → current session + next available prescription
+ *
+ * Rule set (deterministic, units-aware, conservative-by-default):
+ *   - Easy       (actual RPE meaningfully below target): progress load up.
+ *   - At target  (within +/-0.5 of the target midpoint): hold (no aggressive
+ *                 increase even when reps were achieved).
+ *   - Hard        (actual RPE above target, 8-9-ish): hold.
+ *   - Very hard   (actual RPE >= 9): hold — no aggressive increase.
+ *   - Failure     (marked failed): reduce load by one increment.
+ * ---------------------------------------------------------------------------
+ */
+
+const DEFAULT_INCREMENT = 2.5;
+
+const incrementFor = (loadUnit: WorkoutExercise['loadUnit'] | undefined): number => {
+  if (loadUnit === 'bodyweight') return 1;
+  if (loadUnit === 'machine' || loadUnit === 'cable') return 5;
+  return DEFAULT_INCREMENT;
+};
+
+/**
+ * Parse a target-RPE string ("RPE 7-8", "7-8", "7.5", "RPE 8") into its numeric
+ * midpoint. Falls back to 7.5 (a safe autoregulation midpoint) when unparseable.
+ */
+export function parseTargetRPE(targetRPE: string | undefined): number {
+  if (!targetRPE) return 7.5;
+  const nums = (targetRPE.match(/\d+(?:\.\d+)?/g) ?? []).map(n => Number(n));
+  if (nums.length === 0) return 7.5;
+  const sum = nums.reduce((a, b) => a + b, 0);
+  return sum / nums.length;
+}
+
+const roundTo = (load: number, increment: number): number => {
+  const r = Math.round(load / increment) * increment;
+  return Math.round(r * 100) / 100;
+};
+
+/** Adapt a single exercise's target load from its prior execution + RPE. */
+export function adaptExerciseLoad(
+  currentLoad: number,
+  targetRPE: string | undefined,
+  actualRPE: number | null,
+  failed: boolean,
+  loadUnit: WorkoutExercise['loadUnit'] | undefined,
+): number {
+  const increment = incrementFor(loadUnit);
+  const minLoad = loadUnit === 'bodyweight' ? 0 : increment;
+
+  if (failed) {
+    return roundTo(Math.max(minLoad, currentLoad - increment), increment);
+  }
+  if (actualRPE === null || actualRPE === undefined) {
+    return currentLoad; // no execution signal yet → keep coach prescription
+  }
+  // Very hard / extreme effort → hold; no aggressive progression.
+  if (actualRPE >= 9) return currentLoad;
+
+  const target = parseTargetRPE(targetRPE);
+  const undershoot = target - actualRPE; // positive = session was easier than target
+
+  // Easier than target RPE with reps achieved → progress load.
+  if (undershoot >= 1) {
+    return roundTo(currentLoad + increment, increment);
+  }
+  if (undershoot >= 0.5) {
+    return roundTo(currentLoad + increment, increment);
+  }
+  // At/above target RPE → conservative hold.
+  return currentLoad;
+}
+
+/**
+ * Return a NEW session whose per-exercise targetLoad (and targetRPE/context)
+ * reflect the client's most recent actual RPE for that exercise within the
+ * plan. Pure and deterministic — never mutates the plan or logs. The passed
+ * plan/session stay untouched.
+ */
+export function adaptSessionPrescription(
+  plan: TrainingPlan,
+  sessionLogs: SessionLog[],
+  session: WorkoutSession,
+): WorkoutSession {
+  if (!session || !Array.isArray(session.exercises) || session.exercises.length === 0) {
+    return session;
+  }
+
+  // Most recent execution per exercise in this plan, keyed by exercise id.
+  const latestByExercise = new Map<string, { load: number; rpe: number; failed: boolean }>();
+  const planLogs = sessionLogs
+    .filter(l => l.planId === plan.id)
+    .sort((a, b) => (a.loggedAt > b.loggedAt ? 1 : a.loggedAt < b.loggedAt ? -1 : 0));
+
+  for (const log of planLogs) {
+    for (const ex of log.exercises ?? []) {
+      if (typeof ex.rpe !== 'number' || !Number.isFinite(ex.rpe)) continue;
+      if (latestByExercise.has(ex.exerciseId)) continue; // keep earliest → stay within window
+      latestByExercise.set(ex.exerciseId, {
+        load: ex.load,
+        rpe: ex.rpe,
+        failed: ex.failed === true,
+      });
+    }
+  }
+
+  if (latestByExercise.size === 0) {
+    return session;
+  }
+
+  const adaptedExercises = session.exercises.map(ex => {
+    const prior = latestByExercise.get(ex.exercise.id);
+    if (!prior) return ex;
+    const baseLoad = typeof ex.targetLoad === 'number' ? ex.targetLoad : prior.load;
+    const newLoad = adaptExerciseLoad(
+      baseLoad,
+      ex.targetRPE,
+      prior.rpe,
+      prior.failed,
+      ex.loadUnit,
+    );
+    if (newLoad === ex.targetLoad) return ex;
+    return {
+      ...ex,
+      targetLoad: newLoad,
+      progressionHint:
+        `Previous ${ex.exercise.name} RPE ${prior.rpe}. Adjusted prescription: ${newLoad} ${ex.loadUnit ?? 'kg'}.`,
+    };
+  });
+
+  return { ...session, exercises: adaptedExercises };
+}
 
 export interface ClientProgress {
   /** The session the client should log right now (due and not yet logged), if any. */
@@ -100,10 +240,21 @@ export function selectClientProgress(
       ? nextSession.weekNumber
       : plan.duration;
 
+  // Reflect the client's prior execution/RPE in the prescription the client is
+  // about to do (active) and the next one (preview). Adaptation is derived
+  // from plan_data + session_logs and never mutates either. Week/day/ids are
+  // unchanged, so gating fields (nextSessionDate / nextSessionDue) still apply.
+  const adaptedActive = activeSession
+    ? adaptSessionPrescription(plan, sessionLogs, activeSession)
+    : null;
+  const adaptedNext = nextSession
+    ? adaptSessionPrescription(plan, sessionLogs, nextSession)
+    : null;
+
   return {
-    activeSession,
+    activeSession: adaptedActive,
     currentWeek,
-    nextSession,
+    nextSession: adaptedNext,
     nextSessionDate,
     nextSessionDue: nextSession ? isDue(nextSession) : false,
     completedSessions,

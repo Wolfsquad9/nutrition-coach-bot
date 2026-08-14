@@ -1,29 +1,29 @@
 /**
  * ClientMyPlanPage — client-facing "My Plan" page.
  *
- * Shows the authenticated client's full program:
- * - Training plan (reuses TrainingPlanDisplay)
- * - Nutrition plan (reuses WeeklyMealPlanDisplay)
- * - Daily meal plan (reuses DailyMealPlanDisplay)
+ * Shows the authenticated client's NUTRITION program:
+ * - Weekly meal plan
+ * - Daily nutrition targets
  *
- * Fetches the locked nutrition plan AND training plan from the database
- * via the Supabase services. Uses the resolved clientId from AuthProvider.
+ * The client's TRAINING program lives exclusively in the dedicated Training
+ * tab (ClientTrainingSessionPage). This page deliberately does not load or
+ * render the training plan, so there is exactly one client-facing training-plan
+ * presentation in the app.
+ *
+ * Fetches the locked nutrition plan from the database via the Supabase
+ * service. Uses the resolved clientId from AuthProvider.
  */
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchCurrentPlan } from '@/services/supabasePlanService';
-import { fetchActiveTrainingPlan } from '@/services/supabaseTrainingPlanService';
-import { TrainingPlanDisplay } from '@/components/TrainingPlanDisplay';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import type { PlanPayload } from '@/services/supabasePlanService';
-import type { TrainingPlan as PersistedTrainingPlan } from '@/types';
 
 export default function ClientMyPlanPage() {
   const { clientId, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [plan, setPlan] = useState<PlanPayload | null>(null);
-  const [trainingPlan, setTrainingPlan] = useState<PersistedTrainingPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,11 +40,7 @@ export default function ClientMyPlanPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch nutrition and training plans in parallel
-      const [nutritionResult, trainingResult] = await Promise.all([
-        fetchCurrentPlan(clientId),
-        fetchActiveTrainingPlan(clientId),
-      ]);
+      const nutritionResult = await fetchCurrentPlan(clientId);
 
       if (cancelled) return;
 
@@ -54,10 +50,6 @@ export default function ClientMyPlanPage() {
         setError('No plan found. Your coach has not yet created a plan for you.');
       } else {
         setPlan(nutritionResult.plan);
-      }
-
-      if (!cancelled) {
-        setTrainingPlan(trainingResult.plan);
       }
       setLoading(false);
     }
@@ -129,20 +121,6 @@ export default function ClientMyPlanPage() {
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Fat</p>
               <p className="text-xl font-bold text-warning">{plan.macroTargets.fat}g</p>
             </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Training Plan — fetched from training_plans table */}
-      {trainingPlan ? (
-        <TrainingPlanDisplay plan={trainingPlan} />
-      ) : (
-        <Card className="p-6 shadow-card">
-          <div className="flex flex-col items-center justify-center gap-2 py-4">
-            <h3 className="text-lg font-bold text-primary">Training Plan</h3>
-            <p className="text-muted-foreground text-sm">
-              Your training plan will appear here once assigned by your coach.
-            </p>
           </div>
         </Card>
       )}

@@ -10,7 +10,7 @@ vi.mock('@/hooks/useAuth', () => ({
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
-import { saveSessionLog, fetchSessionLogs } from './supabaseSessionLogService';
+import { saveSessionLog, fetchSessionLogs, validateSessionLog } from './supabaseSessionLogService';
 import type { SessionLog } from '@/types';
 
 const mockRpc = supabase.rpc as ReturnType<typeof vi.fn>;
@@ -109,6 +109,44 @@ describe('saveSessionLog', () => {
     const args = mockRpc.mock.calls[0][1] as { p_plan_id: string | null };
     expect(args.p_plan_id).toBe(persistedUuid);
     expect(args.p_plan_id).not.toMatch(/^training-/);
+  });
+});
+
+describe('validateSessionLog (empty / incomplete prevention)', () => {
+  it('accepts a fully completed session with valid load and RPE', () => {
+    expect(validateSessionLog('client-1', baseLog()).ok).toBe(true);
+  });
+
+  it('rejects an empty session (no exercise execution)', () => {
+    const r = validateSessionLog('client-1', { ...baseLog(), exercises: [] });
+    expect(r.ok).toBe(false);
+    if (r.ok === false) expect(r.error).toContain('no exercise execution');
+  });
+
+  it('rejects a completed session with an invalid RPE', () => {
+    const r = validateSessionLog('client-1', { ...baseLog(), exercises: [{ ...baseLog().exercises[0], rpe: 11 }] });
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a completed session with an invalid (negative) load', () => {
+    const r = validateSessionLog('client-1', { ...baseLog(), exercises: [{ ...baseLog().exercises[0], load: -5 }] });
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a payload with a missing planId', () => {
+    const r = validateSessionLog('client-1', { ...baseLog(), planId: null });
+    expect(r.ok).toBe(false);
+  });
+
+  it('a fully-failed session is accepted as long as execution is non-empty', () => {
+    // Failed sessions still record what happened; they must not be empty.
+    const r = validateSessionLog('client-1', {
+      ...baseLog(),
+      completed: false,
+      failedToComplete: true,
+      exercises: [{ ...baseLog().exercises[0], rpe: 10, load: 60, failed: true, completed: false }],
+    });
+    expect(r.ok).toBe(true);
   });
 });
 

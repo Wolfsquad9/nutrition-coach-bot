@@ -99,9 +99,6 @@ const mockSaveSessionLog = vi.mocked(saveSessionLog);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // No persisted questionnaire fields for session duration/style/equipment —
-  // they belong to the Training tab and must stay empty (no arbitrary
-  // defaults) until the coach completes them.
   mockedActiveClientRef.current = {
     ...sampleClient,
     id: 'client-1',
@@ -156,11 +153,9 @@ describe('TrainingPage generation authority', () => {
       expect(screen.getByRole('button', { name: /Generate Plan/i })).toBeInTheDocument();
     });
 
-    // Fill the questionnaire (session duration input + equipment checkbox).
     fireEvent.change(screen.getByLabelText('Session duration (minutes)'), { target: { value: '75' } });
     fireEvent.click(screen.getByRole('checkbox', { name: /barbell/i }));
 
-    // Still nothing generated until the explicit action.
     expect(mockGenerateDynamicTrainingPlan).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /Generate Plan/i }));
@@ -186,195 +181,63 @@ describe('TrainingPage generation authority', () => {
   });
 });
 
-describe('TrainingPage session logging (decoupled execution model)', () => {
-  it('logs session execution data without mutating or resaving the training plan', async () => {
-    mockFetchActiveTrainingPlan.mockResolvedValue({ plan: fixturePlan, error: null });
-    render(<TrainingPage />);
+// --- Coach = prescription + review. The coach must NEVER see the client's
+// execution/logging workflow (that belongs to the CLIENT Training tab). -------
+describe('TrainingPage coach review (no client execution UI)', () => {
+  const oneDoneLog = {
+    id: 'log-1',
+    clientId: 'client-1',
+    planId: 'plan-p1',
+    sessionId: 's1',
+    sessionName: 'Upper Body • Week 1',
+    weekNumber: 1,
+    sessionIndex: 1,
+    completed: true,
+    failedToComplete: false,
+    exercises: [{ exerciseId: 'ex-1', exerciseName: 'Barbell Bench Press', sets: 4, reps: '8-10', load: 62.5, rpe: 8, completed: true, failed: false }],
+    loggedAt: '2026-01-02T00:00:00.000Z',
+  };
 
-    // The workspace is rendered (an active plan exists) — the user is never
-    // sent back through the questionnaire, and no regeneration happens.
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Log Session/i })).toBeInTheDocument();
-    });
-    expect(mockGenerateDynamicTrainingPlan).not.toHaveBeenCalled();
-
-    // The only required user-entered execution fields are load and RPE.
-    fireEvent.change(screen.getByLabelText(/^Load/i), { target: { value: '62.5' } });
-
-    fireEvent.click(screen.getByRole('button', { name: /Log Session/i }));
-
-    await waitFor(() => {
-      expect(mockSaveSessionLog).toHaveBeenCalledTimes(1);
-    });
-
-    const [clientId, sessionLog] = mockSaveSessionLog.mock.calls[0];
-    expect(clientId).toBe('client-1');
-    expect(sessionLog.planId).toBe('plan-p1');
-    expect(sessionLog.sessionId).toBe('s1');
-
-    // Sets/reps come EXCLUSIVELY from the plan prescription (read-only).
-    const exec = sessionLog.exercises[0];
-    expect(exec.sets).toBe(4);
-    expect(exec.reps).toBe('8-10');
-    expect(exec.load).toBe(62.5);
-    expect(exec.completed).toBe(true);
-    expect(exec.failed).toBe(false);
-
-    // Logging a session never writes to / replaces the training plan.
-    expect(mockSaveTrainingPlan).not.toHaveBeenCalled();
-  });
-
-  it('persists a simple failed_to_complete flag without a workflow', async () => {
+  it('renders read-only prescription with NO execution/log controls', async () => {
     mockFetchActiveTrainingPlan.mockResolvedValue({ plan: fixturePlan, error: null });
     render(<TrainingPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Log Session/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /^Prescription$/i })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByLabelText(/Failed to complete/i));
-
-    fireEvent.click(screen.getByRole('button', { name: /Log Session/i }));
-
-    await waitFor(() => {
-      expect(mockSaveSessionLog).toHaveBeenCalledTimes(1);
-    });
-
-    const [, sessionLog] = mockSaveSessionLog.mock.calls[0];
-    expect(sessionLog.failedToComplete).toBe(true);
-    expect(sessionLog.exercises[0].failed).toBe(true);
-    expect(sessionLog.exercises[0].completed).toBe(false);
-    expect(mockSaveTrainingPlan).not.toHaveBeenCalled();
+    // Coach sees the prescribed workout read-only...
+    expect(screen.getByText(/Barbell Bench Press/i)).toBeInTheDocument();
+    // ...and a read-only review panel, never the client logging form.
+    expect(screen.getByRole('heading', { name: /^Session history$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Log Session/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Load/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/RPE/i)).not.toBeInTheDocument();
+    expect(mockSaveSessionLog).not.toHaveBeenCalled();
   });
 
-  it('reloads the existing active plan and derives progress from saved execution without regenerating', async () => {
+  it('shows read-only session history from session_logs (no mutation controls)', async () => {
     mockFetchActiveTrainingPlan.mockResolvedValue({ plan: fixturePlan, error: null });
-    mockFetchSessionLogs.mockResolvedValue({
-      logs: [{
-        id: 'log-1',
-        clientId: 'client-1',
-        planId: 'plan-p1',
-        sessionId: 's1',
-        sessionName: 'Upper Body • Week 1',
-        weekNumber: 1,
-        sessionIndex: 1,
-        completed: true,
-        failedToComplete: false,
-        exercises: [{
-          exerciseId: 'ex-1',
-          exerciseName: 'Barbell Bench Press',
-          sets: 4,
-          reps: '8-10',
-          load: 62.5,
-          rpe: 8,
-          completed: true,
-          failed: false,
-        }],
-        loggedAt: '2026-01-02T00:00:00.000Z',
-      }],
-      error: null,
-    });
-
+    mockFetchSessionLogs.mockResolvedValue({ logs: [oneDoneLog], error: null });
     render(<TrainingPage />);
 
-    // The fixture contains a single session that is now logged → the derived
-    // progress correctly reports the program as complete (the log is scoped to
-    // this plan). No questionnaire, no regeneration, and the log was fetched.
     await waitFor(() => {
-      expect(screen.getByText(/Program complete/i)).toBeInTheDocument();
-    });
-
-    expect(screen.queryByRole('button', { name: /Generate Plan/i })).not.toBeInTheDocument();
-    expect(mockGenerateDynamicTrainingPlan).not.toHaveBeenCalled();
-    expect(mockFetchSessionLogs).toHaveBeenCalledWith('client-1');
-  });
-});
-
-describe('TrainingPage persisted plan UUID propagation', () => {
-  it('logs sessions with the persisted DB plan UUID, never the generated placeholder', async () => {
-    const persistedUuid = 'a3f1d2c4-9e2b-4a6d-8c5f-0e7b9a1d3c5e';
-
-    // The generator returns a plan carrying the OLD-style fabricated id
-    // (`training-<client>-<timestamp>`), which previously leaked into
-    // `p_plan_id` and triggered Postgres 22P02. The page must override it with
-    // the persisted UUID returned by saveTrainingPlan.
-    mockFetchActiveTrainingPlan.mockResolvedValue({ plan: null, error: null });
-    mockSaveTrainingPlan.mockResolvedValue({ success: true, error: null, planId: persistedUuid });
-    mockGenerateDynamicTrainingPlan.mockReturnValue({
-      ...fixturePlan,
-      id: `training-client-1-${Date.now()}`,
-    });
-
-    mockedActiveClientRef.current = {
-      ...sampleClient,
-      id: 'client-1',
-      trainingExperience: 'intermediate',
-      trainingDaysPerWeek: 4,
-      preferredTrainingStyle: 'hypertrophy',
-      sessionDuration: undefined,
-      equipment: undefined,
-    };
-
-    render(<TrainingPage />);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Generate Plan/i })).toBeInTheDocument();
-    });
-
-    // Complete the questionnaire and generate.
-    fireEvent.change(screen.getByLabelText('Session duration (minutes)'), { target: { value: '75' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: /barbell/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Generate Plan/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Log Session/i })).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Log Session/i }));
-
-    await waitFor(() => {
-      expect(mockSaveSessionLog).toHaveBeenCalledTimes(1);
-    });
-
-    const [, sessionLog] = mockSaveSessionLog.mock.calls[0];
-    // saveSessionLog must receive the persisted DB UUID as planId — the fake
-    // `training-...` placeholder must never reach p_plan_id.
-    expect(sessionLog.planId).toBe(persistedUuid);
-    expect(sessionLog.planId).not.toMatch(/^training-/);
-  });
-describe('TrainingPage derived progression (advance after logging)', () => {
-  it('advances to the next prescribed session after logging, without regenerating the plan', async () => {
-    const s1 = fixturePlan.weeks[0].sessions[0];
-    const s2 = { ...s1, id: 's2', name: 'Lower Body • Week 1' };
-    const twoSessionPlan: TrainingPlan = {
-      ...fixturePlan,
-      weeks: [{ ...fixturePlan.weeks[0], sessions: [s1, s2] }],
-    };
-
-    mockFetchActiveTrainingPlan.mockResolvedValue({ plan: twoSessionPlan, error: null });
-
-    render(<TrainingPage />);
-
-    // First prescribed session (W1/S1) is active.
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Log Session/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /^Session history$/i })).toBeInTheDocument();
     });
     expect(screen.getByText(/Upper Body • Week 1/i)).toBeInTheDocument();
-
-    // Enter a load and log the session.
-    fireEvent.change(screen.getByLabelText(/^Load/i), { target: { value: '62.5' } });
-    fireEvent.click(screen.getByRole('button', { name: /Log Session/i }));
-
-    await waitFor(() => {
-      expect(mockSaveSessionLog).toHaveBeenCalledTimes(1);
-    });
-
-    // The UI advances to the next prescribed session WITHOUT regenerating the
-    // plan (progress is re-derived from the optimistic session log).
-    await waitFor(() => {
-      expect(screen.getByText(/Lower Body • Week 1/i)).toBeInTheDocument();
-    });
-    expect(mockGenerateDynamicTrainingPlan).not.toHaveBeenCalled();
-    expect(mockFetchActiveTrainingPlan).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/load 62.5/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Log Session/i })).not.toBeInTheDocument();
   });
-});
+
+  it('reports a fully-logged plan as complete without any execution controls', async () => {
+    mockFetchActiveTrainingPlan.mockResolvedValue({ plan: fixturePlan, error: null });
+    mockFetchSessionLogs.mockResolvedValue({ logs: [oneDoneLog], error: null });
+    render(<TrainingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/plan is complete/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: /Log Session/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Load/i)).not.toBeInTheDocument();
+  });
 });

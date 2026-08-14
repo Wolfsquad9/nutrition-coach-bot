@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Loader2, AlertCircle, Lock, PartyPopper } from 'lucide-react';
+import { Loader2, AlertCircle, Lock, PartyPopper, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchActiveTrainingPlan } from '@/services/supabaseTrainingPlanService';
 import { fetchSessionLogs } from '@/services/supabaseSessionLogService';
@@ -25,6 +25,9 @@ export default function ClientTrainingSessionPage() {
   const [logs, setLogs] = useState<SessionLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Tracks the most recently PERSISTED completed session so the professional
+  // completion message only appears after a successful backend insert.
+  const [lastCompletedSession, setLastCompletedSession] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthLoading) return;
@@ -66,6 +69,9 @@ export default function ClientTrainingSessionPage() {
     // Optimistically record the saved execution; progress re-derives and the UI
     // advances to the next session in the same render (no plan regeneration).
     setLogs(prev => [...prev, { ...log, clientId: clientId ?? '' }]);
+    // onLogged is only invoked by SessionExecutionForm after a successful,
+    // persisted session log — so the professional message is gated on success.
+    setLastCompletedSession(log.sessionId);
   };
 
   if (isAuthLoading || loading) {
@@ -105,6 +111,21 @@ export default function ClientTrainingSessionPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-primary">Training</h2>
+
+      {lastCompletedSession && (
+        <Card className="border-emerald-500/40 bg-emerald-500/5 p-6">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-500" />
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Session logged — well done.</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Consistent execution is what drives durable adaptation. Your next session is now available — arrive rested,
+                stay focused, and keep the quality high.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {progress.isComplete ? (
         <Card className="p-8">
