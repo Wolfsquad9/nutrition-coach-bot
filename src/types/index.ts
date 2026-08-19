@@ -22,13 +22,13 @@ export interface Client {
   weeklyWeightChange?: number; // kg per week (-1 to +0.5)
   
   // Training
-  trainingExperience: 'beginner' | 'intermediate' | 'advanced';
-  trainingDaysPerWeek: number; // 3-6
-  sessionDuration: number; // minutes
-  preferredTrainingStyle: 'strength' | 'hypertrophy' | 'powerlifting' | 'crossfit' | 'bodybuilding';
-  equipment: string[]; // Available equipment
+  trainingExperience?: 'beginner' | 'intermediate' | 'advanced';
+  trainingDaysPerWeek?: number; // 3-6
+  sessionDuration?: number; // minutes
+  preferredTrainingStyle?: 'strength' | 'hypertrophy' | 'powerlifting' | 'crossfit' | 'bodybuilding';
+  equipment?: string[]; // Available equipment
   equipmentAvailable?: string[]; // Alternative name for equipment
-  
+
   // Nutrition preferences
   dietType: 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian' | 'keto' | 'paleo';
   mealsPerDay: 3 | 4 | 5 | 6;
@@ -147,12 +147,55 @@ export interface Exercise {
 
 export interface WorkoutSession {
   id: string;
+  weekNumber: number;
   dayNumber: number; // 1-7
   sessionType: 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'full_body' | 'cardio' | 'rest';
   name: string;
   duration: number; // minutes
   exercises: WorkoutExercise[];
   notes?: string;
+}
+
+export type LoadUnit = 'kg' | 'lb' | 'bodyweight' | 'machine' | 'cable' | 'unknown';
+
+export type EquipmentType = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'other';
+
+/**
+ * Per-exercise execution data for a logged session. `sets` and `reps` are a
+ * read-only snapshot taken from the training-plan prescription (they are NOT
+ * user-editable). The user-entered execution fields are `load` and `rpe`, plus
+ * an optional `failed`/completion flag.
+ */
+export interface ExerciseExecution {
+  exerciseId: string;
+  exerciseName: string;
+  sets: number; // from the generated prescription (read-only)
+  reps: string; // from the generated prescription (read-only)
+  load: number;
+  rpe: number;
+  completed: boolean;
+  failed: boolean;
+  notes?: string;
+}
+
+/**
+ * An independent session log. Persisted separately from the training-plan
+ * prescription so logging a session never mutates the plan. Maps 1:1 to a row
+ * in the `session_logs` table.
+ */
+export interface SessionLog {
+  id?: string;
+  clientId: string;
+  planId?: string | null;
+  sessionId: string;
+  sessionName?: string;
+  weekNumber: number;
+  sessionIndex: number;
+  completed: boolean;
+  failedToComplete: boolean;
+  notes?: string;
+  exercises: ExerciseExecution[];
+  loggedAt: string;
 }
 
 export interface WorkoutExercise {
@@ -163,20 +206,68 @@ export interface WorkoutExercise {
   intensity?: string; // RPE or %1RM
   tempo?: string; // "2-0-2-0"
   notes?: string;
+  targetRPE?: string;
+  targetLoad?: number;
+  loadUnit?: LoadUnit;
+  equipmentType?: EquipmentType;
+  progressionHint?: string;
+  progressionRule?: string;
+}
+
+export interface TrainingPhase {
+  key: string;
+  name: string;
+  objective: string;
+  startWeek: number;
+  endWeek: number;
+}
+
+export interface TrainingWeek {
+  weekNumber: number;
+  phase: string;
+  objective: string;
+  sessions: WorkoutSession[];
 }
 
 export interface TrainingPlan {
   id: string;
   clientId: string;
   name: string;
+  objective: string;
   duration: number; // weeks
   frequency: number; // days per week
   split: 'upper_lower' | 'push_pull_legs' | 'full_body' | 'body_part' | 'custom';
   phase: 'strength' | 'hypertrophy' | 'power' | 'endurance' | 'deload';
+  phases: TrainingPhase[];
+  weeks: TrainingWeek[];
   workouts: WorkoutSession[];
   progressionScheme: string;
+  programDescription: string;
+  /**
+   * Coach-owned scheduling anchor: ISO date (YYYY-MM-DD) of Week 1 / Day 1.
+   * Used by `selectClientProgress` for calendar-gated progression (Option B).
+   * Optional — when absent, progress is sequence-only.
+   */
+  startDate?: string;
   createdAt: string;
 }
+
+/**
+ * The single, complete, validated input the workout generator requires.
+ * Built by the Training tab from the persisted client profile plus the
+ * training questionnaire. Every field is required — the generator must
+ * never receive partial training data.
+ */
+export type TrainingPlanInput = {
+  id: string;
+  primaryGoal: Client['primaryGoal'];
+  trainingExperience: NonNullable<Client['trainingExperience']>;
+  trainingDaysPerWeek: number;
+  sessionDuration: number;
+  preferredTrainingStyle: NonNullable<Client['preferredTrainingStyle']>;
+  equipment: string[];
+  equipmentAvailable?: Client['equipmentAvailable'];
+};
 
 export interface NutritionPlan {
   id: string;

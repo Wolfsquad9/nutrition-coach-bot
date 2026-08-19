@@ -1,27 +1,21 @@
 /**
  * Exporter / Importer — JSON export/import of client ingredient
- * restrictions, plus print, PDF, and WhatsApp dispatch for generated
- * plans.
+ * restrictions, plus print support for generated plans.
  *
- * Extracted from EnhancedIngredientManager.tsx where five handlers
- * (exportRestrictions, importRestrictions, handlePrintPlan,
- * handleExportPDF, handleSendWhatsApp) were defined inline. They are
- * now grouped under a single hook that takes the state the handlers
- * need to read or write and returns the same functions.
+ * Extracted from EnhancedIngredientManager.tsx where several handlers
+ * (exportRestrictions, importRestrictions, handlePrintPlan) were defined
+ * inline. They are now grouped under a single hook that takes the state
+ * the handlers need to read or write and returns the same functions.
  *
- * Why: these five handlers are the "side effects" of the manager
- * (file downloads, network calls, browser print dialog). Keeping them
- * together makes the data flow easier to follow and gives us a single
- * boundary to test the persistence-related behavior.
+ * Why: these handlers are the "side effects" of the manager
+ * (file downloads, browser print dialog). Keeping them together makes
+ * the data flow easier to follow and gives us a single boundary to test.
  */
 
 import { useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { generateCompletePlanPDF, downloadPDF } from "@/utils/pdfExport";
-import { getClientLabel } from "@/utils/clientHelpers";
-import { Client } from "@/types";
+import type { Client } from "@/types";
 import type { ClientIngredientRestrictions } from "@/utils/ingredientSubstitution";
-import type { GeneratedDietPlan, GeneratedTrainingPlan } from "./types";
+import type { GeneratedDietPlan } from "./types";
 import type { ToastFn } from "./recipeActionHandler";
 
 export interface UseIngredientExporterArgs {
@@ -34,15 +28,12 @@ export interface UseIngredientExporterArgs {
   // Plan dispatch
   activeClient: Client | null;
   generatedDietPlan: GeneratedDietPlan | null;
-  generatedTrainingPlan: GeneratedTrainingPlan | null;
 }
 
 export interface UseIngredientExporterResult {
   exportRestrictions: () => void;
   importRestrictions: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handlePrintPlan: () => void;
-  handleExportPDF: () => Promise<void>;
-  handleSendWhatsApp: () => Promise<void>;
 }
 
 export function useIngredientExporter(
@@ -55,7 +46,6 @@ export function useIngredientExporter(
     toast,
     activeClient,
     generatedDietPlan,
-    generatedTrainingPlan,
   } = args;
 
   const exportRestrictions = useCallback(() => {
@@ -108,95 +98,9 @@ export function useIngredientExporter(
     });
   }, [toast]);
 
-  const handleExportPDF = useCallback(async () => {
-    if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
-      toast({
-        title: 'Missing data',
-        description: 'Generate a complete plan first',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      const completePlan = {
-        client: activeClient,
-        nutritionPlan: {
-          metrics: {
-            tdee: generatedDietPlan.totalCalories,
-            targetCalories: generatedDietPlan.totalCalories,
-            proteinGrams: generatedDietPlan.macros.protein,
-            carbsGrams: generatedDietPlan.macros.carbs,
-            fatGrams: generatedDietPlan.macros.fat,
-            fiberGrams: 30,
-            waterLiters: 3,
-          },
-          weeklyMealPlan: generatedDietPlan.meals,
-          groceryList: generatedDietPlan.shoppingList || [],
-        },
-        trainingPlan: generatedTrainingPlan,
-      };
-
-      const clientLabel = getClientLabel(activeClient);
-      const pdf = generateCompletePlanPDF(
-        completePlan as unknown as Parameters<typeof generateCompletePlanPDF>[0]
-      );
-      downloadPDF(pdf, `${clientLabel.replace(/\s+/g, '_')}_plan.pdf`);
-
-      toast({
-        title: 'PDF exported',
-        description: 'The plan has been downloaded successfully',
-      });
-    } catch (error) {
-      console.error('PDF export error:', error);
-      toast({
-        title: 'Export error',
-        description: 'Unable to generate PDF',
-        variant: 'destructive',
-      });
-    }
-  }, [activeClient, generatedDietPlan, generatedTrainingPlan, toast]);
-
-  const handleSendWhatsApp = useCallback(async () => {
-    if (!activeClient || !generatedDietPlan || !generatedTrainingPlan) {
-      toast({
-        title: 'Missing data',
-        description: 'Generate a complete plan first',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-        body: {
-          clientPhone: activeClient.phone,
-          planData: { diet: generatedDietPlan, training: generatedTrainingPlan },
-          planType: 'complete',
-        },
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: 'WhatsApp - Ready',
-        description: data.note || 'Twilio/Make.com integration required',
-      });
-    } catch (error) {
-      console.error('WhatsApp send error:', error);
-      toast({
-        title: 'WhatsApp error',
-        description: 'Unable to send the plan',
-        variant: 'destructive',
-      });
-    }
-  }, [activeClient, generatedDietPlan, generatedTrainingPlan, toast]);
-
   return {
     exportRestrictions,
     importRestrictions,
     handlePrintPlan,
-    handleExportPDF,
-    handleSendWhatsApp,
   };
 }

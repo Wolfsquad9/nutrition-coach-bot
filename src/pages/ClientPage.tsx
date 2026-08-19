@@ -18,16 +18,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Loader2, AlertCircle, Plus, Save, CheckCircle, Download, FileJson, UserPlus, Copy, ExternalLink, Trash2 } from 'lucide-react';
+import { Loader2, AlertCircle, Plus, Save, CheckCircle, UserPlus, Copy, ExternalLink, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppLayout } from '@/hooks/useAppLayout';
 import { NoClientGuard } from '@/components/NoClientGuard';
 import { getClientLabel, calculateAgeFromBirthDate } from '@/utils/clientHelpers';
-import { generatePersonalizedPlan } from '@/services/planService';
-import { generateCompletePlanPDF, downloadPDF, exportPlanAsJSON, downloadJSON } from '@/utils/pdfExport';
 import { createClientInvitation } from '@/services/clientInvitationService';
-import { saveTrainingPlan } from '@/services/supabaseTrainingPlanService';
-import type { Client, CompletePlan, Recipe } from '@/types';
+import type { Client } from '@/types';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -42,8 +39,6 @@ export default function ClientPage() {
     handleDeleteClient: deleteClientFromHook,
     createNewClientDraft,
     clientRestrictions,
-    generatedPlan,
-    setGeneratedPlan,
   } = useAppLayout();
 
   const [draftClient, setDraftClient] = useState<Client | null>(null);
@@ -169,55 +164,7 @@ export default function ClientPage() {
     }
   };
 
-  const handleGeneratePlan = async () => {
-    if (!activeClientId || !activeClient) {
-      toast({ title: "No client selected", description: "Select or create a client first.", variant: "destructive" });
-      return;
-    }
-    setIsGenerating(true);
-    setError(null);
-    try {
-      const likedFoods = getLikedFoods();
-      if (likedFoods.length < 5) {
-        toast({ title: "Tip", description: "Select at least 5 liked foods in the Ingredients tab for a personalized meal plan." });
-      }
-      const plan = await generatePersonalizedPlan(activeClient, likedFoods);
-      setGeneratedPlan(plan);
 
-      // Persist the training plan to the database so the client portal can
-      // read it. The nutrition plan is persisted separately on lock.
-      const trainingResult = await saveTrainingPlan(activeClientId, plan.trainingPlan);
-      if (!trainingResult.success) {
-        toast({
-          title: "Training plan not saved",
-          description: trainingResult.error || "Client portal will not show the training plan until this is resolved.",
-          variant: "destructive",
-        });
-      }
-
-      toast({ title: "Plan generated!", description: `Personalized plan: ${plan.nutritionPlan.metrics.targetCalories} kcal/day` });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unable to generate plan, please try again later";
-      setError(msg);
-      toast({ title: "Generation error", description: msg, variant: "destructive" });
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleDownloadPDF = () => {
-    if (!generatedPlan || !activeClient) return;
-    const label = getClientLabel(activeClient);
-    downloadPDF(generateCompletePlanPDF(generatedPlan), `${label.replace(/\s+/g, '-')}-plan.pdf`);
-    toast({ title: "PDF Downloaded", description: "The complete plan has been downloaded as PDF." });
-  };
-
-  const handleDownloadJSON = () => {
-    if (!generatedPlan || !activeClient) return;
-    const label = getClientLabel(activeClient);
-    downloadJSON(exportPlanAsJSON(generatedPlan), `${label.replace(/\s+/g, '-')}-plan.json`);
-    toast({ title: "JSON Downloaded", description: "The complete plan has been downloaded as JSON." });
-  };
 
   if (isLoadingClients) {
     return (
@@ -460,27 +407,6 @@ export default function ClientPage() {
           </Alert>
         )}
 
-        {hasActiveClient && !isCreatingNewClient && (
-          <div className="mt-6 flex gap-2">
-            <Button onClick={handleGeneratePlan} disabled={isGenerating}>
-              {isGenerating ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating plan...</>
-              ) : (
-                'Generate complete plan'
-              )}
-            </Button>
-            {generatedPlan && (
-              <>
-                <Button variant="outline" onClick={handleDownloadPDF}>
-                  <Download className="mr-2 h-4 w-4" />PDF
-                </Button>
-                <Button variant="outline" onClick={handleDownloadJSON}>
-                  <FileJson className="mr-2 h-4 w-4" />JSON
-                </Button>
-              </>
-            )}
-          </div>
-        )}
       </Card>
     </div>
   );

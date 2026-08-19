@@ -13,7 +13,7 @@ export function selectExercisesForSession(
 ): Exercise[] {
   const expConfig = EXPERIENCE_ADJUSTMENTS[experience] || EXPERIENCE_ADJUSTMENTS.intermediate;
   let muscleGroups: string[] = [];
-  
+
   switch (sessionType) {
     case 'upper':
       muscleGroups = ['chest', 'back', 'shoulders', 'biceps', 'triceps'];
@@ -32,22 +32,31 @@ export function selectExercisesForSession(
       muscleGroups = ['chest', 'back', 'legs', 'shoulders', 'abs'];
       break;
   }
-  
+
+  const hasEquipment = Array.isArray(availableEquipment) && availableEquipment.length > 0;
+  const allowedEquipment = hasEquipment ? availableEquipment.map(e => e.toLowerCase()) : [];
+
+  const canUseExercise = (exercise: Exercise): boolean => {
+    if (!hasEquipment) return true;
+    if (exercise.equipment.length === 0) return true;
+    return exercise.equipment.some(eq => allowedEquipment.includes(eq.toLowerCase()));
+  };
+
   const selectedExercises: Exercise[] = [];
-  
+
   // Select 1-2 exercises per muscle group based on session type
   muscleGroups.forEach(muscle => {
     const muscleExercises = (EXERCISE_DATABASE[muscle] || [])
-      .filter(ex => expConfig.complexityLevel.includes(ex.difficulty));
-    
+      .filter(ex => expConfig.complexityLevel.includes(ex.difficulty))
+      .filter(canUseExercise);
+
     if (muscleExercises.length > 0) {
-      // Deterministic shuffle — same seed = same exercises. Replaces Math.random().
       const shuffled = rng.shuffle(muscleExercises);
       const exercisesToAdd = sessionType === 'full_body' ? 1 : Math.min(2, shuffled.length);
       selectedExercises.push(...shuffled.slice(0, exercisesToAdd));
     }
   });
-  
+
   // Limit total exercises based on experience
   return selectedExercises.slice(0, expConfig.exerciseCount);
 }

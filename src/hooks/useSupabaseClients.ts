@@ -26,11 +26,13 @@ const createEmptyClient = (): Client => ({
   weight: 75,
   activityLevel: 'moderately_active',
   primaryGoal: 'maintenance',
+  // trainingExperience / trainingDaysPerWeek are persisted on the client row
+  // (training_experience, training_frequency). sessionDuration,
+  // preferredTrainingStyle and equipment belong to the Training questionnaire,
+  // not the persistent client profile — they are intentionally left undefined
+  // here so no arbitrary defaults leak into plan generation.
   trainingExperience: 'intermediate',
   trainingDaysPerWeek: 4,
-  sessionDuration: 60,
-  preferredTrainingStyle: 'hypertrophy',
-  equipment: [],
   dietType: 'omnivore',
   mealsPerDay: 4,
   intolerances: [],

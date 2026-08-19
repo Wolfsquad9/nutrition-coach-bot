@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import {
   BookOpen,
+  Dumbbell,
   CheckCircle,
   TrendingUp,
   Bell,
@@ -69,6 +70,11 @@ export default function ClientLayout() {
       to: '/my-plan',
       label: 'Plan',
       icon: BookOpen,
+    },
+    {
+      to: '/train',
+      label: 'Training',
+      icon: Dumbbell,
     },
     {
       to: '/checkin',
