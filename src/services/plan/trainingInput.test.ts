@@ -72,7 +72,7 @@ describe('buildTrainingPlanInput', () => {
     });
   });
 
-  it('passes persisted training values through when the questionnaire leaves them undefined', () => {
+    it('passes persisted training values through when the questionnaire leaves them undefined', () => {
     const result = buildTrainingPlanInput(sampleClient, {
       trainingExperience: undefined,
       trainingDaysPerWeek: undefined,

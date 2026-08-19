@@ -11,7 +11,7 @@ vi.mock('@/hooks/useAuth', () => ({
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUserId } from '@/hooks/useAuth';
 import { saveSessionLog, fetchSessionLogs, validateSessionLog } from './supabaseSessionLogService';
-import type { SessionLog } from '@/types';
+import type { SessionLog, ExerciseExecution } from '@/types';
 
 const mockRpc = supabase.rpc as ReturnType<typeof vi.fn>;
 const mockFrom = supabase.from as ReturnType<typeof vi.fn>;
@@ -109,6 +109,49 @@ describe('saveSessionLog', () => {
     const args = mockRpc.mock.calls[0][1] as { p_plan_id: string | null };
     expect(args.p_plan_id).toBe(persistedUuid);
     expect(args.p_plan_id).not.toMatch(/^training-/);
+  });
+
+  it('forwards clientId verbatim and never sends a spoofable creator/identity field', async () => {
+    // Identity/authorization is owned by the SECURITY DEFINER RPC (auth.uid()).
+    // The payload must never carry a created_by/coach field the caller could
+    // use to impersonate a client — this is what makes the client-only INSERT
+    // RPC effective even if a coach UI called the service.
+    mockGetUserId.mockResolvedValue('the-client-user');
+    mockRpc.mockResolvedValue({ data: [{ success: true, session_log_id: 'log-1', error: null }], error: null });
+
+    const result = await saveSessionLog('client-1', baseLog());
+
+    expect(result.success).toBe(true);
+        const args = mockRpc.mock.calls[0][1] as Record<string, unknown>;
+    expect(args.p_client_id).toBe('client-1');
+    expect(args.p_created_by).toBeUndefined();
+    expect(args.p_creator_id).toBeUndefined();
+    // The only identity the DB can see is the authenticated user's, derived
+    // by the RPC from auth.uid(), never from the request payload.
+  });
+
+  it('execution payload carries only execution fields — never prescription fields', async () => {
+    // A logged session records ACTUAL performance (load/rpe/failed), never the
+    // prescribed targetLoad/targetRPE/loadUnit. This is the invariant that keeps
+    // `training_plans.plan_data` (the immutable coach prescription) untouched by
+    // the client execution path: there is no code path that writes prescription
+    // fields back into a plan when a client logs a session.
+    mockRpc.mockResolvedValue({ data: [{ success: true, session_log_id: 'log-1', error: null }], error: null });
+
+    await saveSessionLog('client-1', baseLog());
+
+    const args = mockRpc.mock.calls[0][1] as { p_execution_data: unknown };
+    const executions = args.p_execution_data as ExerciseExecution[];
+    expect(executions).toHaveLength(1);
+    const ex = executions[0];
+    // Actual execution fields are present...
+    expect(ex).toHaveProperty('load', 62.5);
+    expect(ex).toHaveProperty('rpe', 8);
+    expect(ex).toHaveProperty('failed', false);
+    // ...and NO prescription fields leak into the write payload.
+    expect(ex).not.toHaveProperty('targetLoad');
+    expect(ex).not.toHaveProperty('targetRPE');
+    expect(ex).not.toHaveProperty('loadUnit');
   });
 });
 

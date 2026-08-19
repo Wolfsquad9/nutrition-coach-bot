@@ -307,3 +307,39 @@ describe('adaptSessionPrescription (next prescription reflects prior RPE)', () =
   });
 });
 
+describe('progression integration (session_logs drive the next earned prescription)', () => {
+  const twoSessionPlan = (): TrainingPlan => {
+    const s1 = makeExercisedSession('s11', 1, 1, 60); // bench, target 60 kg, RPE 7-8
+    const s2 = makeExercisedSession('s12', 1, 2, 60);
+    return { ...makePlan(), weeks: [{ weekNumber: 1, phase: 'foundation', objective: 'base', sessions: [s1, s2] }] };
+  };
+
+  it('low actual RPE → the next earned session prescribes a HIGHER load', () => {
+    const p = selectClientProgress(twoSessionPlan(), [makeExecLog('s11', 6)], day('2026-01-06'));
+    expect(p.activeSession?.id).toBe('s12');
+    expect(p.activeSession?.exercises[0].targetLoad).toBe(62.5);
+  });
+
+  it('target/high actual RPE → the next earned session holds the load', () => {
+    const p = selectClientProgress(twoSessionPlan(), [makeExecLog('s11', 8)], day('2026-01-06'));
+    expect(p.activeSession?.exercises[0].targetLoad).toBe(60);
+  });
+
+  it('very high RPE → no aggressive increase; failure → load reduces', () => {
+    const veryHard = selectClientProgress(twoSessionPlan(), [makeExecLog('s11', 9.5)], day('2026-01-06'));
+    expect(veryHard.activeSession?.exercises[0].targetLoad).toBe(60);
+
+    const failed = selectClientProgress(twoSessionPlan(), [makeExecLog('s11', 10, 60, true)], day('2026-01-06'));
+    expect(failed.activeSession?.exercises[0].targetLoad).toBe(57.5);
+  });
+
+  it('derivation is purely derived — the persisted plan object is never mutated', () => {
+    const plan = twoSessionPlan();
+    const frozen = JSON.stringify(plan);
+    selectClientProgress(plan, [makeExecLog('s11', 6)], day('2026-01-06'));
+    selectClientProgress(plan, [makeExecLog('s11', 10, 60, true)], day('2026-01-06'));
+    selectClientProgress(plan, [], day('2026-01-05'));
+    expect(JSON.stringify(plan)).toBe(frozen);
+  });
+});
+

@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAppLayout } from '@/hooks/useAppLayout';
 import { fetchActiveTrainingPlan, saveTrainingPlan } from '@/services/supabaseTrainingPlanService';
 import { fetchSessionLogs } from '@/services/supabaseSessionLogService';
-import { generateDynamicTrainingPlan } from '@/services/plan/workoutGenerator';
+import { generateDynamicTrainingPlan, applyFirstSessionLoads } from '@/services/plan/workoutGenerator';
 import { selectClientProgress } from '@/services/plan/progressSelector';
 import {
   buildTrainingPlanInput,
@@ -47,7 +47,14 @@ export default function TrainingPage() {
   const [trainingDaysPerWeek, setTrainingDaysPerWeek] = useState<number | undefined>(undefined);
   const [sessionDuration, setSessionDuration] = useState<number | undefined>(undefined);
   const [preferredTrainingStyle, setPreferredTrainingStyle] = useState<Client['preferredTrainingStyle'] | undefined>(undefined);
-  const [equipment, setEquipment] = useState<string[]>([]);
+    const [equipment, setEquipment] = useState<string[]>([]);
+  // Draft, unsaved generated plan plus the coach's per-exercise loads for its
+  // FIRST session (Week 1 / Day 1). The coach finalizes each loaded exercise's
+  // own load here, then `saveTrainingPlan` persists a single authoritative plan
+  // (the existing save path). This replaces the old single global load, which
+  // violated "each exercise must have its own targetLoad".
+  const [pendingPlan, setPendingPlan] = useState<TrainingPlan | null>(null);
+  const [firstSessionLoads, setFirstSessionLoads] = useState<Record<string, number>>({});
 
   // Load persisted training-profile values into the questionnaire once per
   // client. Fields with no persisted value stay empty until completed.
@@ -59,8 +66,11 @@ export default function TrainingPage() {
     setTrainingExperience(activeClient.trainingExperience ?? undefined);
     setTrainingDaysPerWeek(activeClient.trainingDaysPerWeek ?? undefined);
     setSessionDuration(activeClient.sessionDuration ?? undefined);
-    setPreferredTrainingStyle(activeClient.preferredTrainingStyle ?? undefined);
+        setPreferredTrainingStyle(activeClient.preferredTrainingStyle ?? undefined);
     setEquipment(activeClient.equipment ?? []);
+    // First-session loads are coach-established on the pending plan (never
+    // persisted on the client row), so they reset whenever the client changes.
+    setFirstSessionLoads({});
   }, [activeClient]);
 
   useEffect(() => {
@@ -100,7 +110,7 @@ export default function TrainingPage() {
     setEquipment(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
   };
 
-  const handleGeneratePlan = async () => {
+    const handleGeneratePlan = async () => {
     if (!clientIdToUse || !activeClient) return;
     setIsGeneratingPlan(true);
     setError(null);
@@ -119,7 +129,46 @@ export default function TrainingPage() {
       }
 
       const generatedPlan = generateDynamicTrainingPlan(input);
-      const saveResult = await saveTrainingPlan(clientIdToUse, generatedPlan);
+      // Do NOT persist yet. The coach must first establish the per-exercise
+      // first-session loads (Week 1 / Day 1) — each exercise its own baseline —
+      // before the single authoritative `saveTrainingPlan` call. Generation
+      // produces equipment-aware default loads as starting points.
+      const loads: Record<string, number> = {};
+      const firstSession = generatedPlan.weeks[0]?.sessions[0];
+      if (firstSession) {
+                for (const ex of firstSession.exercises) {
+          if (ex.loadUnit !== 'bodyweight') {
+            loads[ex.exercise.id] = ex.targetLoad;
+          }
+        }
+      }
+      setPendingPlan(generatedPlan);
+      setFirstSessionLoads(loads);
+      setShowQuestionnaire(false);
+      setError(null);
+      toast({
+        title: 'Plan generated',
+        description: 'Set each exercise load for the first session, then save the plan.',
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to generate training plan.');
+    } finally {
+      setIsGeneratingPlan(false);
+    }
+  };
+
+  // Persist the generated + coach-edited plan. Reuses the authoritative
+  // `saveTrainingPlan` path (single TrainingPlan model; no second plan type).
+  // The coach's per-exercise first-session loads are applied to Week 1 / Day 1
+  // only — that is the coach-established baseline; later sessions are adapted
+  // at runtime by progressSelector from session_logs.
+  const handleSavePlan = async () => {
+    if (!pendingPlan || !clientIdToUse) return;
+    const planToSave = applyFirstSessionLoads(pendingPlan, firstSessionLoads);
+    setIsGeneratingPlan(true);
+    setError(null);
+    try {
+      const saveResult = await saveTrainingPlan(clientIdToUse, planToSave);
       if (!saveResult.success) {
         setError(saveResult.error || 'Failed to save generated training plan.');
         return;
@@ -127,28 +176,34 @@ export default function TrainingPage() {
 
       // `save_training_plan` generates the authoritative `training_plans.id`
       // UUID and returns it as `planId`. OVERRIDE the generated placeholder so
-      // the in-memory plan references the real persisted FK — otherwise the fake
-      // `plan.id` would be sent as `p_plan_id` (a UUID column) when logging a
-      // session, and PostgreSQL rejects it (22P02 invalid UUID).
+      // the in-memory plan references the real persisted FK — otherwise the
+      // placeholder `plan.id` would be sent as `p_plan_id` (a UUID column)
+      // when logging a session, and PostgreSQL rejects it (22P02 invalid UUID).
       const savedPlan = saveResult.planId
-        ? { ...generatedPlan, id: saveResult.planId }
-        : generatedPlan;
+        ? { ...planToSave, id: saveResult.planId }
+        : planToSave;
 
       setPlan(savedPlan);
-      setShowQuestionnaire(false);
+      setPendingPlan(null);
+      setFirstSessionLoads({});
       // A freshly generated plan has no execution history yet — progress starts
       // at the first prescribed session. The plan itself is never rewritten when
       // the client later logs sessions.
       setSessionLogs([]);
       toast({
-        title: 'Training plan generated',
-        description: 'The training plan is saved and ready in the training workspace.',
+        title: 'Training plan saved',
+        description: 'The plan is ready in the training workspace.',
       });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to generate training plan.');
+      setError(err instanceof Error ? err.message : 'Unable to save training plan.');
     } finally {
       setIsGeneratingPlan(false);
     }
+  };
+
+  // Coaching the per-exercise first-session load UI updates the draft loads.
+    const updateFirstSessionLoad = (exerciseId: string, value: number) => {
+    setFirstSessionLoads(prev => ({ ...prev, [exerciseId]: value }));
   };
 
   // Client progress is DERIVED from the prescription + session_logs (scoped by
@@ -172,7 +227,7 @@ export default function TrainingPage() {
     [sessionLogs],
   );
 
-  if (loading) {
+    if (loading) {
     return (
       <Card className="p-8 shadow-card">
         <div className="flex flex-col items-center gap-4">
@@ -180,6 +235,87 @@ export default function TrainingPage() {
           <p className="text-muted-foreground">Loading training plan...</p>
         </div>
       </Card>
+    );
+  }
+
+  // Pending plan: the coach generated a plan and now sets the per-exercise
+  // first-session loads before the single authoritative `saveTrainingPlan`.
+  // Week 1 / Day 1 is the coach-established baseline — each loaded exercise
+  // gets its OWN targetLoad; bodyweight exercises stay bodyweight. No plan is
+  // persisted until the coach clicks Save, so there is never a half-saved state.
+  if (pendingPlan) {
+    const firstSession = pendingPlan.weeks[0]?.sessions[0];
+    if (!firstSession || !firstSession.exercises.length) {
+      return (
+        <Card className="p-6 shadow-card">
+          <h2 className="text-2xl font-bold text-primary">Training</h2>
+          <p className="text-muted-foreground mt-2">The generated plan has no exercises to assign loads to.</p>
+        </Card>
+      );
+    }
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">First session — set starting loads</h2>
+            <p className="text-sm text-muted-foreground">
+              Week 1 / Day 1 is the coach-established baseline. Enter the target load for each
+              loaded exercise — each exercise gets its OWN value, snapped to its equipment increment.
+              Bodyweight exercises stay bodyweight. Subsequent sessions adapt from session logs.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => { setPendingPlan(null); setFirstSessionLoads({}); setShowQuestionnaire(true); }} disabled={isGeneratingPlan}>
+            Back to questionnaire
+          </Button>
+        </div>
+
+        <div className="space-y-3">
+          {firstSession.exercises.map(exercise => {
+            const isBodyweight = exercise.loadUnit === 'bodyweight';
+            const value = firstSessionLoads[exercise.exercise.id] ?? exercise.targetLoad;
+            return (
+              <div key={exercise.exercise.id} className="flex items-end justify-between rounded-lg border border-border p-3">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">{exercise.exercise.name}</p>
+                  <p className="text-xs text-muted-foreground">{exercise.sets}×{exercise.reps} · Target {exercise.targetRPE}</p>
+                </div>
+                {isBodyweight ? (
+                  <div className="text-right">
+                    <span className="text-xs text-muted-foreground">Bodyweight (0)</span>
+                  </div>
+                ) : (
+                  <div className="w-32">
+                    <Label htmlFor={`fs-load-${exercise.exercise.id}`}>Load {exercise.loadUnit}</Label>
+                    <Input
+                      id={`fs-load-${exercise.exercise.id}`}
+                      type="number"
+                      min={0}
+                      step="2.5"
+                      value={Number.isNaN(value) ? '' : String(value)}
+                      onChange={e => updateFirstSessionLoad(exercise.exercise.id, Number(e.target.value))}
+                      className="mt-1"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">Loads are quantized to equipment increments (2.5 kg barbell/dumbbell/cable; 5 kg machine).</p>
+          <Button onClick={handleSavePlan} disabled={isGeneratingPlan}>
+            {isGeneratingPlan ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>Save training plan</>
+            )}
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -263,7 +399,7 @@ export default function TrainingPage() {
                   {activeClient?.primaryGoal ? activeClient.primaryGoal.replace('_', ' ') : 'Not set on client profile'}
                 </div>
               </div>
-            </div>
+                        </div>
 
             <div>
               <Label>Available equipment</Label>

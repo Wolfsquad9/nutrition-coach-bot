@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import TrainingPage from './TrainingPage';
 import { sampleClient } from '@/data/sampleData';
-import type { Client, TrainingPlan } from '@/types';
+import type { Client, TrainingPlan, WorkoutExercise, Exercise } from '@/types';
 
 const { mockedActiveClientRef } = vi.hoisted(() => ({
   mockedActiveClientRef: { current: null as Client | null },
@@ -30,9 +30,10 @@ vi.mock('@/services/supabaseSessionLogService', () => ({
   saveSessionLog: vi.fn(),
 }));
 
-vi.mock('@/services/plan/workoutGenerator', () => ({
-  generateDynamicTrainingPlan: vi.fn(),
-}));
+vi.mock('@/services/plan/workoutGenerator', async () => {
+  const actual = await vi.importActual<typeof import('@/services/plan/workoutGenerator')>('@/services/plan/workoutGenerator');
+  return { ...actual, generateDynamicTrainingPlan: vi.fn() };
+});
 
 import { fetchActiveTrainingPlan, saveTrainingPlan } from '@/services/supabaseTrainingPlanService';
 import { fetchSessionLogs, saveSessionLog } from '@/services/supabaseSessionLogService';
@@ -164,7 +165,7 @@ describe('TrainingPage generation authority', () => {
       expect(mockGenerateDynamicTrainingPlan).toHaveBeenCalledTimes(1);
     });
 
-    const input = mockGenerateDynamicTrainingPlan.mock.calls[0][0];
+        const input = mockGenerateDynamicTrainingPlan.mock.calls[0][0];
     expect(input).toEqual({
       id: 'client-1',
       primaryGoal: 'recomposition',
@@ -176,8 +177,116 @@ describe('TrainingPage generation authority', () => {
       equipmentAvailable: sampleClient.equipmentAvailable,
     });
 
-    // The generated plan is persisted to training_plans.plan_data.
-    expect(mockSaveTrainingPlan).toHaveBeenCalledWith('client-1', fixturePlan);
+    // Generation does NOT persist yet — the coach must set per-exercise first-
+    // session loads first, and only then the single `saveTrainingPlan` fires.
+    expect(mockSaveTrainingPlan).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Save training plan/i })).toBeInTheDocument();
+  });
+
+  it('preserves each exercise OWN first-session load on save (bodyweight stays bodyweight)', async () => {
+    // Three distinct LOADED exercises + one bodyweight exercise in Week 1 / Day 1.
+    mockedActiveClientRef.current = {
+      ...sampleClient,
+      id: 'client-1',
+      trainingExperience: 'intermediate',
+      trainingDaysPerWeek: 4,
+      preferredTrainingStyle: 'hypertrophy',
+      sessionDuration: 60,
+      equipment: undefined,
+    };
+
+    // A generated plan whose first session has four exercises, each with its OWN
+    // targetLoad (30 / 10 / 40 for loaded; 0 / bodyweight for the last).
+    const baseEx: WorkoutExercise = fixturePlan.weeks[0].sessions[0].exercises[0];
+    const makeEx = (
+      exercise: Exercise,
+      targetLoad: number,
+      loadUnit: 'kg' | 'lb' | 'bodyweight',
+      equipmentType: string,
+    ): WorkoutExercise => ({
+      ...baseEx,
+      exercise,
+      sets: 3,
+      reps: '8-10',
+      rest: 90,
+      targetRPE: 'RPE 7-8',
+      targetLoad,
+      loadUnit,
+      equipmentType: equipmentType as WorkoutExercise['equipmentType'],
+      progressionHint: `Start with ${targetLoad}${loadUnit === 'kg' ? ' kg' : ''}.`,
+      progressionRule: 'Use RPE and rep completion to guide the next session load.',
+      intensity: 'RPE 7-8',
+      tempo: '2-0-2-0',
+      notes: '',
+    });
+
+    const exA: Exercise = { id: 'ex-a', name: 'Barbell Squat', category: 'legs', equipment: ['barbell'], difficulty: 'intermediate', primaryMuscles: ['quadriceps'], secondaryMuscles: [], instructions: [] };
+    const exB: Exercise = { id: 'ex-b', name: 'Dumbbell Row', category: 'back', equipment: ['dumbbells'], difficulty: 'intermediate', primaryMuscles: ['lats'], secondaryMuscles: [], instructions: [] };
+    const exC: Exercise = { id: 'ex-c', name: 'Machine Chest Press', category: 'chest', equipment: ['machines'], difficulty: 'intermediate', primaryMuscles: ['chest'], secondaryMuscles: [], instructions: [] };
+    const exBW: Exercise = { id: 'ex-bw', name: 'Pull-ups', category: 'back', equipment: [], difficulty: 'beginner', primaryMuscles: ['lats'], secondaryMuscles: [], instructions: [] };
+
+    const multiFixturePlan: TrainingPlan = {
+      ...fixturePlan,
+      weeks: [{
+        weekNumber: 1,
+        phase: 'foundation',
+        objective: 'o',
+        sessions: [{
+          ...fixturePlan.weeks[0].sessions[0],
+          exercises: [
+            makeEx(exA, 40, 'kg', 'barbell'),
+            makeEx(exB, 10, 'kg', 'dumbbell'),
+            makeEx(exC, 30, 'kg', 'machine'),
+            makeEx(exBW, 0, 'bodyweight', 'bodyweight'),
+          ],
+        }],
+      }],
+    };
+    mockGenerateDynamicTrainingPlan.mockReturnValue(multiFixturePlan);
+
+    render(<TrainingPage />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Generate Plan/i })).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('Session duration (minutes)'), { target: { value: '75' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /barbell/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Plan/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/set starting loads/i)).toBeInTheDocument();
+    });
+    expect(mockSaveTrainingPlan).not.toHaveBeenCalled();
+
+    // The coach edits each loaded exercise's OWN load by its seed default value.
+    fireEvent.change(screen.getByDisplayValue('40'), { target: { value: '55' } });
+    fireEvent.change(screen.getByDisplayValue('10'), { target: { value: '12.5' } });
+    fireEvent.change(screen.getByDisplayValue('30'), { target: { value: '45' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Save training plan/i }));
+
+    await waitFor(() => {
+      expect(mockSaveTrainingPlan).toHaveBeenCalledTimes(1);
+    });
+
+    const savedPlan: TrainingPlan = mockSaveTrainingPlan.mock.calls[0][1];
+    const firstSession = savedPlan.weeks[0].sessions[0];
+    // Each loaded exercise kept its OWN edited targetLoad (not a global value).
+    expect(firstSession.exercises[0].targetLoad).toBe(55);
+    expect(firstSession.exercises[1].targetLoad).toBe(12.5);
+    expect(firstSession.exercises[2].targetLoad).toBe(45);
+    // The loaded exercises remain loaded (correct load unit, > 0).
+    expect(firstSession.exercises[0].loadUnit).toBe('kg');
+    expect(firstSession.exercises[1].loadUnit).toBe('kg');
+    expect(firstSession.exercises[2].loadUnit).toBe('kg');
+    // Bodyweight exercise is NOT given a load — stays bodyweight / 0.
+    expect(firstSession.exercises[3].loadUnit).toBe('bodyweight');
+    expect(firstSession.exercises[3].targetLoad).toBe(0);
+    // The three loaded exercises hold three DISTINCT loads (no single global load).
+    const loadedLoads = firstSession.exercises
+      .filter(e => e.loadUnit !== 'bodyweight')
+      .map(e => e.targetLoad);
+    expect(new Set(loadedLoads)).toHaveLength(3);
   });
 });
 

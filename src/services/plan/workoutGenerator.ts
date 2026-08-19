@@ -107,7 +107,15 @@ const buildWeek = (
       createSeededRng(`${client.id}-${weekNumber}-${sessionType}`),
     );
 
-    const workoutExercises: WorkoutExercise[] = exercises.map((exercise, exerciseIndex) => {
+        // Week 1 / Day 1 is the coach-established baseline: each loaded exercise
+    // gets its OWN equipment-aware default load here (quantized in
+    // loadPrescription). A single global load is NEVER applied — the coach
+    // finalizes each exercise's first-session load via the Training page's
+    // per-exercise editor before the plan is persisted. Later weeks use the
+    // same per-exercise defaults; the runtime progression engine
+    // (progressSelector) adapts them from session_logs.
+
+    const workoutExercises: WorkoutExercise[] = exercises.map(exercise => {
       const goalParams = GOAL_TRAINING_PARAMS[client.primaryGoal] || GOAL_TRAINING_PARAMS.maintenance;
       const prescription = buildWorkoutPrescription(
         exercise,
@@ -116,7 +124,6 @@ const buildWeek = (
         client.equipmentAvailable ?? client.equipment,
         goalParams.reps,
         goalParams.intensity,
-        exerciseIndex === 0 ? 0 : undefined,
       );
 
       const isCompound = ['squat', 'deadlift', 'bench', 'row', 'press', 'pull-up', 'dip'].some(token => exercise.name.toLowerCase().includes(token));
@@ -193,8 +200,65 @@ export function generateDynamicTrainingPlan(client: TrainingPlanInput): Training
     workouts,
     progressionScheme: 'Autoregulated progression using double progression and RPE-based load decisions.',
     programDescription: `A ${duration}-week training block designed for ${client.primaryGoal.replace('_', ' ')} with ${daysPerWeek}-day frequency and equipment-aware loading.`,
-    // Coach-owned scheduling anchor for Week 1 / Day 1 (calendar-gated progression).
+        // Coach-owned scheduling anchor for Week 1 / Day 1 (calendar-gated progression).
     startDate: new Date().toISOString().slice(0, 10),
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Apply the coach's per-exercise first-session loads (Week 1 / Day 1) into the
+ * generated plan, immutably. Each loaded exercise keeps its OWN targetLoad; the
+ * coach's value replaces the generated default and is snapped to that
+ * equipment's increment (2.5 kg for barbell/dumbbell/cable, 5 kg for machines).
+ * Bodyweight exercises are left untouched (they remain bodyweight / targetLoad 0).
+ *
+ * Only the first session (weeks[0].sessions[0]) is editable - that is the
+ * coach-established baseline. Later sessions and weeks are unchanged and are
+ * adapted at runtime by progressSelector from session_logs. This never mutates
+ * the plan the client later logs into; it only shapes the prescription at
+ * generation/save time.
+ */
+
+// Coarsest load increment per equipment type stored on a WorkoutExercise.
+const EQUIPMENT_INCREMENT: Record<string, number> = {
+  barbell: 2.5,
+  dumbbell: 2.5,
+  cable: 2.5,
+  machine: 5,
+  bodyweight: 1,
+};
+const equipmentIncrement = (ex: WorkoutExercise): number =>
+  ex.loadUnit === 'bodyweight' ? 1 : (EQUIPMENT_INCREMENT[ex.equipmentType ?? ''] ?? 2.5);
+const quantizeToIncrement = (load: number, increment: number): number => {
+  if (increment <= 0) return Math.round(load);
+  const q = Math.round(load / increment) * increment;
+  return Math.max(increment, Math.round(q * 100) / 100);
+};
+
+export function applyFirstSessionLoads(
+  plan: TrainingPlan,
+  loadsByExerciseId: Record<string, number>,
+): TrainingPlan {
+  if (!plan.weeks.length) return plan;
+  const updatedWeeks = plan.weeks.map((week, weekIndex) => {
+    if (weekIndex !== 0) return week;
+    return {
+      ...week,
+      sessions: week.sessions.map((session, sessionIndex) => {
+        if (sessionIndex !== 0) return session;
+        return {
+          ...session,
+          exercises: session.exercises.map((ex): WorkoutExercise => {
+            // Bodyweight exercises never receive a load - they stay bodyweight/0.
+            if (ex.loadUnit === 'bodyweight') return ex;
+            const next = loadsByExerciseId[ex.exercise.id];
+            if (typeof next !== 'number' || Number.isNaN(next) || next < 0) return ex;
+            return { ...ex, targetLoad: quantizeToIncrement(next, equipmentIncrement(ex)) };
+          }),
+        };
+      }),
+    };
+  });
+  return { ...plan, weeks: updatedWeeks };
 }
