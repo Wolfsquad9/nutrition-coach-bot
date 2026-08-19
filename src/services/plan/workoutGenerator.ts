@@ -13,10 +13,12 @@ const WEEK_OPTIONS = [4, 5, 6, 7, 8] as const;
  * the real persisted UUID as soon as the plan is saved/reloaded, so it is
  * never used as the `session_logs.plan_id` FK (which is a UUID column).
  */
+let planPlaceholderSequence = 0;
+
 const createPlanPlaceholderId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
-    : `plan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    : `plan-${Date.now()}-${++planPlaceholderSequence}`;
 
 const trainingObjective = (goal: TrainingPlanInput['primaryGoal']): TrainingPlan['objective'] => {
   switch (goal) {
