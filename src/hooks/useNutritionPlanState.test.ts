@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useNutritionPlanState } from './useNutritionPlanState';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
-import type { MacroTargets } from '@/types';
+import type { MacroTargets, NutritionMetrics } from '@/types';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
@@ -604,7 +604,54 @@ describe('lockPlan snapshot atomicity', () => {
       result.current.weeklyPlan!.days[0].dayName = 'Changed draft day';
     }).not.toThrow();
 
-    expect(result.current.weeklyPlan!.days[0].dayName).toBe('Changed draft day');
+        expect(result.current.weeklyPlan!.days[0].dayName).toBe('Changed draft day');
+  });
+
+  it('passes canonical client metrics into the locked snapshot (not zeroed placeholders)', async () => {
+    mockLockNutritionPlan.mockResolvedValue({
+      success: true,
+      planId: 'p1',
+      versionId: 'v1',
+      versionNumber: 1,
+      error: null,
+    });
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    const canonicalMetrics: NutritionMetrics = {
+      tdee: 2500,
+      bmr: 1800,
+      targetCalories: 2200,
+      proteinGrams: 165,
+      carbsGrams: 250,
+      fatGrams: 73,
+      fiberGrams: 30,
+      waterLiters: 3,
+    };
+
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
+    });
+
+    await act(async () => {
+      await result.current.lockPlan('client-1', fakeClientInfo);
+    });
+
+    expect(mockLockNutritionPlan).toHaveBeenCalledTimes(1);
+    // lockNutritionPlan(clientId, planPayload, snapshot, opts) -> snapshot is arg[2]
+    const builtSnapshot = mockLockNutritionPlan.mock.calls[0][2] as { metrics: NutritionMetrics };
+    expect(builtSnapshot.metrics).toEqual(
+      expect.objectContaining({
+        bmr: 1800,
+        tdee: 2500,
+        targetCalories: 2200,
+        proteinGrams: 165,
+        carbsGrams: 250,
+        fatGrams: 73,
+        fiberGrams: 30,
+        waterLiters: 3,
+      }),
+    );
   });
 
 });

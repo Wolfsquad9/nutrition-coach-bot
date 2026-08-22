@@ -7,6 +7,11 @@
 
 import type { IngredientData } from '@/data/ingredientDatabase';
 import { PORTION_CONSTRAINTS } from '@/domain/shared/constants';
+import {
+  KCAL_PER_G_PROTEIN,
+  KCAL_PER_G_CARBS,
+  KCAL_PER_G_FAT,
+} from '@/domain/nutrition/engine';
 
 // ============= INGREDIENT ROLE TYPES =============
 
@@ -33,24 +38,26 @@ export interface IngredientWithRole extends IngredientData {
  * - Secondary: none of the above
  */
 export function calculateIngredientRole(macros: IngredientData['macros']): IngredientRole {
-  const { protein, carbs, fat, calories } = macros;
-  
+  const { protein, carbs, fat } = macros;
+
+  // Calculate canonical energy from each macronutrient using the engine's
+  // single energy policy (no hardcoded 4/4/9 literals, no reliance on the
+  // legacy stored `calories` field which can diverge).
+  const proteinKcal = protein * KCAL_PER_G_PROTEIN;
+  const carbKcal = carbs * KCAL_PER_G_CARBS;
+  const fatKcal = fat * KCAL_PER_G_FAT;
+  const totalKcal = proteinKcal + carbKcal + fatKcal;
+
   // Avoid division by zero
-  if (calories <= 0) {
+  if (totalKcal <= 0) {
     return 'secondary';
   }
-  
-  // Calculate calories from each macronutrient
-  // Protein: 4 kcal/g, Carbs: 4 kcal/g, Fat: 9 kcal/g
-  const proteinCalories = protein * 4;
-  const carbCalories = carbs * 4;
-  const fatCalories = fat * 9;
-  
+
   // Calculate percentage contribution
-  const proteinPercent = proteinCalories / calories;
-  const carbPercent = carbCalories / calories;
-  const fatPercent = fatCalories / calories;
-  
+  const proteinPercent = proteinKcal / totalKcal;
+  const carbPercent = carbKcal / totalKcal;
+  const fatPercent = fatKcal / totalKcal;
+
   // Apply role assignment rules in order of specificity
   if (proteinPercent >= 0.40) {
     return 'protein';
@@ -61,7 +68,7 @@ export function calculateIngredientRole(macros: IngredientData['macros']): Ingre
   if (fatPercent >= 0.50) {
     return 'fat';
   }
-  
+
   return 'secondary';
 }
 

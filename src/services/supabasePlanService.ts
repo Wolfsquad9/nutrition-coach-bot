@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 import { deepFreeze } from '@/domain/nutrition/snapshot';
+import type { NutritionPrescriptionRecord } from '@/domain/nutrition/prescription';
 import type { Json } from '@/integrations/supabase/types';
 import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
 
@@ -31,6 +32,13 @@ export interface PlanPayload {
   constraintsHitDetails?: string[];
   likedIngredients: string[];
   locked_snapshot_json?: PlanSnapshot | null;
+  /**
+   * Phase 8: the ACTIVE NUTRITION PRESCRIPTION established by THIS lock.
+   * Optional so legacy payloads (without it) remain valid — historical rows
+   * are never rewritten. The record carries only what cannot be derived from
+   * canonical inputs (the effective weekly rate) plus provenance.
+   */
+  nutritionPrescription?: NutritionPrescriptionRecord;
 }
 
 export interface NutritionPlanRow {
@@ -74,6 +82,12 @@ export interface BuildLockedPlanPayloadInput {
   likedIngredients: string[];
   realismConstraintHit?: boolean;
   constraintsHitDetails?: string[];
+  /**
+   * Phase 8: the prescription record established by this lock (effective
+   * weekly rate + provenance). Built via the domain helper
+   * `buildPrescriptionRecord`; omitted for legacy/test callers.
+   */
+  nutritionPrescription?: NutritionPrescriptionRecord;
 }
 
 export interface LockNutritionPlanOptions {
@@ -101,6 +115,7 @@ export function buildLockedPlanPayload(input: BuildLockedPlanPayloadInput): Plan
     realismConstraintHit: input.realismConstraintHit,
     constraintsHitDetails: input.constraintsHitDetails,
     likedIngredients: input.likedIngredients,
+    nutritionPrescription: input.nutritionPrescription,
   };
 }
 

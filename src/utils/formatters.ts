@@ -32,19 +32,3 @@ export function formatWeight(grams: number): string {
   }
   return `${Math.round(grams)} g`;
 }
-
-/**
- * Scale macros by serving size
- */
-export function scaleMacrosByServing(
-  macrosPer100g: { protein: number; carbs: number; fat: number; kcal: number },
-  servingSizeG: number
-): { protein: number; carbs: number; fat: number; calories: number } {
-  const factor = servingSizeG / 100;
-  return {
-    protein: macrosPer100g.protein * factor,
-    carbs: macrosPer100g.carbs * factor,
-    fat: macrosPer100g.fat * factor,
-    calories: macrosPer100g.kcal * factor,
-  };
-}

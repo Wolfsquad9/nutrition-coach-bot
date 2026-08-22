@@ -16,6 +16,7 @@ import type {
   GroceryItem,
 } from '@/types';
 import type { MealData, MealTimeType, IngredientData } from '@/data/ingredientDatabase';
+import { sumMacros, DAYS_PER_WEEK } from '@/domain/nutrition/engine';
 
 const MEAL_ORDER: MealTimeType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -137,6 +138,30 @@ export function mapSnapshotToWeeklyPlan(snapshot: {
   weeklyPlan: readonly Readonly<MealPlan>[];
   metrics: Readonly<Macros>;
 }): WeeklyMealPlanResult {
+  // A week is 7 daily cycles: weekly targets are the daily macro set repeated
+  // for DAYS_PER_WEEK days (canonical weekly scaling, NOT a single day).
+  const weeklyTargetMacros: Macros = {
+    calories: snapshot.metrics.calories * DAYS_PER_WEEK,
+    protein: snapshot.metrics.protein * DAYS_PER_WEEK,
+    carbs: snapshot.metrics.carbs * DAYS_PER_WEEK,
+    fat: snapshot.metrics.fat * DAYS_PER_WEEK,
+    fiber: snapshot.metrics.fiber ? snapshot.metrics.fiber * DAYS_PER_WEEK : 0,
+  };
+
+  // Weekly total = the sum of each day's *actual* aggregated macros, computed
+  // from the canonical `sumMacros` helper (single source of truth).
+  const weeklyTotalMacros = sumMacros(
+    snapshot.weeklyPlan.map((day) => day.totalMacros),
+  );
+
+  const weeklyVariance: Macros = {
+    calories: weeklyTotalMacros.calories - weeklyTargetMacros.calories,
+    protein: weeklyTotalMacros.protein - weeklyTargetMacros.protein,
+    carbs: weeklyTotalMacros.carbs - weeklyTargetMacros.carbs,
+    fat: weeklyTotalMacros.fat - weeklyTargetMacros.fat,
+    fiber: (weeklyTotalMacros.fiber ?? 0) - (weeklyTargetMacros.fiber ?? 0),
+  };
+
   return {
     days: snapshot.weeklyPlan.map((day) => ({
       dayNumber: day.day,
@@ -148,9 +173,9 @@ export function mapSnapshotToWeeklyPlan(snapshot: {
         variance: zeroMacros(),
       },
     })),
-    weeklyTotalMacros: snapshot.metrics,
-    weeklyTargetMacros: snapshot.metrics,
-    weeklyVariance: zeroMacros(),
+    weeklyTotalMacros,
+    weeklyTargetMacros,
+    weeklyVariance,
   };
 }
 

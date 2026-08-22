@@ -21,8 +21,9 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanState';
+import { useAdaptiveNutritionTarget } from '@/hooks/useAdaptiveNutritionTarget';
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
-import { calculateNutritionMetrics } from '@/utils/calculations';
+import { calculateNutritionMetrics } from '@/domain/nutrition/engine';
 import { generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
 import { createDefaultOptimizationEngine } from '@/services/optimization/OptimizationEngine';
 import { DEFAULT_CANDIDATE_COUNT } from '@/services/optimization/types';
@@ -73,6 +74,15 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const planState = useNutritionPlanState();
   const ingredientValidation = useIngredientValidation(activeClientId, clientRestrictions);
 
+  // Phase 7/8: adaptive targeting. The adaptation baseline is the client's
+  // ACTIVE PRESCRIPTION (persisted with the current locked plan version and
+  // unaffected by draft generation). The adapted FUTURE target is used for NEW
+  // plan generation ONLY when the adaptation layer is eligible. Locked plans
+  // are never modified; only an explicit lock establishes a new prescription.
+  const adaptiveTarget = useAdaptiveNutritionTarget(activeClient, planState.activePrescription);
+  const effectiveMetrics =
+    adaptiveTarget.effectiveMetrics ?? calculateNutritionMetrics(activeClient);
+
   const [dailyMealPlan, setDailyMealPlan] = useState<FullDayMealPlanResult | null>(null);
   const [isGeneratingDaily, setIsGeneratingDaily] = useState(false);
   const [isGeneratingWeekly, setIsGeneratingWeekly] = useState(false);
@@ -102,7 +112,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
     setIsGeneratingDaily(true);
     try {
       const likedFoods = getLikedFoods();
-      const metrics = calculateNutritionMetrics(activeClient);
+      const metrics = effectiveMetrics;
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,
@@ -131,7 +141,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
 
     try {
       const likedFoods = getLikedFoods();
-      const metrics = calculateNutritionMetrics(activeClient);
+      const metrics = effectiveMetrics;
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,
@@ -150,7 +160,9 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         candidateCount: DEFAULT_CANDIDATE_COUNT,
       });
 
-      planState.setDraftPlan(result.plan, macroTargets, likedFoods);
+            planState.setDraftPlan(result.plan, macroTargets, likedFoods, metrics, {
+              weeklyRateKg: adaptiveTarget.effectiveWeeklyRateKg,
+            });
       toast({ title: 'Draft generated!', description: 'Plan is in draft mode. Click "Lock Plan" to save it.' });
     } finally {
       setIsGeneratingWeekly(false);

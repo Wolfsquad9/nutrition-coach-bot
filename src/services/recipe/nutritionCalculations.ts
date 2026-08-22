@@ -1,22 +1,48 @@
-import { calculateMacros, type IngredientData } from '@/data/ingredientDatabase';
+import { type IngredientData } from '@/data/ingredientDatabase';
 import type { Macros, MacroTargets } from '@/types';
+import { sumMacros, caloriesFromMacros } from '@/domain/nutrition/engine';
 import { MACRO_TOLERANCES, type MealType } from './constants';
 import type { ToleranceCheckResult } from './types';
 
 /**
- * Calculates total macros of selected ingredients based on their typical serving sizes
+ * Calculates total macros of selected ingredients based on their typical
+ * serving sizes.
+ *
+ * CANONICAL aggregation: each ingredient is scaled exactly to its typical
+ * serving (no intermediate rounding) and the portions are summed through the
+ * engine's `sumMacros` so the recipe calorie total is exactly the canonical
+ * energy of the summed macro grams. The legacy per-ingredient `calories`
+ * source field is never used here.
  */
 export function calculateTotalMacros(ingredients: IngredientData[]): Macros {
-  return ingredients.reduce((total, ing) => {
-    const macros = calculateMacros(ing, ing.typical_serving_size_g);
+  const portions = ingredients.map((ing) => {
+    const factor = ing.typical_serving_size_g / 100;
     return {
-      calories: total.calories + macros.calories,
-      protein: total.protein + macros.protein,
-      carbs: total.carbs + macros.carbs,
-      fat: total.fat + macros.fat,
-      fiber: (total.fiber || 0) + (macros.fiber || 0),
+      protein: ing.macros.protein * factor,
+      carbs: ing.macros.carbs * factor,
+      fat: ing.macros.fat * factor,
+      fiber: ing.macros.fiber !== undefined ? ing.macros.fiber * factor : undefined,
     };
-  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+  });
+
+  const total = sumMacros(portions);
+
+  return {
+    calories: total.calories,
+    protein: total.protein,
+    carbs: total.carbs,
+    fat: total.fat,
+    fiber: total.fiber,
+  };
+}
+
+/** Canonical energy (kcal) of an ingredient's macro grams for one 100g unit. */
+export function macroCaloriesPer100g(ingredient: IngredientData): number {
+  return caloriesFromMacros({
+    protein: ingredient.macros.protein,
+    carbs: ingredient.macros.carbs,
+    fat: ingredient.macros.fat,
+  });
 }
 
 /**

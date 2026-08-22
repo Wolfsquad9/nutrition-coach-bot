@@ -38,6 +38,11 @@ import {
 } from "@/domain/nutrition/snapshotAdapter";
 
 import {
+  buildPrescriptionRecord,
+  type ActiveNutritionPrescription,
+} from "@/domain/nutrition/prescription";
+
+import {
   calculateLockExpiry,
   canLock as domainCanLock,
   validateImmutability,
@@ -114,7 +119,35 @@ export function useNutritionPlanState() {
 
   /* ---------------- SNAPSHOT ---------------- */
 
-  const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
+    const [snapshot, setSnapshot] = useState<PlanSnapshot | null>(null);
+
+  /* ---------------- ACTIVE PRESCRIPTION (Phase 8) ----------------
+   * The client's current authoritative nutrition prescription, hydrated from
+   * the current locked plan version's payload and refreshed by every
+   * successful lock (via the post-lock reload of the atomic RPC result).
+   *
+   * Deliberately NOT cleared or modified by setDraftPlan / discardDraft:
+   * generating or discarding drafts never changes the prescription basis.
+   * Only an explicit lock establishes a new prescription.
+   */
+  const [activePrescription, setActivePrescription] = useState<ActiveNutritionPrescription | null>(null);
+
+  // The effective weekly rate of the CURRENT DRAFT (captured at generation
+  // time so locking persists it into the payload's prescription record).
+  const [draftWeeklyRateKg, setDraftWeeklyRateKg] = useState<number | null>(null);
+  const draftWeeklyRateKgRef = useRef<number | null>(null);
+  draftWeeklyRateKgRef.current = draftWeeklyRateKg;
+
+  /* ---------------- CANONICAL CLIENT METRICS ----------------
+   * Captured at generation time so the locked snapshot carries the real
+   * BMR / TDEE / fiber / water values (instead of zeroed placeholders).
+   * Backs lockPlan (and retryLastAction, which routes through lockPlan).
+   * Synced to a ref so the memoized lockPlan callback always reads the
+   * latest value without re-creating itself.
+   */
+  const [clientMetrics, setClientMetrics] = useState<NutritionMetrics | null>(null);
+  const clientMetricsRef = useRef<NutritionMetrics | null>(null);
+  clientMetricsRef.current = clientMetrics;
 
   /* ---------------- DB METADATA ---------------- */
 
@@ -196,11 +229,14 @@ export function useNutritionPlanState() {
   /* ---------------- CLEAR ---------------- */
   // Defined before loadPlanForClient so it is in scope
 
-  const resetHydratedPlanState = useCallback(() => {
+    const resetHydratedPlanState = useCallback(() => {
     setWeeklyPlan(null);
     setMacroTargets(null);
     setLikedIngredients([]);
+    setClientMetrics(null);
     setSnapshot(null);
+    setActivePrescription(null);
+    setDraftWeeklyRateKg(null);
     setPlanId(null);
     setVersionId(null);
     setVersionNumber(null);
@@ -224,8 +260,9 @@ export function useNutritionPlanState() {
   const { loadPlanForClient } = usePlanFetch(
     {
       setUiState, setError, setLastPersistenceFailed, setWeeklyPlan, setMacroTargets,
-      setLikedIngredients, setSnapshot, setPlanId, setVersionId, setVersionNumber,
-      setPlanCreatedAt, setPayloadHash, setLockedAt, setLockedUntil, setPendingOverrides,
+      setLikedIngredients, setSnapshot, setActivePrescription, setPlanId, setVersionId,
+      setVersionNumber, setPlanCreatedAt, setPayloadHash, setLockedAt, setLockedUntil,
+      setPendingOverrides,
     },
     { loadRequestIdRef, lastFailedActionRef },
     { planId, versionId },
@@ -234,8 +271,14 @@ export function useNutritionPlanState() {
 
   /* ---------------- DRAFT ---------------- */
 
-  const setDraftPlan = useCallback(
-    (plan: WeeklyMealPlanResult, macros: MacroTargets, ingredients: string[]) => {
+    const setDraftPlan = useCallback(
+    (
+      plan: WeeklyMealPlanResult,
+      macros: MacroTargets,
+      ingredients: string[],
+      clientMetricsInput?: NutritionMetrics,
+      options?: { weeklyRateKg?: number | null },
+    ) => {
       const validation = validateImmutability(lifecycleState, "REGENERATE");
       if (!validation.valid) {
         setError("Can't regenerate a locked plan");
@@ -244,7 +287,14 @@ export function useNutritionPlanState() {
 
       setWeeklyPlan(plan);
       setMacroTargets(macros);
+      setClientMetrics(clientMetricsInput ?? null);
       setLikedIngredients(ingredients);
+
+      // Phase 8: capture the draft's effective weekly rate so locking THIS
+      // draft persists its prescription record. The ACTIVE PRESCRIPTION itself
+      // is deliberately left untouched — drafts are never authoritative.
+      const rate = options?.weeklyRateKg;
+      setDraftWeeklyRateKg(typeof rate === "number" && Number.isFinite(rate) ? rate : null);
 
       setPlanId(null);
       setVersionId(null);
@@ -267,10 +317,11 @@ export function useNutritionPlanState() {
     setPlanId(null);
     setVersionId(null);
     setVersionNumber(null);
-    setPlanCreatedAt(null);
+        setPlanCreatedAt(null);
     setPayloadHash(null);
     setLockedAt(null);
     setLockedUntil(null);
+    setClientMetrics(null);
     setSnapshot(null);
 
     // Reload previously locked plan from DB if clientId provided
@@ -298,16 +349,33 @@ export function useNutritionPlanState() {
 
         try {
           try {
+            // Phase 8: persist the prescription record (effective weekly rate
+            // + provenance) with THIS lock, through the existing atomic RPC.
+            // Only an explicit lock establishes a new active prescription.
+            const draftRate = draftWeeklyRateKgRef.current;
+            const nutritionPrescription =
+              draftRate !== null
+                ? buildPrescriptionRecord({
+                    weeklyRateKg: draftRate,
+                    lockedAt: attempt.lockedAt,
+                    versionId: attempt.versionId,
+                  })
+                : undefined;
+
             const planPayload = buildLockedPlanPayload({
               lockedAt: attempt.lockedAt,
               weeklyPlan,
               macroTargets,
               likedIngredients,
+              nutritionPrescription,
             });
             const payloadHash = hashPlanPayload(planPayload);
 
-            // Map MacroTargets → NutritionMetrics for snapshot
-            const metrics: NutritionMetrics = {
+                        // Build canonical NutritionMetrics for the snapshot. Prefer the full
+            // client metrics captured at generation time (carries BMR/TDEE/fiber/
+            // water); fall back to a macroTargets-derived view only when no client
+            // metrics are available (e.g. tests / legacy callers).
+            const metrics: NutritionMetrics = clientMetricsRef.current ?? {
               tdee: 0,
               bmr: 0,
               targetCalories: macroTargets.calories,
@@ -472,11 +540,12 @@ export function useNutritionPlanState() {
   const resolvedWeeklyPlan = snapshot
     ? mapSnapshotToWeeklyPlan({
         weeklyPlan: snapshot.weeklyPlan,
-        metrics: {
+                metrics: {
           calories: snapshot.metrics.targetCalories,
           protein: snapshot.metrics.proteinGrams,
           carbs: snapshot.metrics.carbsGrams,
           fat: snapshot.metrics.fatGrams,
+          fiber: snapshot.metrics.fiberGrams,
         },
       })
     : lockedAt && versionId
@@ -504,6 +573,9 @@ export function useNutritionPlanState() {
     macroTargets,
     likedIngredients,
     snapshot,
+
+    /** Phase 8: the client's current authoritative nutrition prescription. */
+    activePrescription,
 
     planId,
     versionId,

@@ -3,7 +3,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { mapWeeklyMealPlanToSnapshot, buildGroceryListFromPlan } from './snapshotAdapter';
+import {
+  mapWeeklyMealPlanToSnapshot,
+  buildGroceryListFromPlan,
+  mapSnapshotToWeeklyPlan,
+} from './snapshotAdapter';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { IngredientData, MealData, DailyMealPlan } from '@/data/ingredientDatabase';
 
@@ -147,8 +151,61 @@ describe('buildGroceryListFromPlan', () => {
     expect(riceItem).toBeDefined();
     expect(riceItem!.totalAmount).toBe(400); // 200g × 2 days
 
-    const oatsItem = groceries.find(g => g.ingredient === 'Oats');
+        const oatsItem = groceries.find(g => g.ingredient === 'Oats');
     expect(oatsItem).toBeDefined();
     expect(oatsItem!.totalAmount).toBe(160); // 80g × 2 days
+  });
+});
+
+describe('mapSnapshotToWeeklyPlan', () => {
+  it('reconstructs weekly TARGET as 7x daily and TOTAL as the sum of day totals', () => {
+    // Three days with distinct totals. A "single day == weekly" bug (the old
+    // F11 behaviour where weeklyTarget/weeklyTotal were each just `metrics`)
+    // fails here because no single day equals the sum or the 7x target.
+    const snapshot = {
+      weeklyPlan: [
+        { day: 1, meals: [], totalMacros: { calories: 370, protein: 30, carbs: 40, fat: 10, fiber: 2 }, hydration: 0 },
+        { day: 2, meals: [], totalMacros: { calories: 495, protein: 40, carbs: 50, fat: 15, fiber: 3 }, hydration: 0 },
+        { day: 3, meals: [], totalMacros: { calories: 620, protein: 50, carbs: 60, fat: 20, fiber: 5 }, hydration: 0 },
+      ],
+      metrics: {
+        calories: 2000,
+        protein: 150,
+        carbs: 200,
+        fat: 70,
+        fiber: 30,
+      },
+    } as Parameters<typeof mapSnapshotToWeeklyPlan>[0];
+
+    const result = mapSnapshotToWeeklyPlan(snapshot);
+
+    // Weekly TARGET = 7 × daily target (canonical weekly scaling, NOT the daily figure)
+    expect(result.weeklyTargetMacros).toEqual({
+      calories: 14000,
+      protein: 1050,
+      carbs: 1400,
+      fat: 490,
+      fiber: 210,
+    });
+
+    // Weekly TOTAL = sum of each day's aggregated macros. Calories are
+    // recomputed by the canonical sumMacros rule (protein*4 + carbs*4 + fat*9):
+    // (30+40+50)*4 + (40+50+60)*4 + (10+15+20)*9 = 480 + 600 + 405 = 1485
+    expect(result.weeklyTotalMacros).toEqual({
+      calories: 1485,
+      protein: 120,
+      carbs: 150,
+      fat: 45,
+      fiber: 10,
+    });
+
+    // Variance is total - target (the old code zeroed it out)
+    expect(result.weeklyVariance).toEqual({
+      calories: 1485 - 14000,
+      protein: 120 - 1050,
+      carbs: 150 - 1400,
+      fat: 45 - 490,
+      fiber: 10 - 210,
+    });
   });
 });
