@@ -5,7 +5,8 @@ import {
   MEAL_MACRO_SPLIT,
   MAX_CONVERGENCE_ITERATIONS,
 } from './constants';
-import { checkMacroTolerance } from './nutritionCalculations';
+import { checkMacroTolerance, calculateTotalMacros } from './nutritionCalculations';
+import { sumMacros } from '@/domain/nutrition/engine';
 import { generateRecipe } from './recipeGenerators';
 import { generateMealRecipeText, generateFinalRecipeText } from './deterministicRecipeText';
 import { adjustMealIngredients } from './mealAdjuster';
@@ -58,14 +59,10 @@ export function generateFullDayMealPlan(
         typical_serving_size_g: Math.round(ing.typical_serving_size_g * clampedScale),
       }));
       
-      // Recalculate macros with scaled ingredients
-      const scaledMacros = {
-        calories: Math.round(recipe.macrosPerServing.calories * clampedScale),
-        protein: Math.round(recipe.macrosPerServing.protein * clampedScale),
-        carbs: Math.round(recipe.macrosPerServing.carbs * clampedScale),
-        fat: Math.round(recipe.macrosPerServing.fat * clampedScale),
-        fiber: Math.round((recipe.macrosPerServing.fiber || 0) * clampedScale),
-      };
+      // Recalculate macros from the scaled ingredients through the canonical
+      // aggregation helper — calories are derived by the engine from the
+      // summed macro grams, never scaled from a stored per-serving calorie.
+      const scaledMacros = { ...calculateTotalMacros(scaledIngredients) };
       
       // Generate recipe text
       const recipeText = generateMealRecipeText(recipe.name, scaledIngredients, recipe.instructions);
@@ -173,18 +170,29 @@ export function generateFullDayMealPlan(
     if (meal.ingredients && meal.ingredients.length > 0) {
       meal.recipeText = generateFinalRecipeText(meal.ingredients, mealType);
       
-      // Also recalculate and update the meal macros to ensure accuracy
-      const recalculatedMacros = meal.ingredients.reduce((acc, ing) => {
-        const factor = ing.typical_serving_size_g / 100;
-        return {
-          calories: acc.calories + Math.round(ing.macros.calories * factor),
-          protein: acc.protein + Math.round(ing.macros.protein * factor),
-          carbs: acc.carbs + Math.round(ing.macros.carbs * factor),
-          fat: acc.fat + Math.round(ing.macros.fat * factor),
-        };
-      }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-      
-      meal.macros = recalculatedMacros;
+      // Also recalculate and update the meal macros to ensure accuracy.
+      // CANONICAL: aggregate the (exact) scaled ingredient grams through the
+      // engine's sumMacros, then round ONCE at the meal boundary. The legacy
+      // ingredient `calories` field is intentionally never used here.
+      const recalculatedMacros = sumMacros(
+        meal.ingredients.map((ing) => {
+          const factor = ing.typical_serving_size_g / 100;
+          return {
+            protein: ing.macros.protein * factor,
+            carbs: ing.macros.carbs * factor,
+            fat: ing.macros.fat * factor,
+            fiber: ing.macros.fiber !== undefined ? ing.macros.fiber * factor : undefined,
+          };
+        })
+      );
+
+      meal.macros = {
+        calories: Math.round(recalculatedMacros.calories),
+        protein: Math.round(recalculatedMacros.protein),
+        carbs: Math.round(recalculatedMacros.carbs),
+        fat: Math.round(recalculatedMacros.fat),
+        fiber: recalculatedMacros.fiber !== undefined ? Math.round(recalculatedMacros.fiber) : undefined,
+      };
     }
   }
   

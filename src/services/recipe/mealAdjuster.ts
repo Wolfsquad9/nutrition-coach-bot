@@ -1,4 +1,5 @@
 import { type Macros, type MacroTargets } from '@/types';
+import { caloriesFromMacros } from '@/domain/nutrition/engine';
 import {
   enhanceIngredientWithRole,
   calculateIngredientRole,
@@ -120,9 +121,14 @@ export function adjustMealIngredients(
           typical_serving_size_g: Math.round(newServing),
         };
 
-        // Update meal macros
+        // Update meal macros — calorie change derived canonically from the
+        // adjusted macro grams (never from the stored ingredient calories field).
         const macroChange = {
-          calories: (ing.macros.calories / 100) * servingChange,
+          calories: caloriesFromMacros({
+            protein: (ing.macros.protein / 100) * servingChange,
+            carbs: (ing.macros.carbs / 100) * servingChange,
+            fat: (ing.macros.fat / 100) * servingChange,
+          }),
           protein: (ing.macros.protein / 100) * servingChange,
           carbs: (ing.macros.carbs / 100) * servingChange,
           fat: (ing.macros.fat / 100) * servingChange,
@@ -179,7 +185,11 @@ export function adjustMealIngredients(
           meal.ingredients[i] = { ...ing, typical_serving_size_g: Math.round(newServing) };
           
           const macroChange = {
-            calories: (ing.macros.calories / 100) * addGrams,
+            calories: caloriesFromMacros({
+              protein: (ing.macros.protein / 100) * addGrams,
+              carbs: (ing.macros.carbs / 100) * addGrams,
+              fat: (ing.macros.fat / 100) * addGrams,
+            }),
             protein: (ing.macros.protein / 100) * addGrams,
             carbs: (ing.macros.carbs / 100) * addGrams,
             fat: (ing.macros.fat / 100) * addGrams,

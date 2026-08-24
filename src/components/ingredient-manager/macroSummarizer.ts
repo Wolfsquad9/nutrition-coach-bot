@@ -13,6 +13,7 @@
 
 import { useMemo } from "react";
 import { coreIngredients } from "@/data/ingredientDatabase";
+import { sumMacros } from "@/domain/nutrition/engine";
 import type { ClientIngredientRestrictions } from "@/utils/ingredientSubstitution";
 
 export interface MacroTotals {
@@ -31,6 +32,9 @@ const EMPTY_TOTALS: MacroTotals = {
 
 /**
  * Pure: compute totals over the given ingredient pool minus blocked.
+ * CANONICAL: scale each ingredient exactly to its serving and aggregate via
+ * the engine's sumMacros so calories = canonical energy of the summed grams.
+ * The legacy `ing.macros.calories` source field is intentionally never summed.
  */
 export function summarizeMacros(
   restriction: ClientIngredientRestrictions | null
@@ -41,15 +45,24 @@ export function summarizeMacros(
     (ing) => !restriction.blockedIngredients.includes(ing.id)
   );
 
-  return allowedIngredients.reduce<MacroTotals>((acc, ing) => {
-    const servingFactor = ing.typical_serving_size_g / 100;
-    return {
-      calories: acc.calories + ing.macros.calories * servingFactor,
-      protein: acc.protein + ing.macros.protein * servingFactor,
-      carbs: acc.carbs + ing.macros.carbs * servingFactor,
-      fat: acc.fat + ing.macros.fat * servingFactor,
-    };
-  }, { ...EMPTY_TOTALS });
+  const totals = sumMacros(
+    allowedIngredients.map((ing) => {
+      const servingFactor = ing.typical_serving_size_g / 100;
+      return {
+        protein: ing.macros.protein * servingFactor,
+        carbs: ing.macros.carbs * servingFactor,
+        fat: ing.macros.fat * servingFactor,
+        fiber: ing.macros.fiber !== undefined ? ing.macros.fiber * servingFactor : undefined,
+      };
+    })
+  );
+
+  return {
+    calories: totals.calories,
+    protein: totals.protein,
+    carbs: totals.carbs,
+    fat: totals.fat,
+  };
 }
 
 /**

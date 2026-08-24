@@ -33,6 +33,11 @@ import {
   validateSnapshotStructure,
 } from "@/domain/nutrition/snapshot";
 import {
+  prescriptionFromLockedPlan,
+  readPrescriptionRecord,
+  type ActiveNutritionPrescription,
+} from "@/domain/nutrition/prescription";
+import {
   createSnapshotInvariantError,
   createSnapshotValidationError,
   createTransientLoadError,
@@ -53,6 +58,7 @@ export interface UsePlanFetchSetters {
   setMacroTargets: Dispatch<SetStateAction<MacroTargets | null>>;
   setLikedIngredients: Dispatch<SetStateAction<string[]>>;
   setSnapshot: Dispatch<SetStateAction<PlanSnapshot | null>>;
+  setActivePrescription: Dispatch<SetStateAction<ActiveNutritionPrescription | null>>;
   setPlanId: Dispatch<SetStateAction<string | null>>;
   setVersionId: Dispatch<SetStateAction<string | null>>;
   setVersionNumber: Dispatch<SetStateAction<number | null>>;
@@ -86,8 +92,9 @@ export function usePlanFetch(
 ) {
   const {
     setUiState, setError, setLastPersistenceFailed, setWeeklyPlan, setMacroTargets,
-    setLikedIngredients, setSnapshot, setPlanId, setVersionId, setVersionNumber,
-    setPlanCreatedAt, setPayloadHash, setLockedAt, setLockedUntil, setPendingOverrides,
+    setLikedIngredients, setSnapshot, setActivePrescription, setPlanId, setVersionId,
+    setVersionNumber, setPlanCreatedAt, setPayloadHash, setLockedAt, setLockedUntil,
+    setPendingOverrides,
   } = setters;
   const { loadRequestIdRef, lastFailedActionRef } = refs;
   const { planId, versionId } = ctx;
@@ -177,6 +184,22 @@ export function usePlanFetch(
       setWeeklyPlan(payload.weeklyPlan);
       setMacroTargets(payload.macroTargets as MacroTargets);
       setLikedIngredients(payload.likedIngredients || []);
+      // Phase 8: hydrate the ACTIVE PRESCRIPTION from the current locked
+      // version's payload. Legacy payloads without a (valid) record yield null
+      // and the consumer lazily derives the canonical initial prescription.
+      const rxRecord = readPrescriptionRecord(payload);
+      setActivePrescription(
+        rxRecord && planResult.versionId
+          ? prescriptionFromLockedPlan({
+              weeklyRateKg: rxRecord.weeklyRateKg,
+              targetCalories:
+                nextSnapshot?.metrics.targetCalories ?? payload.macroTargets.calories,
+              versionId: planResult.versionId,
+              versionNumber: planResult.versionNumber ?? null,
+              establishedAt: rxRecord.establishedAt,
+            })
+          : null,
+      );
       setPlanId(planResult.planId);
       setVersionId(planResult.versionId);
       setVersionNumber(planResult.versionNumber ?? null);
@@ -230,9 +253,9 @@ export function usePlanFetch(
   }, [
     clearState, resetHydratedPlanState, planId, versionId,
     setUiState, setError, setLastPersistenceFailed, setWeeklyPlan, setMacroTargets,
-    setLikedIngredients, setSnapshot, setPlanId, setVersionId, setVersionNumber,
-    setPlanCreatedAt, setPayloadHash, setLockedAt, setLockedUntil, setPendingOverrides,
-    loadRequestIdRef, lastFailedActionRef,
+    setLikedIngredients, setSnapshot, setActivePrescription, setPlanId, setVersionId,
+    setVersionNumber, setPlanCreatedAt, setPayloadHash, setLockedAt, setLockedUntil,
+    setPendingOverrides, loadRequestIdRef, lastFailedActionRef,
   ]);
 
   return { loadPlanForClient };

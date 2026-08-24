@@ -1,5 +1,7 @@
 export type MealTimeType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+import { caloriesFromMacros } from '@/domain/nutrition/engine';
+
 export interface IngredientData {
   id: string;
   name: string;
@@ -533,15 +535,27 @@ export function getIngredientsByTags(tags: string[]): IngredientData[] {
   );
 }
 
-// Helper function to calculate macros for a given serving size
+// Helper function to calculate macros for a given serving size.
+// IMPORTANT (data-source divergence fix): ingredient `macros.calories` is
+// treated as legacy source metadata. The returned `calories` is ALWAYS derived
+// from the scaled macro grams through the canonical engine rule
+// (protein*4 + carbs*4 + fat*9) — never from the stored `macros.calories` field.
 export function calculateMacros(ingredient: IngredientData, servingSize: number) {
   const ratio = servingSize / 100;
+  const scaled = {
+    protein: ingredient.macros.protein * ratio,
+    carbs: ingredient.macros.carbs * ratio,
+    fat: ingredient.macros.fat * ratio,
+    fiber: ingredient.macros.fiber !== undefined ? ingredient.macros.fiber * ratio : undefined,
+  };
   return {
-    protein: Math.round(ingredient.macros.protein * ratio * 10) / 10,
-    carbs: Math.round(ingredient.macros.carbs * ratio * 10) / 10,
-    fat: Math.round(ingredient.macros.fat * ratio * 10) / 10,
-    calories: Math.round(ingredient.macros.calories * ratio),
-    fiber: ingredient.macros.fiber ? Math.round(ingredient.macros.fiber * ratio * 10) / 10 : undefined
+    protein: Math.round(scaled.protein * 10) / 10,
+    carbs: Math.round(scaled.carbs * 10) / 10,
+    fat: Math.round(scaled.fat * 10) / 10,
+    calories: Math.round(
+      caloriesFromMacros({ protein: scaled.protein, carbs: scaled.carbs, fat: scaled.fat })
+    ),
+    fiber: scaled.fiber !== undefined ? Math.round(scaled.fiber * 10) / 10 : undefined,
   };
 }
 

@@ -1,5 +1,6 @@
 import { type IngredientData } from '@/data/ingredientDatabase';
 import { type MealType } from './constants';
+import { sumMacros } from '@/domain/nutrition/engine';
 
 /**
  * Generates a deterministic recipe name based on main ingredients
@@ -162,18 +163,22 @@ export function generateFinalRecipeText(
     .map((inst, idx) => `${idx + 1}. ${inst}`)
     .join('\n');
   
-  // Calculate and display meal macros summary
-  const mealMacros = ingredients.reduce((acc, ing) => {
-    const factor = ing.typical_serving_size_g / 100;
-    return {
-      calories: acc.calories + Math.round(ing.macros.calories * factor),
-      protein: acc.protein + Math.round(ing.macros.protein * factor),
-      carbs: acc.carbs + Math.round(ing.macros.carbs * factor),
-      fat: acc.fat + Math.round(ing.macros.fat * factor),
-    };
-  }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-  
-  const macroSummary = `Macros: ${mealMacros.calories} kcal | P: ${mealMacros.protein}g | C: ${mealMacros.carbs}g | F: ${mealMacros.fat}g`;
+  // CANONICAL meal macros summary: aggregate exact scaled macro grams through
+  // the engine's sumMacros, then round at the display-text boundary. The
+  // legacy per-ingredient `calories` source field is intentionally never used.
+  const mealMacros = sumMacros(
+    ingredients.map((ing) => {
+      const factor = ing.typical_serving_size_g / 100;
+      return {
+        protein: ing.macros.protein * factor,
+        carbs: ing.macros.carbs * factor,
+        fat: ing.macros.fat * factor,
+        fiber: ing.macros.fiber !== undefined ? ing.macros.fiber * factor : undefined,
+      };
+    })
+  );
+
+  const macroSummary = `Macros: ${Math.round(mealMacros.calories)} kcal | P: ${Math.round(mealMacros.protein)}g | C: ${Math.round(mealMacros.carbs)}g | F: ${Math.round(mealMacros.fat)}g`;
   
   return `**${recipeName}**\n\n${macroSummary}\n\n**Ingredients:**\n${ingredientList}\n\n**Preparation:**\n${instructionList}`;
 }

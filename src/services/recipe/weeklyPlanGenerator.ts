@@ -1,4 +1,5 @@
 import { type Macros, type MacroTargets } from '@/types';
+import { DAYS_PER_WEEK } from '@/domain/nutrition/engine';
 import { DAY_NAMES } from './constants';
 import { generateFullDayMealPlan, shuffleForDay } from './mealPlanGenerator';
 import type { WeeklyMealPlanResult } from './types';
@@ -38,12 +39,13 @@ export function generateWeeklyMealPlan(
     weeklyTotalMacros.fiber = (weeklyTotalMacros.fiber || 0) + (dailyResult.totalMacros.fiber || 0);
   }
   
-  // Calculate weekly targets and variance
+  // Calculate weekly targets and variance (7 days per week, from the engine
+  // constant so the weekly multiplier has exactly one definition).
   const weeklyTargetMacros: MacroTargets = {
-    calories: macroTargets.calories * 7,
-    protein: macroTargets.protein * 7,
-    carbs: macroTargets.carbs * 7,
-    fat: macroTargets.fat * 7,
+    calories: macroTargets.calories * DAYS_PER_WEEK,
+    protein: macroTargets.protein * DAYS_PER_WEEK,
+    carbs: macroTargets.carbs * DAYS_PER_WEEK,
+    fat: macroTargets.fat * DAYS_PER_WEEK,
   };
   
   const weeklyVariance = {
