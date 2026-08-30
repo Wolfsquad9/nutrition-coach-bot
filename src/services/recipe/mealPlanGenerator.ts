@@ -143,34 +143,18 @@ export function generateFullDayMealPlan(
     iteration++;
   }
 
-  // Final check after loop
-  const finalCheck = checkMacroTolerance(totalMacros, macroTargets);
-  if (finalCheck.withinTolerance) {
-    converged = true;
-  }
+  // ------------------------------------------------------------------
+  // FINAL BOUNDARY ROUNDING — performed ONCE, BEFORE the final validation.
+  // Each meal's macros are recomputed from its exact scaled ingredient grams
+  // through the canonical engine's `sumMacros`, then rounded once at the meal
+  // boundary. The day total is re-derived from those exact returned values.
+  // The object validated below IS the object returned — no post-validation
+  // rounding can drift a converged result out of tolerance.
+  const finalizePlan = (plan: FullDayMealPlanResult['dailyPlan']): Macros => {
+    for (const mealType of mealTypes) {
+      const meal = plan[mealType];
+      if (!meal.ingredients || meal.ingredients.length === 0) continue;
 
-  // If not converged, use best result
-  if (!converged) {
-    const finalVariance = 
-      Math.abs(finalCheck.percentageVariance.calories) +
-      Math.abs(finalCheck.percentageVariance.protein) +
-      Math.abs(finalCheck.percentageVariance.carbs) +
-      Math.abs(finalCheck.percentageVariance.fat);
-
-    if (finalVariance > bestVariance) {
-      dailyPlan = bestResult.plan;
-      totalMacros = bestResult.macros;
-    }
-  }
-
-  // FINAL STEP: Regenerate all recipe texts with final adjusted quantities
-  // This happens ONCE after convergence completes (not during iterations)
-  for (const mealType of mealTypes) {
-    const meal = dailyPlan[mealType];
-    if (meal.ingredients && meal.ingredients.length > 0) {
-      meal.recipeText = generateFinalRecipeText(meal.ingredients, mealType);
-      
-      // Also recalculate and update the meal macros to ensure accuracy.
       // CANONICAL: aggregate the (exact) scaled ingredient grams through the
       // engine's sumMacros, then round ONCE at the meal boundary. The legacy
       // ingredient `calories` field is intentionally never used here.
@@ -183,7 +167,7 @@ export function generateFullDayMealPlan(
             fat: ing.macros.fat * factor,
             fiber: ing.macros.fiber !== undefined ? ing.macros.fiber * factor : undefined,
           };
-        })
+        }),
       );
 
       meal.macros = {
@@ -194,21 +178,55 @@ export function generateFullDayMealPlan(
         fiber: recalculatedMacros.fiber !== undefined ? Math.round(recalculatedMacros.fiber) : undefined,
       };
     }
-  }
-  
-  // Recalculate total macros after final adjustments
-  totalMacros = {
-    calories: 0,
-    protein: 0,
-    carbs: 0,
-    fat: 0,
-    fiber: 0,
+
+    const roundedTotal: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+    for (const mealType of mealTypes) {
+      roundedTotal.calories += plan[mealType].macros.calories;
+      roundedTotal.protein += plan[mealType].macros.protein;
+      roundedTotal.carbs += plan[mealType].macros.carbs;
+      roundedTotal.fat += plan[mealType].macros.fat;
+    }
+    return roundedTotal;
   };
+
+  // Finalize the active candidate (this is the plan that is returned).
+  totalMacros = finalizePlan(dailyPlan);
+  const validatedTotal = { ...totalMacros };
+
+  // Finalize the best intermediate result identically so the fallback path
+  // also returns exactly the values it was validated against.
+  const bestTotal = finalizePlan(bestResult.plan);
+  bestResult.macros = bestTotal;
+
+  // Final check against the EXACT returned object (post-rounding).
+  const finalCheck = checkMacroTolerance(validatedTotal, macroTargets);
+  if (finalCheck.withinTolerance) {
+    converged = true;
+  }
+
+  const varianceScore = (t: ToleranceCheckResult) =>
+    Math.abs(t.percentageVariance.calories) +
+    Math.abs(t.percentageVariance.protein) +
+    Math.abs(t.percentageVariance.carbs) +
+    Math.abs(t.percentageVariance.fat);
+
+  // If not converged, keep the best intermediate result (already finalized up
+  // above) — it is returned verbatim, never re-rounded afterwards.
+  if (!converged) {
+    const bestCheck = checkMacroTolerance(bestResult.macros, macroTargets);
+    if (varianceScore(finalCheck) > varianceScore(bestCheck)) {
+      dailyPlan = bestResult.plan;
+      totalMacros = { ...bestResult.macros };
+    }
+  }
+
+  // Regenerate all recipe texts with the FINAL adjusted quantities. Macros are
+  // NOT recomputed here: they were finalized and validated above exactly.
   for (const mealType of mealTypes) {
-    totalMacros.calories += dailyPlan[mealType].macros.calories;
-    totalMacros.protein += dailyPlan[mealType].macros.protein;
-    totalMacros.carbs += dailyPlan[mealType].macros.carbs;
-    totalMacros.fat += dailyPlan[mealType].macros.fat;
+    const meal = dailyPlan[mealType];
+    if (meal.ingredients && meal.ingredients.length > 0) {
+      meal.recipeText = generateFinalRecipeText(meal.ingredients, mealType);
+    }
   }
 
   // Calculate final variance from targets

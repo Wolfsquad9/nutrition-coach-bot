@@ -18,10 +18,11 @@ import {
   resolveAdaptedTarget,
   type AdaptiveTargetFetchers,
 } from '@/services/nutrition/adaptiveTargetService';
-import { calculateNutritionMetrics } from '@/domain/nutrition/engine';
+import { calculateNutritionMetrics, calculateProfile, buildNutritionProfileInput } from '@/domain/nutrition/engine';
 import {
   deriveInitialPrescription,
   prescriptionFromLockedPlan,
+  reconstructMetricsFromPrescription,
 } from '@/domain/nutrition/prescription';
 import type { Client } from '@/types';
 import type { DailyCheckin } from '@/types/checkin';
@@ -164,6 +165,67 @@ describe('useAdaptiveNutritionTarget', () => {
     // Fallback remains canonical profile metrics at the prescription rate.
     expect(result.current.effectiveMetrics).toEqual(calculateNutritionMetrics(CLIENT));
     expect(result.current.effectiveWeeklyRateKg).toBe(LOCKED_RX.weeklyRateKg);
+  });
+});
+
+// ============================================================================
+// P0 — effectiveMetrics AND effectiveWeeklyRateKg MUST describe the SAME basis
+// ============================================================================
+
+const RX_DIFF = prescriptionFromLockedPlan({
+  weeklyRateKg: -0.7,
+  targetCalories: calculateProfile({
+    ...buildNutritionProfileInput(CLIENT),
+    weeklyWeightChange: -0.7,
+  }).targetCalories,
+  versionId: 'v-diff-1',
+  versionNumber: 2,
+  establishedAt: '2026-01-01T10:00:00.000Z',
+});
+
+describe('P0 · effective metrics agree with the effective weekly rate (same prescription)', () => {
+  it('a prescription whose rate differs from the profile is the basis, not the profile', async () => {
+    const { result } = renderHook(() =>
+      useAdaptiveNutritionTarget(CLIENT, RX_DIFF, emptyFetchers),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.decision?.outcome).toBe('insufficient_data');
+    // The exposed metrics are reconstructed from the ACTIVE prescription (-0.7),
+    // NOT recomputed from the current profile request (-0.5).
+    const expected = reconstructMetricsFromPrescription(CLIENT, RX_DIFF);
+    expect(result.current.effectiveMetrics).toEqual(expected);
+    expect(result.current.effectiveWeeklyRateKg).toBe(RX_DIFF.weeklyRateKg);
+    // They plainly differ from the raw current-profile metrics.
+    expect(result.current.effectiveMetrics).not.toEqual(calculateNutritionMetrics(CLIENT));
+  });
+
+  it('a current client profile change cannot silently override the active prescription', async () => {
+    const changed = buildClient({ weight: 90, weeklyWeightChange: 0.5 });
+    const { result } = renderHook(() =>
+      useAdaptiveNutritionTarget(changed, RX_DIFF, emptyFetchers),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    // Still prescribes the ACTIVE prescription's rate...
+    expect(result.current.effectiveWeeklyRateKg).toBe(RX_DIFF.weeklyRateKg);
+    // ...and its metrics are that prescription reconstructed through the engine.
+    expect(result.current.effectiveMetrics!.targetCalories).toBeCloseTo(
+      calculateProfile({
+        ...buildNutritionProfileInput(changed),
+        weeklyWeightChange: RX_DIFF.weeklyRateKg,
+      }).targetCalories,
+      4,
+    );
+  });
+
+  it('repeated rendering exposes the same effective target/rate (deterministic)', async () => {
+    const first = renderHook(() => useAdaptiveNutritionTarget(CLIENT, RX_DIFF, emptyFetchers));
+    const second = renderHook(() => useAdaptiveNutritionTarget(CLIENT, RX_DIFF, emptyFetchers));
+    await waitFor(() => expect(first.result.current.status).toBe('ready'));
+    await waitFor(() => expect(second.result.current.status).toBe('ready'));
+    expect(first.result.current.effectiveMetrics).toEqual(second.result.current.effectiveMetrics);
+    expect(first.result.current.effectiveWeeklyRateKg).toBe(
+      second.result.current.effectiveWeeklyRateKg,
+    );
   });
 });
 
