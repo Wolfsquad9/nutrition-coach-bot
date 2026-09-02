@@ -406,21 +406,56 @@ function clampAbsoluteTarget(target: number): number {
 }
 
 /**
+ * Resolve the ACTUAL signed energy adjustment the engine will embed in the
+ * target — after BOTH canonical feasibility stages (the signed goal clamp and
+ * the absolute target cap/floor). Single shared path so `calculateTargetCalories`
+ * and the structured decision can never disagree about what was delivered.
+ */
+export function resolveEffectiveEnergyAdjustment(
+  goal: PrimaryGoal,
+  weeklyWeightChange?: number | null,
+): number {
+  const { adjustmentKcal } = resolveEnergyAdjustment(goal, weeklyWeightChange);
+  return clampAdjustment(goal, adjustmentKcal);
+}
+
+/**
+ * Weekly rate (kg/week, signed) implied by an ACTUAL daily energy adjustment.
+ * The exact inverse of `dailyEnergyDelta`; used ONLY for the effective rate so
+ * that a clamped target is never quoted at its pre-clamp requested rate.
+ */
+export function weeklyRateForAdjustment(adjustmentKcal: number): number {
+  return (adjustmentKcal * DAYS_PER_WEEK) / KCAL_PER_KG_BODYWEIGHT;
+}
+
+/**
+ * The effective weekly rate (kg/week, signed) actually delivered by a target
+ * that came OUT of the full canonical clamping pipeline: the rate whose energy
+ * delta equals `targetCalories - tdee`. Errors on the target (e.g. the
+ * absolute MIN/MAX target caps) are reflected here instead of being hidden.
+ */
+export function effectiveWeeklyRateForTarget(tdee: number, targetCalories: number): number {
+  return weeklyRateForAdjustment(targetCalories - tdee);
+}
+
+/**
  * Calculate the starting daily calorie target: targetCalories = TDEE + signedDelta.
  *
  * When no weeklyWeightChange is requested, use the explicit conservative
  * defaults per goal (maintenance => TDEE, recomposition => ~maintenance,
  * fat_loss => conservative deficit, muscle_gain => conservative surplus).
- * The sign of the requested weekly change is always preserved.
+ * The sign of the requested weekly change is always preserved through the
+ * goal-appropriate clamp; the absolute target cap/floor then applies. The
+ * REQUESTED rate is NOT echoed as the delivered rate — use
+ * `effectiveWeeklyRateForTarget` to know what was actually delivered after
+ * all clamps.
  */
 export function calculateTargetCalories(
   tdee: number,
   goal: PrimaryGoal,
   weeklyWeightChange?: number,
 ): number {
-  const { adjustmentKcal } = resolveEnergyAdjustment(goal, weeklyWeightChange);
-  const clamped = clampAdjustment(goal, adjustmentKcal);
-  return clampAbsoluteTarget(tdee + clamped);
+  return clampAbsoluteTarget(tdee + resolveEffectiveEnergyAdjustment(goal, weeklyWeightChange));
 }
 
 // ============================================================================
@@ -636,6 +671,16 @@ export interface NutritionFeasibilityDetail {
 
 /** Requested/implied weekly rate, in kg/week and as % of bodyweight. */
 export interface NutritionRateDetail {
+  /**
+   * The raw client request (kg/week, signed), or null when the energy target
+   * was formed from the goal default (no explicit weekly request).
+   */
+  requestedWeeklyRateKg: number | null;
+  /**
+   * THE EFFECTIVE weekly rate (kg/week, signed) actually delivered: the rate
+   * implied by the post-clamp target. This is the value the active nutrition
+   * prescription persists — never the pre-clamp request.
+   */
   weeklyRateKg: number;
   weeklyRatePercentBodyweight: number;
 }
@@ -673,15 +718,58 @@ export function resolveNutritionDecision(input: NutritionProfileInput): Nutritio
   const bmr = roundKcal(calculateBMR(input.weightKg, input.heightCm, input.age, input.gender));
   const tdee = roundKcal(calculateTDEE(bmr, input.activityLevel));
   const plan = resolveEnergyAdjustment(input.primaryGoal, input.weeklyWeightChange);
-  const targetCalories = calculateTargetCalories(
-    tdee,
-    input.primaryGoal,
-    input.weeklyWeightChange,
-  );
+
+  // The absolute target floor/cap can bind even when the goal-appropriate
+  // adjustment (±1150/±550) is inside its own domain. Detect that binding so
+  // feasibility is surfaced explicitly instead of silently presenting a target
+  // that cannot honor the requested prescription (F-04). `preFloorTarget` is the
+  // target the engine would produce before the absolute floor/cap is applied.
+  const preFloorTarget =
+    tdee + resolveEffectiveEnergyAdjustment(input.primaryGoal, input.weeklyWeightChange);
+  const targetCalories = clampAbsoluteTarget(preFloorTarget);
+  const floorBoundActive = preFloorTarget < MIN_TARGET_KCAL;
+  const capBoundActive = preFloorTarget > MAX_TARGET_KCAL;
 
   const priority = resolveProteinPriority(input.primaryGoal, input.activityLevel);
   const daily = reconcileTarget(targetCalories, input.weightKg, priority);
   const waterLiters = calculateWaterIntake(input.weightKg, input.activityLevel);
+
+  // F-04: energy-level feasibility — the requested rate cannot be achieved when
+  // the absolute floor/cap is the binding constraint. Surface a deterministic
+  // warning and fold the mismatch into the overall feasibility flag so the
+  // constrained target is never silently relabeled as having achieved the
+  // requested prescription.
+  const energyWarnings: string[] = [];
+  if (floorBoundActive) {
+    energyWarnings.push(
+      `requested weekly rate ${plan.weeklyRateKg} kg/week would require a target of ` +
+        `${Math.round(preFloorTarget)} kcal, below the canonical minimum of ` +
+        `${MIN_TARGET_KCAL} kcal; target floored at ${MIN_TARGET_KCAL} kcal and the ` +
+        `requested rate cannot be achieved`,
+    );
+  } else if (capBoundActive) {
+    energyWarnings.push(
+      `requested weekly rate ${plan.weeklyRateKg} kg/week would require a target of ` +
+        `${Math.round(preFloorTarget)} kcal, above the canonical maximum of ` +
+        `${MAX_TARGET_KCAL} kcal; target capped at ${MAX_TARGET_KCAL} kcal and the ` +
+        `requested rate cannot be achieved`,
+    );
+  }
+  const energyInfeasible = floorBoundActive || capBoundActive;
+  const isFeasible = daily.isFeasible && !energyInfeasible;
+  const warnings = [...energyWarnings, ...daily.warnings];
+
+  // Effective-rate semantics (F-04): for a FEASIBLE target, the reported rate is
+  // the rate the delivered target actually implies (post-clamp, sign preserved).
+  // For an INFEASIBLE/clamped target the reported rate is the requested
+  // (direction-preserving) rate and feasibility explicitly communicates the
+  // mismatch — never a reverse-engineered rate that could invert the requested
+  // direction. `plan.weeklyRateKg` is exactly the requested rate for explicit
+  // requests and the goal-implied default rate otherwise, so it is the prescribed
+  // rate that must be preserved.
+  const reportedRateKg = energyInfeasible
+    ? plan.weeklyRateKg
+    : effectiveWeeklyRateForTarget(tdee, daily.targetCalories);
 
   return {
     energy: {
@@ -706,13 +794,17 @@ export function resolveNutritionDecision(input: NutritionProfileInput): Nutritio
       carbohydrateMethod: 'calorie_remainder',
     },
     feasibility: {
-      isFeasible: daily.isFeasible,
-      warnings: daily.warnings,
+      isFeasible,
+      warnings,
     },
     rate: {
-      weeklyRateKg: plan.weeklyRateKg,
+      requestedWeeklyRateKg:
+        plan.energyMethod === 'tdee_plus_requested_weekly_change'
+          ? (input.weeklyWeightChange ?? null)
+          : null,
+      weeklyRateKg: reportedRateKg,
       weeklyRatePercentBodyweight: weeklyRateAsPercentBodyweight(
-        plan.weeklyRateKg,
+        reportedRateKg,
         input.weightKg,
       ),
     },

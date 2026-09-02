@@ -105,10 +105,18 @@ function mapIngredientCategory(cat: IngredientData['category']): Ingredient['cat
 
 /**
  * Map a WeeklyMealPlanResult into the canonical MealPlan[] used by PlanSnapshot.
+ *
+ * Hydration is per-day meal-plan data: it is populated from the canonical
+ * daily water target (`hydrationLiters`, i.e. `metrics.waterLiters`) when the
+ * caller has resolved one. Keeping the per-day value consistent with
+ * `snapshot.metrics.waterLiters` removes the contradictory `hydration: 0`
+ * representation that previously dropped water at persistence.
  */
 export function mapWeeklyMealPlanToSnapshot(
   weeklyPlan: WeeklyMealPlanResult,
+  hydrationLiters?: number,
 ): MealPlan[] {
+  const hydration = Number.isFinite(hydrationLiters) ? (hydrationLiters as number) : 0;
   return weeklyPlan.days.map((day) => {
     const dailyPlan = day.plan.dailyPlan;
     const meals: Meal[] = [];
@@ -126,7 +134,7 @@ export function mapWeeklyMealPlanToSnapshot(
       day: day.dayNumber,
       meals,
       totalMacros: { ...day.plan.totalMacros },
-      hydration: 0, // populated from metrics if available
+      hydration,
     };
   });
 }

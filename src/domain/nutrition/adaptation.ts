@@ -26,6 +26,7 @@
 import {
   calculateTargetCalories,
   DAYS_PER_WEEK,
+  effectiveWeeklyRateForTarget,
   KCAL_PER_KG_BODYWEIGHT,
   MAX_WEEKLY_CHANGE_KG,
   weeklyRateAsPercentBodyweight,
@@ -101,7 +102,18 @@ export interface AdaptationDecision {
   readonly rateToleranceKgPerWeek: number;
   /** Signed small-step adjustment; always 0 unless outcome is adherent_unexpected. */
   readonly calorieAdjustmentKcal: number;
+  /**
+   * Requested next-cycle weekly rate (kg/week, signed): `prescribed + shift`
+   * clamped to the canonical +/-MAX kg/week domain. Pre-clamp-view only.
+   */
   readonly futureWeeklyRateKg: number;
+  /**
+   * The EFFECTIVE next-cycle weekly rate (kg/week, signed) actually implied by
+   * `futureTargetCalories` after every canonical energy/feasibility clamp. The
+   * active prescription must persist THIS value, never the raw pre-clamp
+   * `futureWeeklyRateKg`.
+   */
+  readonly effectiveFutureWeeklyRateKg: number;
   /** Recomputed THROUGH THE CANONICAL ENGINE (same clamps as any plan). */
   readonly futureTargetCalories: number;
   /** Always true: adaptation proposes a future target and never rewrites the locked plan. */
@@ -200,14 +212,18 @@ function analyzeTrend(observations: ReadonlyArray<WeightObservation>): TrendAnal
     ADAPTATION_SMOOTHING_WINDOW,
   );
 
-  // Regress each window mean at its MIDPOINT x-position: the mean of any
-  // consecutive stretch of a linear series lies exactly on the line at the
-  // stretch's midpoint, so partial edge windows stay unbiased and the slope
-  // of a perfectly linear trend is recovered exactly.
+  // Regress each rolling mean at the TIME-CENTROID of the observations that
+  // formed it: the mean of a linear series across ARBITRARILY spaced x values
+  // equals the line's value at the mean (centroid) of those x's, not at the
+  // arithmetic midpoint (min+max)/2. Midpoint alignment is only exact for
+  // evenly spaced weigh-ins; use the true centroid so irregular sampling,
+  // missing days and duplicates keep the slope unbiased and deterministic.
   const xs = sorted.map((o) => (timestampOf(o.date) - firstTs) / MS_PER_DAY);
   const pairs: Array<{ x: number; y: number }> = sorted.map((_, i) => {
     const start = Math.max(0, i - ADAPTATION_SMOOTHING_WINDOW + 1);
-    return { x: (xs[start] + xs[i]) / 2, y: smoothed[i] };
+    let xSum = 0;
+    for (let j = start; j <= i; j += 1) xSum += xs[j];
+    return { x: xSum / (i - start + 1), y: smoothed[i] };
   });
 
   // Ordinary least squares slope over (midpointOffset, smoothedWeight).
@@ -309,6 +325,7 @@ export function decideAdaptation(input: AdaptiveTargetingInput): AdaptationDecis
       rateToleranceKgPerWeek: tolerance,
       calorieAdjustmentKcal: 0,
       futureWeeklyRateKg: prescribed,
+      effectiveFutureWeeklyRateKg: prescribed,
       futureTargetCalories: input.currentTargetCalories,
       lockedPlanUntouched: true,
       rationale: [
@@ -338,6 +355,7 @@ export function decideAdaptation(input: AdaptiveTargetingInput): AdaptationDecis
       rateToleranceKgPerWeek: tolerance,
       calorieAdjustmentKcal: 0,
       futureWeeklyRateKg: prescribed,
+      effectiveFutureWeeklyRateKg: prescribed,
       futureTargetCalories: input.currentTargetCalories,
       lockedPlanUntouched: true,
       rationale: [
@@ -401,11 +419,27 @@ export function decideAdaptation(input: AdaptiveTargetingInput): AdaptationDecis
   // Convert the (possibly zero) adjustment back into a weekly-rate correction
   // and recompute the FUTURE target through the canonical engine so every
   // feasibility clamp applies identically to initial and adapted targets.
+  // `futureWeeklyRateKg` is the REQUESTED next-cycle rate; the effective rate
+  // actually delivered by `futureTargetCalories` is what a prescription stores.
   const shiftKg = (calorieAdjustmentKcal * DAYS_PER_WEEK) / KCAL_PER_KG_BODYWEIGHT;
   const futureWeeklyRateKg = clampWeeklyRate(prescribed + shiftKg);
-  const futureTargetCalories = roundKcal(
-    calculateTargetCalories(input.tdee, input.primaryGoal, futureWeeklyRateKg),
-  );
+  // F-03: on maintain outcomes (no adjustment) echo the standing prescription's
+  // rate+target verbatim. Recomputing them through the engine against the
+  // *current* TDEE would diverge from the prescription that actually stands once
+  // the client's bodyweight has drifted since lock, making the reported future
+  // target/rate disagree with the "current prescription remains immutable"
+  // rationale — and with each other. Only an adjusted outcome recomputes a NEW
+  // future target through the canonical engine (same pattern as the
+  // insufficient-evidence paths, which also echo the standing basis).
+  const adjusting = calorieAdjustmentKcal !== 0;
+  const futureTargetCalories = adjusting
+    ? roundKcal(
+        calculateTargetCalories(input.tdee, input.primaryGoal, futureWeeklyRateKg),
+      )
+    : input.currentTargetCalories;
+  const effectiveFutureWeeklyRateKg = adjusting
+    ? effectiveWeeklyRateForTarget(input.tdee, futureTargetCalories)
+    : prescribed;
 
   if (calorieAdjustmentKcal !== 0) {
     rationale.push(
@@ -413,10 +447,14 @@ export function decideAdaptation(input: AdaptiveTargetingInput): AdaptationDecis
         `(maximum step +/-${MAX_ADAPTATION_STEP_KCAL} kcal)`,
     );
   }
+  const futureBasisLine = adjusting
+    ? `-> future target ${futureTargetCalories} kcal recomputed by the canonical engine`
+    : `-> future target ${futureTargetCalories} kcal carried forward from the standing prescription`;
   rationale.push(
-    `future weekly rate ${futureWeeklyRateKg} kg/week ` +
+    `future weekly rate ${effectiveFutureWeeklyRateKg} kg/week (effective, ` +
+      `requested ${futureWeeklyRateKg} kg/week before energy clamps) ` +
       `(${weeklyRateAsPercentBodyweight(futureWeeklyRateKg, input.referenceWeightKg)}% of bodyweight) ` +
-      `-> future target ${futureTargetCalories} kcal recomputed by the canonical engine`,
+      futureBasisLine,
   );
   rationale.push(
     `locked/current prescription of ${input.currentTargetCalories} kcal remains immutable; ` +
@@ -434,6 +472,7 @@ export function decideAdaptation(input: AdaptiveTargetingInput): AdaptationDecis
     rateToleranceKgPerWeek: tolerance,
     calorieAdjustmentKcal,
     futureWeeklyRateKg,
+    effectiveFutureWeeklyRateKg,
     futureTargetCalories,
     lockedPlanUntouched: true,
     rationale,

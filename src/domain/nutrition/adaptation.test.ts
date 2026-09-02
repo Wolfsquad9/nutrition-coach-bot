@@ -24,7 +24,7 @@ import {
   type AdaptiveTargetingInput,
   type WeightObservation,
 } from './adaptation';
-import { calculateTargetCalories } from './engine';
+import { calculateTargetCalories, effectiveWeeklyRateForTarget } from './engine';
 import { buildPlanSnapshot, deepFreeze, type SnapshotBuildInput } from './snapshot';
 
 // ============================================================================
@@ -203,6 +203,95 @@ describe('outcome classification', () => {
     expect(result.outcome).toBe('non_adherent_expected');
     expect(result.calorieAdjustmentKcal).toBe(0);
     expect(result.futureTargetCalories).toBe(CURRENT_TARGET);
+  });
+});
+
+// ============================================================================
+// F-03 REGRESSION — maintain outcomes must echo the standing prescription
+// ============================================================================
+// Once the client's bodyweight drifts, the CURRENT TDEE differs from the TDEE
+// the locked prescription was built against. The maintain paths must therefore
+// echo the standing prescription's rate+target verbatim instead of recomputing
+// them against the drifted TDEE (which would contradict the "the current
+// prescription stands" rationale and break the effective-rate <> target pairing).
+
+describe('F-03 · maintain outcomes carry the standing prescription forward', () => {
+  // Lock-time TDEE 2759 produced 2209 kcal @-0.5. After a weight drop the
+  // current TDEE is 2600, which the engine alone would resolve to 2050 kcal.
+  const DRIFT_TDEE = 2600;
+  const LOCKED_TARGET = calculateTargetCalories(2759, 'fat_loss', -0.5); // 2209
+  const driftedEngineTarget = calculateTargetCalories(DRIFT_TDEE, 'fat_loss', -0.5); // 2050
+
+  it('precondition: the drifted TDEE would change the engine result (regression is meaningful)', () => {
+    expect(LOCKED_TARGET).not.toBe(driftedEngineTarget);
+  });
+
+  it('adherent + expected trend -> future target/rate remain the standing prescription', () => {
+    const result = decideAdaptation(
+      baseInput({
+        tdee: DRIFT_TDEE,
+        currentTargetCalories: LOCKED_TARGET,
+        observations: linearWeighIns(-2, 28), // exactly on the prescribed -0.5
+        adherenceScores: adherentScores(10),
+      }),
+    );
+    expect(result.outcome).toBe('adherent_expected');
+    expect(result.calorieAdjustmentKcal).toBe(0);
+    expect(result.futureTargetCalories).toBe(LOCKED_TARGET);
+    expect(result.futureWeeklyRateKg).toBe(-0.5);
+    expect(result.effectiveFutureWeeklyRateKg).toBe(-0.5);
+    expect(result.rationale.join(' ')).toMatch(/carried forward/);
+  });
+
+  it('poor adherence + unexpected trend (maintain) -> standing prescription echoed, not recomputed', () => {
+    const result = decideAdaptation(
+      baseInput({
+        tdee: DRIFT_TDEE,
+        currentTargetCalories: LOCKED_TARGET,
+        observations: linearWeighIns(-0.8, 28), // observed -0.2 ≠ prescribed -0.5
+        adherenceScores: poorScores(10),
+      }),
+    );
+    expect(result.outcome).toBe('non_adherent_unexpected');
+    expect(result.calorieAdjustmentKcal).toBe(0);
+    // The target must NOT be the drifted-tdee recompute (2050).
+    expect(result.futureTargetCalories).toBe(LOCKED_TARGET);
+    expect(result.futureTargetCalories).not.toBe(driftedEngineTarget);
+    expect(result.effectiveFutureWeeklyRateKg).toBe(-0.5);
+  });
+
+  it('adherent + unexpected trend (ADJUST) still recomputes through the canonical engine', () => {
+    const result = decideAdaptation(
+      baseInput({
+        tdee: DRIFT_TDEE,
+        currentTargetCalories: LOCKED_TARGET,
+        observations: linearWeighIns(-0.8, 28), // slow loss -> deeper deficit
+        adherenceScores: adherentScores(10),
+      }),
+    );
+    expect(result.outcome).toBe('adherent_unexpected');
+    expect(result.calorieAdjustmentKcal).not.toBe(0);
+    // Canonical delegation: the future target is EXACTLY the engine's output for
+    // the adjusted requested rate against the drifted (current) TDEE.
+    expect(result.futureTargetCalories).toBe(
+      Math.round(calculateTargetCalories(DRIFT_TDEE, 'fat_loss', result.futureWeeklyRateKg)),
+    );
+    expect(result.futureTargetCalories).not.toBe(LOCKED_TARGET);
+    expect(result.effectiveFutureWeeklyRateKg).toBe(
+      effectiveWeeklyRateForTarget(DRIFT_TDEE, result.futureTargetCalories),
+    );
+  });
+
+  it('is deterministic across repeated evaluation of the same drifted input', () => {
+    const input = baseInput({
+      tdee: DRIFT_TDEE,
+      currentTargetCalories: LOCKED_TARGET,
+      observations: linearWeighIns(-0.8, 28),
+      adherenceScores: poorScores(10),
+    });
+    const a = decideAdaptation(input);
+    const b = decideAdaptation(input);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 });
 

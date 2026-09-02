@@ -128,6 +128,26 @@ describe('mapWeeklyMealPlanToSnapshot', () => {
       oats.macros.calories + chicken.macros.calories + rice.macros.calories + chicken.macros.calories
     );
   });
+
+  it('populates per-day hydration from the canonical water target (P10)', () => {
+    const dailyPlan: DailyMealPlan = {
+      breakfast: makeMealData([oats], 'Porridge'),
+      lunch: emptyMeal,
+      dinner: emptyMeal,
+      snack: emptyMeal,
+    };
+    const weekly = buildWeeklyPlan([buildDay(1, dailyPlan), buildDay(2, dailyPlan)]);
+    const withHydration = mapWeeklyMealPlanToSnapshot(weekly, 2.5);
+    for (const day of withHydration) {
+      // Matches the authoritative snapshot nutrition metadata (metrics.waterLiters)
+      // instead of the contradictory hydration: 0 that dropped water.
+      expect(day.hydration).toBe(2.5);
+    }
+    // Historical compatibility: when no canonical water value is provided the
+    // field stays 0 (safe for legacy callers that never resolved water).
+    const legacy = mapWeeklyMealPlanToSnapshot(weekly);
+    for (const day of legacy) expect(day.hydration).toBe(0);
+  });
 });
 
 describe('buildGroceryListFromPlan', () => {

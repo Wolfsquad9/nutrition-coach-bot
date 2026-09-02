@@ -276,6 +276,20 @@ export async function lockNutritionPlan(
     const snapshotJson = JSON.parse(JSON.stringify(lockedSnapshot)) as Json;
     const payloadHash = hashPlanPayload(payload);
 
+    // Integrity guard: the hash persisted by the authoritative lock RPC must be
+    // derived from EXACTLY the payload being persisted. The client-side hash is
+    // a deduplication identifier (not a tamper-proof digest); this check pins
+    // the payload<->hash relationship for the serialized form actually sent.
+    if (hashPlanPayload(planPayloadJson as unknown as PlanPayload) !== payloadHash) {
+      return {
+        success: false,
+        planId: null,
+        versionId: null,
+        versionNumber: null,
+        error: 'Payload hash does not correspond to the plan payload being locked',
+      };
+    }
+
     const { data, error } = await supabase
       .rpc('lock_nutrition_plan', {
         p_client_id: clientId,

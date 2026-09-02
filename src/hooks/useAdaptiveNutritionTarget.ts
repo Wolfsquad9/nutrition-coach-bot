@@ -26,7 +26,10 @@ import {
 } from '@/services/nutrition/adaptiveTargetService';
 import { calculateNutritionMetrics } from '@/domain/nutrition/engine';
 import type { AdaptationDecision } from '@/domain/nutrition/adaptation';
-import type { ActiveNutritionPrescription } from '@/domain/nutrition/prescription';
+import {
+  reconstructMetricsFromPrescription,
+  type ActiveNutritionPrescription,
+} from '@/domain/nutrition/prescription';
 import type { Client, NutritionMetrics } from '@/types';
 
 export type AdaptiveTargetStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -114,19 +117,45 @@ export function useAdaptiveNutritionTarget(
     };
   }, [clientKey, prescriptionKey]);
 
-  // Canonical fallback: the profile decision whenever there is no ready
-  // adapted state. Effective outputs follow the ACTIVE PRESCRIPTION chain.
+  // Canonical fallback: the effective metrics ALWAYS describe the SAME basis as
+  // `effectiveWeeklyRateKg`. When a prescription basis exists, the fallback is a
+  // canonical RECONSTRUCTION from that prescription (never the raw client
+  // profile, which would mix two different values). Without any prescription the
+  // canonical profile decision is the basis — identical to the deterministic
+  // initial prescription the service derives, so the invariant still holds.
   return useMemo(() => {
-    const fallbackMetrics = client ? calculateNutritionMetrics(client) : null;
+    const basis = state.result?.baseline ?? activePrescription ?? null;
+
+    // P0 invariant: effectiveMetrics ↔ effectiveWeeklyRateKg MUST describe the
+    // same prescription. Reconstruction is the ONLY path once a prescription
+    // exists. If it cannot be performed safely, fail deterministically instead
+    // of silently combining values from two different sources.
+    let fallbackMetrics: NutritionMetrics | null = null;
+    if (client) {
+      if (basis) {
+        try {
+          fallbackMetrics = reconstructMetricsFromPrescription(client, basis);
+        } catch (err: unknown) {
+          return {
+            status: 'error',
+            decision: null,
+            baseline: state.result?.baseline ?? activePrescription ?? null,
+            futureMetrics: null,
+            effectiveMetrics: null,
+            effectiveWeeklyRateKg: null,
+            error:
+              err instanceof Error
+                ? err.message
+                : 'Active prescription cannot be reconstructed through the canonical engine',
+          };
+        }
+      } else {
+        fallbackMetrics = calculateNutritionMetrics(client);
+      }
+    }
+    const fallbackRate = basis ? basis.weeklyRateKg : null;
 
     if (state.status !== 'ready' || !state.result || !client) {
-      // Outside 'ready', keep prescribing from the active prescription's rate
-      // when one exists (drafts must not drift the basis), else profile rate.
-      const fallbackRate = activePrescription
-        ? activePrescription.weeklyRateKg
-        : state.result
-          ? state.result.baseline.weeklyRateKg
-          : null;
       return {
         status: state.status,
         decision: null,
@@ -145,8 +174,12 @@ export function useAdaptiveNutritionTarget(
       decision,
       baseline,
       futureMetrics,
+      // 1) eligible: adapted future metrics whose target corresponds to the
+      //    effective future weekly rate (canonical engine output);
+      // 2) otherwise: canonical reconstruction of the same prescription whose
+      //    rate `effectiveWeeklyRateKg` describes.
       effectiveMetrics: futureMetrics ?? fallbackMetrics,
-      effectiveWeeklyRateKg: eligible ? decision.futureWeeklyRateKg : baseline.weeklyRateKg,
+      effectiveWeeklyRateKg: eligible ? decision.effectiveFutureWeeklyRateKg : baseline.weeklyRateKg,
       error: null,
     };
   }, [state, client, activePrescription]);

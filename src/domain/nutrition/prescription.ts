@@ -18,8 +18,29 @@
  * performs no nutrition mathematics itself.
  */
 
-import { resolveNutritionDecision, buildNutritionProfileInput } from './engine';
-import type { Client } from '@/types';
+import {
+  resolveNutritionDecision,
+  buildNutritionProfileInput,
+  calculateProfile,
+  MAX_WEEKLY_CHANGE_KG,
+} from './engine';
+import type { Client, NutritionMetrics } from '@/types';
+
+// ============================================================================
+// ERRORS
+// ============================================================================
+
+/**
+ * Raised when an active prescription cannot deterministically produce canonical
+ * metrics. Never silently mix values from the prescription with values from
+ * another basis.
+ */
+export class PrescriptionIntegrityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PrescriptionIntegrityError';
+  }
+}
 
 // ============================================================================
 // TYPES
@@ -103,7 +124,8 @@ export function deriveInitialPrescription(client: Client): ActiveNutritionPrescr
 
 /**
  * Build the persisted payload record at lock time. Validates the rate so no
- * garbage ever enters the payload.
+ * garbage ever enters the payload: it must be a finite number within the
+ * canonical permitted weekly-change domain (+/-MAX_WEEKLY_CHANGE_KG).
  */
 export function buildPrescriptionRecord(args: {
   weeklyRateKg: number;
@@ -116,6 +138,12 @@ export function buildPrescriptionRecord(args: {
       `Invalid nutrition prescription: weeklyRateKg must be a finite number (got ${weeklyRateKg})`,
     );
   }
+  if (Math.abs(weeklyRateKg) > MAX_WEEKLY_CHANGE_KG) {
+    throw new Error(
+      `Invalid nutrition prescription: |weeklyRateKg| may not exceed ` +
+        `${MAX_WEEKLY_CHANGE_KG} kg/week (got ${weeklyRateKg})`,
+    );
+  }
   return {
     weeklyRateKg,
     establishedAt: args.lockedAt.toISOString(),
@@ -123,10 +151,26 @@ export function buildPrescriptionRecord(args: {
   };
 }
 
+/** Parseable ISO timestamp (structure check only — never a domain choice). */
+const isIsoTimestampLike = (value: string): boolean => !Number.isNaN(Date.parse(value));
+
+/** Loose provenance shape check: non-empty alphanumeric/hyphen identifier. */
+const isVersionIdLike = (value: string): boolean => {
+  if (typeof value !== 'string') return false;
+  if (value.trim().length === 0) return false;
+  if (value.length > 64) return false;
+  // Reject control characters / leading+trailing whitespace normalization.
+  return /^[\x21-\x7E]+$/.test(value);
+};
+
 /**
- * Rehydrate validation for a fetched plan payload's prescription record.
- * Returns null when absent/malformed (legacy plans) so callers can fall back
- * to `deriveInitialPrescription`.
+ * Rehydrate + SEMANTICALLY VALIDATE a fetched plan payload's prescription
+ * record. Returns null when absent/malformed (legacy plans) so callers can fall
+ * back to `deriveInitialPrescription`. Validation is structural AND semantic:
+ * - weeklyRateKg must be finite AND within the canonical permitted range
+ * - establishedAt must parse as a timestamp
+ * - sourceVersionId must have a valid identifier shape
+ * Malformed records never become authoritative.
  */
 export function readPrescriptionRecord(
   payload: unknown,
@@ -138,10 +182,40 @@ export function readPrescriptionRecord(
   if (
     typeof r.weeklyRateKg !== 'number' ||
     !Number.isFinite(r.weeklyRateKg) ||
+    Math.abs(r.weeklyRateKg) > MAX_WEEKLY_CHANGE_KG ||
     typeof r.establishedAt !== 'string' ||
-    typeof r.sourceVersionId !== 'string'
+    !isIsoTimestampLike(r.establishedAt) ||
+    typeof r.sourceVersionId !== 'string' ||
+    !isVersionIdLike(r.sourceVersionId)
   ) {
     return null;
   }
   return { weeklyRateKg: r.weeklyRateKg, establishedAt: r.establishedAt, sourceVersionId: r.sourceVersionId };
+}
+
+/**
+ * Deterministic canonical reconstruction of the active prescription's metrics.
+ *
+ * An active prescription is ALWAYS the effective weekly rate + provenance;
+ * every nutrition value is recomputed by the canonical engine at that rate.
+ * This is the ONLY allowed source of `effectiveMetrics` when an active
+ * prescription exists — never `calculateNutritionMetrics(client)` (which would
+ * describe the raw profile request instead of the prescription).
+ *
+ * Fails deterministically (PrescriptionIntegrityError) when the record cannot
+ * be reconstructed safely rather than silently returning mixed values.
+ */
+export function reconstructMetricsFromPrescription(
+  client: Client,
+  rx: ActiveNutritionPrescription,
+): NutritionMetrics {
+  if (!Number.isFinite(rx.weeklyRateKg) || Math.abs(rx.weeklyRateKg) > MAX_WEEKLY_CHANGE_KG) {
+    throw new PrescriptionIntegrityError(
+      `Cannot reconstruct active prescription: weeklyRateKg ${rx.weeklyRateKg} ` +
+        `is outside the canonical permitted range +/-${MAX_WEEKLY_CHANGE_KG} kg/week`,
+    );
+  }
+  // Single canonical path: prescription rate -> profile input -> engine.
+  const input = buildNutritionProfileInput(client);
+  return calculateProfile({ ...input, weeklyWeightChange: rx.weeklyRateKg });
 }
