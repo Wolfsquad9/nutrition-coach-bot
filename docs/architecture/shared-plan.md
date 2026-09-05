@@ -16,7 +16,7 @@ material. Removing it removes a product surface.
 
 Sprint 1.77's "restore shared plan" patch shipped the Edge Function code but
 not the database changes. The result: the function runs, but RLS rejects the
-read. (See `sprint-1.9-regression-report.md`, REGRESSION 7.)
+read. (See `docs/archive/sprint-1.9-regression-report.md`, REGRESSION 7.)
 
 Sprint 1.95's previous attempt to fix this reintroduced the `service_role`
 key — a CRITICAL exposure that audit C1 (commit `55f066f`) had explicitly
