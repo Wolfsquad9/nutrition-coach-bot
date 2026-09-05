@@ -166,25 +166,18 @@ export async function setupLockedClientWithInvite(
   // ---------- 2. Create a new client ----------
   await createClient(page, clientData);
 
-  // ---------- 3. Generate complete plan ----------
-  await page.getByRole('button', { name: /Generate complete plan/i }).click();
-  await expect(
-    page.getByRole('button', { name: /^PDF$/i })
-  ).toBeVisible({ timeout: 30_000 });
-
-  // ---------- 4. Ingredients tab — prefer 5, then generate ----------
+  // ---------- 3. Ingredients tab — prefer 5 liked ingredients ----------
+  // (Plan GENERATION happens on the Nutrition tab in step 5; the Ingredients
+  //  tab only marks preferences — it has no "Generate Full Plan" action in
+  //  the current UI. There is no "Generated Plans" heading either.)
   await page.getByRole('tab', { name: 'Ingredients' }).click();
   await page.waitForURL(/\/ingredients$/);
   await expect(
     page.getByRole('heading', { name: 'Ingredient Manager' })
   ).toBeVisible();
   await preferFirstNIngredients(page, 5);
-  await page.getByRole('button', { name: /Generate Full Plan/i }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Generated Plans' })
-  ).toBeVisible({ timeout: 30_000 });
 
-  // ---------- 5. Nutrition tab — generate weekly plan ----------
+  // ---------- 4. Nutrition tab — generate weekly plan ----------
   await page.getByRole('tab', { name: 'Nutrition' }).click();
   await page.waitForURL(/\/nutrition$/);
   await expect(
@@ -200,7 +193,7 @@ export async function setupLockedClientWithInvite(
     page.getByText('Breakfast', { exact: true }).first()
   ).toBeVisible({ timeout: 30_000 });
 
-  // ---------- 6. Lock the plan ----------
+  // ---------- 5. Lock the plan ----------
   await page.getByRole('button', { name: /^Lock Plan$/i }).click();
   await expect(
     page.getByRole('heading', { name: 'Confirm lock' })
@@ -210,7 +203,7 @@ export async function setupLockedClientWithInvite(
     timeout: 10_000,
   });
 
-  // ---------- 7. Check-in tab — must not hang ----------
+  // ---------- 6. Check-in tab — must not hang ----------
   await page.getByRole('tab', { name: 'Check-in' }).click();
   await page.waitForURL(/\/checkin$/);
   await expect(
@@ -221,15 +214,15 @@ export async function setupLockedClientWithInvite(
     page.getByRole('tab', { name: 'Daily Check-in' })
   ).toBeVisible();
 
-  // ---------- 8. Training tab — plan is shown ----------
+  // ---------- 7. Training tab — loads (plan is generated per-client; this
+  // journey does not generate one, so the questionnaire is the expected UI) ---
   await page.getByRole('tab', { name: 'Training' }).click();
   await page.waitForURL(/\/training$/);
   await expect(
-    page.getByRole('heading', { name: "Plan d'Entraînement" })
+    page.getByRole('heading', { name: 'Training questionnaire' })
   ).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('Programme Hebdomadaire')).toBeVisible();
 
-  // ---------- 9. Progress tab — loads ----------
+  // ---------- 8. Progress tab — loads ----------
   await page.getByRole('tab', { name: 'Progress' }).click();
   await page.waitForURL(/\/progress$/);
   await expect(
@@ -242,7 +235,7 @@ export async function setupLockedClientWithInvite(
     )
   ).toBeVisible({ timeout: 10_000 });
 
-  // ---------- 10. Invite Client ----------
+  // ---------- 9. Invite Client ----------
   await page.getByRole('tab', { name: 'Client' }).click();
   await page.waitForURL(/^http:\/\/localhost:8080\/clients\/[^/]+$/);
   await expect(

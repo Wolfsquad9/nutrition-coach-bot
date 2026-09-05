@@ -29,16 +29,15 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { uniqueTag } from './helpers/test-data';
+import type { Database } from '@/integrations/supabase/types';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_URL_DIRECT = process.env.SUPABASE_URL ?? SUPABASE_URL;
-
-const skipIfNoEnv = SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_URL_DIRECT ? test : test.skip;
 
 const FUNCTIONS_BASE = `${SUPABASE_URL_DIRECT}/functions/v1`;
 const REST_BASE = `${SUPABASE_URL_DIRECT}/rest/v1`;
@@ -48,7 +47,7 @@ interface SeededPlanVersion {
   clientId: string;
 }
 
-async function seedLockedPlanVersion(supabase: ReturnType<typeof createClient>): Promise<SeededPlanVersion> {
+async function seedLockedPlanVersion(supabase: SupabaseClient<Database>): Promise<SeededPlanVersion> {
   // Direct DB seeding via service_role (test-only path). Creates:
   //   - a tagged coach user
   //   - a tagged client + client row
@@ -146,7 +145,7 @@ async function seedLockedPlanVersion(supabase: ReturnType<typeof createClient>):
   return { versionId: pv.id, clientId: client.id };
 }
 
-async function seedDraftPlanVersion(supabase: ReturnType<typeof createClient>): Promise<string> {
+async function seedDraftPlanVersion(supabase: SupabaseClient<Database>): Promise<string> {
   const tag = uniqueTag();
   const coachEmail = `e2e-test-coach-${tag}@example.com`;
   const coachPassword = 'E2eTest!Passw0rd-2026';
@@ -219,21 +218,29 @@ async function seedDraftPlanVersion(supabase: ReturnType<typeof createClient>): 
   return pv.id;
 }
 
-async function cleanupSeededData(supabase: ReturnType<typeof createClient>, versionId: string): Promise<void> {
+async function cleanupSeededData(supabase: SupabaseClient<Database>, versionId: string): Promise<void> {
   // Best-effort: delete by version_id. We don't have a coach email/UUID
   // at hand for the fallback RPC from here; cleanup at the spec level
   // can target the profiles by `email like 'e2e-test-%'` separately.
   await supabase.from('plan_versions').delete().eq('id', versionId);
 }
 
-skipIfNoEnv.describe('Shared Plan — production security boundary', () => {
-  let serviceClient: ReturnType<typeof createClient>;
+test.describe('Shared Plan — production security boundary', () => {
+  // Same runtime behavior the old `skipIfNoEnv` conditional provided (skip,
+  // never fail, when the Supabase env is unavailable) without routing the
+  // describe block through the untyped `test.skip` union that broke typing.
+  test.skip(
+    !SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_URL_DIRECT,
+    'requires Supabase env (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)',
+  );
+
+  let serviceClient: SupabaseClient<Database>;
 
   test.beforeAll(() => {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('E2E tests need VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in env');
     }
-    serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    serviceClient = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
   });
@@ -317,7 +324,7 @@ skipIfNoEnv.describe('Shared Plan — production security boundary', () => {
       });
       if (coachErr || !coachAuth.user) throw new Error(`coach create failed: ${coachErr?.message}`);
 
-      const authedClient = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+      const authedClient = createClient<Database>(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
       const { error: signInErr } = await authedClient.auth.signInWithPassword({
@@ -374,7 +381,7 @@ skipIfNoEnv.describe('Shared Plan — production security boundary', () => {
     // This is the "wrong path" test. The migration REVOKEs anon SELECT, so
     // any future developer who writes a SELECT * against plan_versions via
     // the anon client will be denied by Postgres itself, not just by the RPC.
-    const anonClient = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+    const anonClient = createClient<Database>(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const { data, error } = await anonClient.from('plan_versions').select('*').limit(1);
@@ -395,13 +402,16 @@ skipIfNoEnv.describe('Shared Plan — production security boundary', () => {
   });
 
   test('9. anon CANNOT INSERT into plan_versions (defence in depth)', async () => {
-    const anonClient = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+    const anonClient = createClient<Database>(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+    // plan_payload is NOT NULL in the Insert type — the denial being asserted
+    // here is RLS, so the payload shape is irrelevant to the security check.
     const { data, error } = await anonClient.from('plan_versions').insert({
       plan_id: '00000000-0000-4000-8000-000000000000',
       created_by: '00000000-0000-4000-8000-000000000000',
       version_number: 1,
+      plan_payload: { x: 1 },
       locked_snapshot_json: { x: 1 },
       payload_hash: 'evil',
       idempotency_key: 'evil',
