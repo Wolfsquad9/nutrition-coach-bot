@@ -42,6 +42,7 @@ const TAB_ROUTES = [
   { value: 'ingredients', label: 'Ingredients', path: 'ingredients' },
   { value: 'checkin', label: 'Check-in', path: 'checkin' },
   { value: 'nutrition', label: 'Nutrition', path: 'nutrition' },
+  { value: 'review', label: 'Review', path: 'review' },
   { value: 'training', label: 'Training', path: 'training' },
   { value: 'progress', label: 'Progress', path: 'progress' },
 ] as const;
@@ -206,7 +207,7 @@ export default function AppLayout() {
         )}
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-card border border-border">
+          <TabsList className="grid w-full grid-cols-7 bg-card border border-border">
             {TAB_ROUTES.map(tab => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}
