@@ -8,6 +8,7 @@
 import { useAppLayout } from '@/hooks/useAppLayout';
 import { useClientReview } from '@/hooks/useClientReview';
 import { useCoachingDecision } from '@/hooks/useCoachingDecision';
+import { useCoachingDecisionHistory } from '@/hooks/useCoachingDecisionHistory';
 import { NoClientGuard } from '@/components/NoClientGuard';
 import { ClientReviewView } from '@/components/review/ClientReviewView';
 
@@ -19,6 +20,7 @@ export default function ClientReviewPage() {
   // React rules for consistent hook ordering across renders.
   const view = useClientReview(hasClient ? activeClient : null);
   const recording = useCoachingDecision();
+  const history = useCoachingDecisionHistory(activeClientId);
 
   if (!hasClient) {
     return <NoClientGuard message="Select or create a client to view their nutrition review." />;
@@ -30,6 +32,7 @@ export default function ClientReviewPage() {
       view={view}
       recording={recording}
       onRecord={recording.recordDecision}
+      history={history}
     />
   );
 }

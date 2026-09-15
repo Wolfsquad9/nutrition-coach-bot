@@ -9,6 +9,10 @@
  *    no update to nutrition_plans, no plan generation, no locking.
  *  - `fetchLatestCoachingDecision` reads the most recent decision for a client
  *    so the review screen can verify what was recorded.
+ *  - `fetchCoachingDecisionHistory` (Phase 13D) reads the client's FULL
+ *    persisted decision history, newest-first. Read-only: it never writes,
+ *    never invokes the recording RPC, and never reconstructs history from
+ *    current state.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -146,6 +150,53 @@ export async function fetchLatestCoachingDecision(
     return {
       data: null,
       error: err instanceof Error ? err.message : 'Unknown error loading the coaching decision',
+    };
+  }
+}
+
+// ============================================================================
+// READ (decision history — newest-first, read-only)
+// ============================================================================
+
+/** The result of a history read: all persisted decisions for one client. */
+export interface CoachingDecisionHistoryResult {
+  readonly data: CoachingDecision[] | null;
+  readonly error: string | null;
+}
+
+/**
+ * Read the client's FULL persisted decision history (Phase 13D). Strictly
+ * read-only: it only SELECTs from `coaching_decisions` under the existing RLS
+ * policy, ordered by `decision_date` descending. Persisted values are mapped
+ * verbatim — nothing is recomputed, reinterpreted or reconstructed from the
+ * current prescription / review state.
+ */
+export async function fetchCoachingDecisionHistory(
+  clientId: string,
+): Promise<CoachingDecisionHistoryResult> {
+  try {
+    if (!clientId) {
+      return { data: null, error: 'clientId is required' };
+    }
+
+    const { data, error } = await supabase
+      .from('coaching_decisions' as never)
+      .select('*')
+      .eq('client_id', clientId)
+      .order('decision_date', { ascending: false });
+
+    if (error) {
+      console.error('[fetchCoachingDecisionHistory] select failed:', error);
+      return { data: null, error: error.message };
+    }
+
+    const rows = (data ?? []) as unknown as CoachingDecisionRow[];
+    return { data: rows.map(rowToDecision), error: null };
+  } catch (err: unknown) {
+    console.error('[fetchCoachingDecisionHistory] unexpected error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Unknown error loading the decision history',
     };
   }
 }

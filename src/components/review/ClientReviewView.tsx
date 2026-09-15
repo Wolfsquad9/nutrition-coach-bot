@@ -20,9 +20,11 @@ import {
   CoachDecisionPanel,
   type CoachingDecisionRecordProps,
 } from './CoachDecisionPanel';
+import { DecisionHistory } from './DecisionHistory';
 import type { Client } from '@/types';
 import type { ClientReviewView as ReviewView } from './reviewView';
 import type { CreateCoachingDecisionInput } from '@/services/review/coachingDecisionService';
+import type { CoachingDecisionHistoryState } from '@/hooks/useCoachingDecisionHistory';
 
 export interface ClientReviewViewProps {
   client: Client;
@@ -30,9 +32,11 @@ export interface ClientReviewViewProps {
   /** When wired, the Coach Decision recording panel is composed into the review. */
   recording?: CoachingDecisionRecordProps;
   onRecord?: (input: CreateCoachingDecisionInput) => void;
+  /** When wired, the read-only persisted Decision History is composed into the review. */
+  history?: CoachingDecisionHistoryState;
 }
 
-export function ClientReviewView({ client, view, recording, onRecord }: ClientReviewViewProps) {
+export function ClientReviewView({ client, view, recording, onRecord, history }: ClientReviewViewProps) {
   if (view.status === 'loading' || view.status === 'idle') {
     return <LoadingState />;
   }
@@ -87,6 +91,7 @@ export function ClientReviewView({ client, view, recording, onRecord }: ClientRe
           onRecord={onRecord}
         />
       ) : null}
+      {history ? <DecisionHistory {...history} /> : null}
     </div>
   );
 }
