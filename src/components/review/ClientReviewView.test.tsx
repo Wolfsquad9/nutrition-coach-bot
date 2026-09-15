@@ -129,6 +129,7 @@ function makeView(
       isLocked: true,
       daysRemaining: 5,
       versionNumber: 1,
+      versionId: 'ver-1',
       lockEstablishedAt: '2026-01-01T00:00:00.000Z',
       source: 'locked_plan',
       weeklyRateKg: -0.5,
@@ -233,7 +234,7 @@ describe('ClientReviewView — error & read-only guarantees', () => {
     expect(screen.queryByText('Adjustment recommended')).toBeNull();
   });
 
-  it('exposes no write actions in the ready review (read-only UI)', () => {
+  it('exposes no write actions when the decision panel is not wired (read-only fallback)', () => {
     render(
       <ClientReviewView
         client={CLIENT}
@@ -241,8 +242,44 @@ describe('ClientReviewView — error & read-only guarantees', () => {
       />,
     );
 
-    // A read-only review has no buttons (no lock / save / generate / accept /
-    // modify / decision-persistence interactions).
+    // Without the recording props the view stays a pure read-only review — no
+    // buttons at all.
     expect(document.querySelectorAll('button')).toHaveLength(0);
+  });
+});
+
+describe('ClientReviewView — wired coach decision actions', () => {
+  it('renders the decision panel with adjustment actions when wired', () => {
+    render(
+      <ClientReviewView
+        client={CLIENT}
+        view={makeView(
+          'adjustment_recommended',
+          makeDecision('adherent_unexpected', {
+            adherent: true,
+            calorieAdjustmentKcal: -150,
+            futureTargetCalories: 2000,
+          }),
+        )}
+        recording={{ isSaving: false, error: null, recorded: null }}
+        onRecord={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('Coach Decision')).toBeInTheDocument();
+    expect(screen.getByText('Accept recommendation')).toBeInTheDocument();
+    expect(screen.getByText('Modify')).toBeInTheDocument();
+    expect(screen.getByText('Keep current')).toBeInTheDocument();
+    expect(screen.getByText('Defer')).toBeInTheDocument();
+  });
+
+  it('does not render the decision panel at all unless wired', () => {
+    render(
+      <ClientReviewView
+        client={CLIENT}
+        view={makeView('maintain', makeDecision('adherent_expected'))}
+      />,
+    );
+    expect(screen.queryByText('Coach Decision')).toBeNull();
   });
 });

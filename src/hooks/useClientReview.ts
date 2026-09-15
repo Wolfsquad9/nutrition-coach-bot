@@ -56,6 +56,7 @@ function toPrescriptionInfo(
     isLocked: planState.isLocked,
     daysRemaining: planState.lockStatus ? planState.lockStatus.daysRemaining : null,
     versionNumber: rx ? rx.versionNumber : null,
+    versionId: rx ? rx.versionId : null,
     lockEstablishedAt: rx ? rx.establishedAt : null,
     source: rx ? rx.source : (baseline ? baseline.source : null),
     weeklyRateKg: baseline ? baseline.weeklyRateKg : null,

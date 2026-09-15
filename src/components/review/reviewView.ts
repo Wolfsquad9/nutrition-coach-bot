@@ -19,6 +19,8 @@ export interface ReviewPrescriptionInfo {
   readonly isLocked: boolean;
   readonly daysRemaining: number | null;
   readonly versionNumber: number | null;
+  /** Provenance: the plan version UUID behind the prescription, when one exists. */
+  readonly versionId: string | null;
   readonly lockEstablishedAt: string | null;
   readonly source: 'locked_plan' | 'initial_profile' | null;
   readonly weeklyRateKg: number | null;

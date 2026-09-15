@@ -16,15 +16,23 @@ import { ReviewStatus } from './ReviewStatus';
 import { CurrentPrescription } from './CurrentPrescription';
 import { ReviewEvidence } from './ReviewEvidence';
 import { DecisionSummary } from './DecisionSummary';
+import {
+  CoachDecisionPanel,
+  type CoachingDecisionRecordProps,
+} from './CoachDecisionPanel';
 import type { Client } from '@/types';
 import type { ClientReviewView as ReviewView } from './reviewView';
+import type { CreateCoachingDecisionInput } from '@/services/review/coachingDecisionService';
 
 export interface ClientReviewViewProps {
   client: Client;
   view: ReviewView;
+  /** When wired, the Coach Decision recording panel is composed into the review. */
+  recording?: CoachingDecisionRecordProps;
+  onRecord?: (input: CreateCoachingDecisionInput) => void;
 }
 
-export function ClientReviewView({ client, view }: ClientReviewViewProps) {
+export function ClientReviewView({ client, view, recording, onRecord }: ClientReviewViewProps) {
   if (view.status === 'loading' || view.status === 'idle') {
     return <LoadingState />;
   }
@@ -70,6 +78,15 @@ export function ClientReviewView({ client, view }: ClientReviewViewProps) {
       <CurrentPrescription metrics={currentMetrics} prescription={prescription} />
       <ReviewEvidence review={review} evidence={evidence} />
       <DecisionSummary review={review} />
+      {recording && onRecord ? (
+        <CoachDecisionPanel
+          client={client}
+          review={review}
+          prescription={prescription}
+          recording={recording}
+          onRecord={onRecord}
+        />
+      ) : null}
     </div>
   );
 }
