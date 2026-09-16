@@ -24,6 +24,12 @@ export type FetchCoachingDecisionHistory = (
 export interface UseCoachingDecisionHistoryOptions {
   /** Injectable reader (defaults to the Supabase service) — used by tests. */
   fetchHistory?: FetchCoachingDecisionHistory;
+  /**
+   * When this changes (Phase 13F: e.g. a decision was just persisted), the
+   * persisted history is re-read so the UI reflects the authoritative data.
+   * No fabricated entries are ever appended locally.
+   */
+  refreshKey?: string | null;
 }
 
 export type DecisionHistoryStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -42,6 +48,7 @@ export function useCoachingDecisionHistory(
   options?: UseCoachingDecisionHistoryOptions,
 ): CoachingDecisionHistoryState {
   const fetchHistory = options?.fetchHistory ?? defaultFetchHistory;
+  const refreshKey = options?.refreshKey ?? null;
 
   const [state, setState] = useState<CoachingDecisionHistoryState>({
     status: 'idle',
@@ -77,7 +84,8 @@ export function useCoachingDecisionHistory(
           err instanceof Error ? err.message : 'Unknown error loading the decision history';
         setState({ status: 'error', decisions: [], error: message });
       });
-  }, [clientId, fetchHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, refreshKey]);
 
   return state;
 }

@@ -100,3 +100,51 @@ describe('useCoachingDecisionHistory', () => {
     });
   });
 });
+
+// ============================================================================
+// Phase 13F — refresh after a successful persistence
+// ============================================================================
+
+describe('useCoachingDecisionHistory — refreshKey (Phase 13F)', () => {
+  it('re-reads the persisted history when the refreshKey changes (no fabricated entries)', async () => {
+    const fetchHistory = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], error: null }) // before the save
+      .mockResolvedValue({
+        data: [
+          {
+            id: 'd-new',
+            coachId: 'coach-1',
+            createdAt: '2026-09-16T09:00:00Z',
+            clientId: 'client-13d',
+            decisionDate: '2026-09-16',
+            recommendationStatus: 'adjustment_recommended',
+            coachAction: 'modified',
+            baselinePrescriptionVersionId: 'ver-1',
+            observedWeeklyRateKg: -0.5,
+            targetWeeklyRateKg: -0.5,
+            adherenceScore: 90,
+            recommendedCalorieAdjustment: -150,
+            recommendedTargetCalories: 2000,
+            finalTargetCalories: 2050,
+            coachNote: null,
+          },
+        ],
+        error: null,
+      });
+
+    const { result, rerender } = renderHook(
+      ({ refreshKey }: { refreshKey: string | null }) =>
+        useCoachingDecisionHistory('client-13d', { fetchHistory, refreshKey }),
+      { initialProps: { refreshKey: null as string | null } },
+    );
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.decisions).toEqual([]);
+
+    // The decision was persisted; the hook re-reads the authoritative history.
+    rerender({ refreshKey: 'd-new' });
+    await waitFor(() => expect(result.current.decisions[0]?.id).toBe('d-new'));
+    expect(fetchHistory).toHaveBeenCalledTimes(2);
+  });
+});

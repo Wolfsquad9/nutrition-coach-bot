@@ -43,6 +43,12 @@ export interface CoachingDecisionRecordProps {
   readonly isSaving: boolean;
   readonly error: string | null;
   readonly recorded: CoachingDecision | null;
+  /**
+   * Phase 13F: the decision PERSISTED for the current decision date (hydrated
+   * from the database on mount/refresh). Source of truth for the recorded
+   * state when no in-session recording exists.
+   */
+  readonly persistedRecorded?: CoachingDecision | null;
 }
 
 export interface CoachDecisionPanelProps {
@@ -51,6 +57,15 @@ export interface CoachDecisionPanelProps {
   readonly prescription: ReviewPrescriptionInfo | null;
   readonly recording: CoachingDecisionRecordProps;
   readonly onRecord: (input: CreateCoachingDecisionInput) => void;
+  /**
+   * Phase 13F: the decision PERSISTED for the current decision date, if the
+   * persistence layer reports one (hard-refresh / navigation hydration). The
+   * fresh in-hook recording always wins; persistence is the fallback source
+   * of truth. Historical decisions are never passed here.
+   */
+  readonly persistedRecorded?: CoachingDecision | null;
+  /** Phase 13F: true while the persisted current decision is being checked. */
+  readonly isCheckingRecorded?: boolean;
 }
 
 export function CoachDecisionPanel({
@@ -59,6 +74,8 @@ export function CoachDecisionPanel({
   prescription,
   recording,
   onRecord,
+  persistedRecorded,
+  isCheckingRecorded,
 }: CoachDecisionPanelProps) {
   const [mode, setMode] = useState<'idle' | 'modify'>('idle');
   const [targetInput, setTargetInput] = useState<string>('');
@@ -66,8 +83,12 @@ export function CoachDecisionPanel({
   const [localError, setLocalError] = useState<string | null>(null);
   const allowed = ALLOWED_ACTIONS_BY_STATUS[review.status];
 
-  if (recording.recorded) {
-    return <RecordedState recorded={recording.recorded} review={review} />;
+  // Only a SUCCESSFULLY persisted decision (this session) or a decision
+  // hydrated from persistence puts the panel in its recorded state. A failed
+  // save leaves `recording.recorded` null, so the panel stays actionable.
+  const recordedDecision = recording.recorded ?? persistedRecorded ?? null;
+  if (recordedDecision) {
+    return <RecordedState recorded={recordedDecision} review={review} />;
   }
 
   const submit = (action: CoachAction, finalTargetCalories: number | null) => {
@@ -106,7 +127,10 @@ export function CoachDecisionPanel({
     review.status === 'adjustment_recommended' && review.proposedTargetCalories !== null;
   const isMaintain = review.status === 'maintain';
   const isReviewState = review.status === 'review_required' || review.status === 'insufficient_data';
-  const controlsDisabled = recording.isSaving;
+  // Controls are disabled while a save is in flight AND while the persisted
+  // current decision is being hydrated — this prevents any duplicate
+  // submission from either rapid interaction or a racing hydration.
+  const controlsDisabled = recording.isSaving || isCheckingRecorded === true;
 
   return (
     <Card className="p-5 shadow-card border-primary/30">

@@ -34,9 +34,18 @@ export interface ClientReviewViewProps {
   onRecord?: (input: CreateCoachingDecisionInput) => void;
   /** When wired, the read-only persisted Decision History is composed into the review. */
   history?: CoachingDecisionHistoryState;
+  /** Phase 13F: true while the persisted current decision is being checked. */
+  isCheckingRecorded?: boolean;
 }
 
-export function ClientReviewView({ client, view, recording, onRecord, history }: ClientReviewViewProps) {
+export function ClientReviewView({
+  client,
+  view,
+  recording,
+  onRecord,
+  history,
+  isCheckingRecorded,
+}: ClientReviewViewProps) {
   if (view.status === 'loading' || view.status === 'idle') {
     return <LoadingState />;
   }
@@ -89,6 +98,8 @@ export function ClientReviewView({ client, view, recording, onRecord, history }:
           prescription={prescription}
           recording={recording}
           onRecord={onRecord}
+          persistedRecorded={recording.persistedRecorded ?? null}
+          isCheckingRecorded={isCheckingRecorded}
         />
       ) : null}
       {history ? <DecisionHistory {...history} /> : null}
