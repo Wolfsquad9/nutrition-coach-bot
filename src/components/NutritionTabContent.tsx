@@ -248,14 +248,17 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
             </h2>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <Button onClick={handleGenerateDailyPlan} disabled={isGenerating || !ingredientValidation.canGenerateDaily || planState.isBlocked} variant="outline">
+            <Button onClick={handleGenerateDailyPlan} disabled={planState.isLoading || isGenerating || !ingredientValidation.canGenerateDaily || planState.isBlocked} variant="outline">
               {isGeneratingDaily ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</> : <><CalendarDays className="mr-2 h-4 w-4" />Daily Plan</>}
             </Button>
-            <Button onClick={handleGenerateWeeklyPlan} disabled={isGenerating || !ingredientValidation.canGenerateWeekly || regenerationBlocked || planState.isBlocked} variant={planState.isDraft ? "outline" : "default"}>
+            {/* planState.isLoading: never start generation while the authoritative
+                plan load is still pending — a draft created now would race the
+                in-flight load (see usePlanFetch stale-load guard). */}
+            <Button onClick={handleGenerateWeeklyPlan} disabled={planState.isLoading || isGenerating || !ingredientValidation.canGenerateWeekly || regenerationBlocked || planState.isBlocked} variant={planState.isDraft ? "outline" : "default"}>
               {isGeneratingWeekly ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</> : <><Calendar className="mr-2 h-4 w-4" />{planState.isDraft ? 'Regenerate' : 'Weekly Plan'}</>}
             </Button>
             {planState.isDraft && <DiscardDraftButton onDiscard={handleDiscardDraft} disabled={planState.isSaving} />}
-            <LockPlanButton canLock={planState.canLock} isLocking={planState.isSaving} onLock={handleLockPlan} disabled={!ingredientValidation.canGenerateWeekly || planState.isBlocked} />
+            <LockPlanButton canLock={planState.canLock} isLocking={planState.isSaving} onLock={handleLockPlan} disabled={planState.isLoading || !ingredientValidation.canGenerateWeekly || planState.isBlocked} />
             <SharePlanButton versionId={planState.versionId} isShareable={planState.isShareable} />
           </div>
         </div>

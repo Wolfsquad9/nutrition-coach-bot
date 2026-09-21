@@ -25,6 +25,12 @@ export interface AuthContextType {
   userId: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /**
+   * True while an auth/role resolution round-trip is outstanding. The guard
+   * contract: AUTHENTICATED + resolving => WAIT, never redirect to /login.
+   * Every resolution path terminates, so this can never stick.
+   */
+  isResolving: boolean;
   signOut: () => Promise<void>;
   userRole: 'coach' | 'client' | null;
   isClient: boolean;
@@ -40,6 +46,7 @@ const AuthContext = createContext<AuthContextType>({
   userId: null,
   isLoading: true,
   isAuthenticated: false,
+  isResolving: false,
   signOut: async () => {},
   userRole: null,
   isClient: false,
@@ -117,6 +124,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'coach' | 'client' | null>(null);
+  // Explicit "auth resolution in progress" state (auth-race fix): true while
+  // ANY resolveAuthState round-trip is outstanding. ProtectedRoute uses this
+  // to WAIT instead of treating "not yet resolved" as "unauthorized".
+  const [isResolving, setIsResolving] = useState(false);
+  // Stale-resolution guard: every resolveAuthState call takes a monotonically
+  // increasing id; a call whose id is no longer current (a newer session event
+  // or a sign-out happened meanwhile) must not write auth state.
+  const authResolutionIdRef = useRef(0);
+  const activeResolutionsRef = useRef(0);
   // Track user.id in a ref so refreshAuthState always reads the latest value,
   // even when called from an event handler that hasn't re-rendered yet.
   const userIdRef = useRef<string | null>(null);
@@ -141,64 +157,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resolveAuthState = useCallback(async (uid: string) => {
     console.log('[DEBUG] resolveAuthState START, uid:', uid);
 
-    // SEQUENTIAL AWAITS: Each query is isolated so the browser Network tab
-    // shows exactly which HTTP request (if any) never completes.
-    console.log('[AUTH] ⏳ user_roles query START');
-    const roleLookup = await lookupWithRetry<{
-      role: 'client' | 'trainer' | 'admin';
-    }>('user_roles', async () => {
-      const result = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', uid)
-        .maybeSingle();
-      return {
-        data: (result.data as { role: 'client' | 'trainer' | 'admin' } | null) ?? null,
-        error: result.error,
-      };
-    });
-    if (!roleLookup.ok) {
-      // Role is UNKNOWN, not "absent": keep the last-known valid role and
-      // leave clientId untouched as well — this re-resolution made no change.
-      console.error(
-        '[AUTH] ❌ user_roles lookup failed after retries; retaining last-known role',
-        roleLookup.error,
-      );
-      return;
+    // Take a resolution id and mark resolution in flight. A newer session
+    // event (or sign-out) bumps the id and makes THIS resolution stale, so it
+    // must not write any auth state after its awaits complete. The ref-counted
+    // isResolving flag always terminates: every path below reaches finally.
+    const resolutionId = ++authResolutionIdRef.current;
+    activeResolutionsRef.current += 1;
+    setIsResolving(true);
+
+    try {
+      // SEQUENTIAL AWAITS: Each query is isolated so the browser Network tab
+      // shows exactly which HTTP request (if any) never completes.
+      console.log('[AUTH] ⏳ user_roles query START');
+      const roleLookup = await lookupWithRetry<{
+        role: 'client' | 'trainer' | 'admin';
+      }>('user_roles', async () => {
+        const result = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', uid)
+          .maybeSingle();
+        return {
+          data: (result.data as { role: 'client' | 'trainer' | 'admin' } | null) ?? null,
+          error: result.error,
+        };
+      });
+      if (!roleLookup.ok) {
+        // Role is UNKNOWN, not "absent": keep the last-known valid role and
+        // leave clientId untouched as well — this re-resolution made no change.
+        console.error(
+          '[AUTH] ❌ user_roles lookup failed after retries; retaining last-known role',
+          roleLookup.error,
+        );
+        return;
+      }
+      // A newer resolution superseded this one — never write stale state.
+      if (resolutionId !== authResolutionIdRef.current) {
+        console.log('[DEBUG] resolveAuthState STALE (superseded), uid:', uid);
+        return;
+      }
+      const roleData = roleLookup.value;
+      console.log('[AUTH] ✅ user_roles query DONE', roleData ? 'found' : 'not found');
+
+      console.log('[AUTH] ⏳ clients query START');
+      const clientLookup = await lookupWithRetry<{ id: string }>('clients', async () => {
+        const result = await supabase
+          .from('clients')
+          .select('id')
+          .eq('user_profile_id', uid)
+          .maybeSingle();
+        return { data: (result.data as { id: string } | null) ?? null, error: result.error };
+      });
+      if (!clientLookup.ok) {
+        // clientId is UNKNOWN, not "absent": retain the last-known value.
+        console.error(
+          '[AUTH] ❌ clients lookup failed after retries; retaining last-known clientId',
+          clientLookup.error,
+        );
+      } else if (resolutionId === authResolutionIdRef.current) {
+        setClientId(clientLookup.value?.id ?? null);
+        console.log('[AUTH] ✅ clients query DONE', clientLookup.value ? 'found' : 'not found');
+      }
+
+      console.log('[DEBUG] resolveAuthState DONE');
+      // Map DB role ('trainer') to frontend role ('coach'); null only after a
+      // SUCCESSFUL query that found no row (genuine absence, never an error).
+      const dbRole = roleData?.role;
+      const mappedRole: 'coach' | 'client' | null =
+        dbRole === 'client' ? 'client' :
+        dbRole === 'trainer' ? 'coach' :
+        null;
+
+      // A newer resolution superseded this one — never write stale state.
+      if (resolutionId !== authResolutionIdRef.current) {
+        console.log('[DEBUG] resolveAuthState STALE (superseded), uid:', uid);
+        return;
+      }
+      setUserRole(mappedRole);
+    } finally {
+      activeResolutionsRef.current -= 1;
+      if (activeResolutionsRef.current <= 0) {
+        setIsResolving(false);
+      }
     }
-    const roleData = roleLookup.value;
-    console.log('[AUTH] ✅ user_roles query DONE', roleData ? 'found' : 'not found');
-
-    console.log('[AUTH] ⏳ clients query START');
-    const clientLookup = await lookupWithRetry<{ id: string }>('clients', async () => {
-      const result = await supabase
-        .from('clients')
-        .select('id')
-        .eq('user_profile_id', uid)
-        .maybeSingle();
-      return { data: (result.data as { id: string } | null) ?? null, error: result.error };
-    });
-    if (!clientLookup.ok) {
-      // clientId is UNKNOWN, not "absent": retain the last-known value.
-      console.error(
-        '[AUTH] ❌ clients lookup failed after retries; retaining last-known clientId',
-        clientLookup.error,
-      );
-    } else {
-      setClientId(clientLookup.value?.id ?? null);
-      console.log('[AUTH] ✅ clients query DONE', clientLookup.value ? 'found' : 'not found');
-    }
-
-    console.log('[DEBUG] resolveAuthState DONE');
-    // Map DB role ('trainer') to frontend role ('coach'); null only after a
-    // SUCCESSFUL query that found no row (genuine absence, never an error).
-    const dbRole = roleData?.role;
-    const mappedRole: 'coach' | 'client' | null =
-      dbRole === 'client' ? 'client' :
-      dbRole === 'trainer' ? 'coach' :
-      null;
-
-    setUserRole(mappedRole);
   }, []);
 
   /**
@@ -237,7 +278,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Single resolution: read from database, no metadata fallback
         await resolveAuthState(currentUser.id);
       } else {
-        // No user — clear all auth-derived state immediately
+        // No user — clear all auth-derived state immediately. Also invalidate
+        // any in-flight resolution so it cannot repopulate cleared state.
+        authResolutionIdRef.current += 1;
         setClientId(null);
         setUserRole(null);
       }
@@ -323,6 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userId: user?.id ?? null,
     isLoading,
     isAuthenticated,
+    isResolving,
     signOut,
     userRole,
     isClient,

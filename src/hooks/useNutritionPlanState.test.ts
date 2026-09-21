@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useNutritionPlanState } from './useNutritionPlanState';
 import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { MacroTargets, NutritionMetrics } from '@/types';
@@ -27,6 +27,21 @@ const mockFetchPersistedSnapshot = vi.fn();
 const mockEmitRuntimeFailure = vi.fn();
 const mockEmitRetryTelemetry = vi.fn();
 const mockEmitHydrationResetTelemetry = vi.fn();
+
+// Deferred fetchCurrentPlan support for the stale-load epoch tests:
+// deferNextFetchCurrentPlan() makes the NEXT load hang until explicitly
+// released; resolveNextFetchCurrentPlan releases the OLDEST pending load
+// first (FIFO).
+const deferredFetchResolvers: Array<(r: unknown) => void> = [];
+let deferredFetchNextCalls = 0;
+let fallbackFetchCurrentPlan: unknown = { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null };
+const deferNextFetchCurrentPlan = () => { deferredFetchNextCalls += 1; };
+const pendingFetchCurrentPlan = () => deferredFetchResolvers.length;
+const resolveNextFetchCurrentPlan = (r: unknown) => {
+  const resolve = deferredFetchResolvers.shift();
+  if (!resolve) throw new Error('resolveNextFetchCurrentPlan: no pending deferred load');
+  resolve(r);
+};
 
 vi.mock('@/services/supabasePlanService', () => ({
   buildLockedPlanPayload: vi.fn((input) => ({
@@ -654,4 +669,102 @@ describe('lockPlan snapshot atomicity', () => {
     );
   });
 
+});
+
+/**
+ * Stale in-flight plan load vs freshly generated draft — regression tests
+ * (proven pre-existing bug).
+ *
+ * Production sequence (Nutrition tab): the component's mount effect starts
+ * `loadPlanForClient`, the coach clicks "Weekly Plan" before that load
+ * resolves, the draft is stored — and then the in-flight load's (older)
+ * response resolves and OVERWRITES the draft, leaving the UI on the empty
+ * state while the "Draft generated!" toast is still on screen.
+ */
+describe('loadPlanForClient stale-load epoch (regression)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deferredFetchResolvers.length = 0;
+    deferredFetchNextCalls = 0;
+    fallbackFetchCurrentPlan = { plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null };
+    mockCheckPlanLockStatus.mockResolvedValue({ isLocked: false, lockedUntil: null, daysRemaining: 0 });
+    mockFetchCurrentPlan.mockImplementation(() => {
+      if (deferredFetchNextCalls > 0) {
+        deferredFetchNextCalls -= 1;
+        return new Promise((resolve) => deferredFetchResolvers.push(resolve));
+      }
+      return Promise.resolve(fallbackFetchCurrentPlan);
+    });
+    mockFetchPersistedSnapshot.mockResolvedValue({ snapshot: null, error: null });
+  });
+
+  it('1. a draft generated while a plan load is in flight survives that stale load', async () => {
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    deferNextFetchCurrentPlan();
+    await act(async () => {
+      void result.current.loadPlanForClient('client-1');
+    });
+    await waitFor(() => expect(pendingFetchCurrentPlan()).toBe(1));
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+
+    // The coach generates a draft while the load is still pending.
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+    });
+    expect(result.current.isDraft).toBe(true);
+
+    // The OLDER load resolves with "no plan" — it must NOT clobber the draft.
+    await act(async () => {
+      resolveNextFetchCurrentPlan({ plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null });
+    });
+
+    expect(result.current.weeklyPlan).toEqual(fakeWeeklyPlan);
+    expect(result.current.isDraft).toBe(true);
+    // Resolution terminated: no stuck loading state either.
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('2. a current/valid load response still updates the state normally', async () => {
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    fallbackFetchCurrentPlan = { plan: fakeLockedPlanPayload, planId: 'p1', versionId: null, createdAt: lockedAtIso, snapshot: null, payloadHash: 'hash_test', versionNumber: 1, error: null };
+    await act(async () => {
+      await result.current.loadPlanForClient('client-1');
+    });
+
+    expect(result.current.weeklyPlan).toEqual(fakeWeeklyPlan);
+    expect(result.current.planId).toBe('p1');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('3. an older/stale load response is ignored when a newer load supersedes it', async () => {
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    deferNextFetchCurrentPlan(); // load A (older)
+    await act(async () => {
+      void result.current.loadPlanForClient('client-1');
+    });
+    await waitFor(() => expect(pendingFetchCurrentPlan()).toBe(1));
+    deferNextFetchCurrentPlan(); // load B (newer)
+    await act(async () => {
+      void result.current.loadPlanForClient('client-1');
+    });
+    // Both loads are now in flight; resolving shifts the OLDEST (load A) first.
+    await waitFor(() => expect(pendingFetchCurrentPlan()).toBe(2));
+
+    // The older load resolves first with a plan — its result must be dropped.
+    await act(async () => {
+      resolveNextFetchCurrentPlan({ plan: fakeLockedPlanPayload, planId: 'p1', versionId: null, createdAt: lockedAtIso, snapshot: null, payloadHash: 'hash_test', versionNumber: 1, error: null });
+    });
+    expect(result.current.weeklyPlan).toBeNull();
+
+    // The newer load resolves with an (identical-shape) result — it applies.
+    await act(async () => {
+      resolveNextFetchCurrentPlan({ plan: fakeLockedPlanPayload, planId: 'p2', versionId: null, createdAt: lockedAtIso, snapshot: null, payloadHash: 'hash_test', versionNumber: 1, error: null });
+    });
+    expect(result.current.weeklyPlan).toEqual(fakeWeeklyPlan);
+    expect(result.current.planId).toBe('p2');
+    expect(result.current.isLoading).toBe(false);
+  });
 });

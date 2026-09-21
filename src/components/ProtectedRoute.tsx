@@ -9,6 +9,14 @@ interface ProtectedRouteProps {
   role?: 'coach' | 'client';
 }
 
+function AuthLoadingSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
+
 /**
  * Wraps routes that require authentication.
  * Optionally restricts access by role.
@@ -21,7 +29,7 @@ interface ProtectedRouteProps {
  * Client accessing a coach route → /my-plan
  */
 export default function ProtectedRoute({ children, role }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, userRole } = useAuth();
+  const { isAuthenticated, isLoading, isResolving, userRole } = useAuth();
 
   // Memoize the last redirect target so re-renders that produce the same
   // (isAuthenticated, userRole, role) tuple do not emit a fresh <Navigate>.
@@ -32,18 +40,32 @@ export default function ProtectedRoute({ children, role }: ProtectedRouteProps) 
 
   // Show loading spinner while auth state is initializing
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AuthLoadingSpinner />;
   }
 
+  // Unauthenticated users → /login
   if (!isAuthenticated) {
     if (lastRedirectRef.current !== '/login') {
       lastRedirectRef.current = '/login';
     }
     return <Navigate to="/login" replace />;
+  }
+
+  // AUTHENTICATED + role/auth resolution still in progress (and the role is
+  // not known yet) → WAIT. "Not yet resolved" must never be treated as
+  // "unauthorized": redirecting here bounced freshly signed-in users back to
+  // /login ~165ms before their valid role arrived (proven race). Every
+  // resolution path terminates (role found / genuine absence / failure after
+  // retries), so this spinner can never become permanent.
+  //
+  // Deliberately scoped to `!userRole`: once a role IS known, a background
+  // re-resolution (e.g. TOKEN_REFRESHED) must not unmount the protected
+  // content — the guard would otherwise destroy in-memory UI state such as a
+  // freshly generated nutrition draft. With a known role there is nothing to
+  // bounce: the authorization checks below run on the resolved role, and
+  // resolveAuthState retains the last-known role on lookup failure.
+  if (isResolving && !userRole) {
+    return <AuthLoadingSpinner />;
   }
 
   // If we require a role but the auth state has fully loaded with no role,

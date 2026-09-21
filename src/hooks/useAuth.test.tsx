@@ -18,7 +18,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, renderHook, waitFor, act, screen } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
@@ -32,6 +32,11 @@ const h = vi.hoisted(() => {
   let session: unknown = null;
   let roleAttempts = 0;
   let clientsAttempts = 0;
+  // Auth-race test support: make the NEXT N user_roles lookups hang until
+  // explicitly released, and record which uid each lookup was for.
+  let deferredLookupsPending = 0;
+  const pendingRoleResolvers: ((r: LookupResponse) => void)[] = [];
+  const roleLookupUids: string[] = [];
   const supabase = {
     auth: {
       onAuthStateChange: (cb: (event: string, s: unknown) => void) => {
@@ -43,19 +48,28 @@ const h = vi.hoisted(() => {
     },
     from: (table: string) => ({
       select: () => ({
-        eq: () => ({
-          maybeSingle: async () => {
-            if (table === 'user_roles') {
-              roleAttempts += 1;
-              return roleQueue.length > 0 ? roleQueue.shift()! : roleResponse;
-            }
-            if (table === 'clients') {
-              clientsAttempts += 1;
-              return clientsResponse;
-            }
-            return { data: null, error: null };
-          },
-        }),
+        eq: (_col: string, val: string) => {
+          if (table === 'user_roles') roleLookupUids.push(val);
+          return {
+            maybeSingle: async () => {
+              if (table === 'user_roles') {
+                roleAttempts += 1;
+                if (deferredLookupsPending > 0) {
+                  deferredLookupsPending -= 1;
+                  return new Promise<LookupResponse>((resolve) => {
+                    pendingRoleResolvers.push(resolve);
+                  });
+                }
+                return roleQueue.length > 0 ? roleQueue.shift()! : roleResponse;
+              }
+              if (table === 'clients') {
+                clientsAttempts += 1;
+                return clientsResponse;
+              }
+              return { data: null, error: null };
+            },
+          };
+        },
       }),
     }),
   };
@@ -80,7 +94,22 @@ const h = vi.hoisted(() => {
       roleAttempts = 0;
       clientsAttempts = 0;
       roleQueue = [];
+      deferredLookupsPending = 0;
+      roleLookupUids.length = 0;
+      // Drop any dangling deferred resolvers from earlier tests — their
+      // continuations belong to unmounted providers and must not leak.
+      pendingRoleResolvers.length = 0;
     },
+    deferNextRoleLookup: () => {
+      deferredLookupsPending += 1;
+    },
+    releaseRole: (r: LookupResponse) => {
+      const resolve = pendingRoleResolvers.shift();
+      if (resolve) resolve(r);
+      else roleResponse = r;
+    },
+    getRoleLookupUids: () => [...roleLookupUids],
+    getPendingRoleLookups: () => pendingRoleResolvers.length,
   };
 });
 
@@ -231,5 +260,190 @@ describe('useAuth — Phase 12 auth resilience', () => {
   });
 
 
+});
+
+/**
+ * Auth resolution race — regression tests (proven pre-existing E2E bug).
+ *
+ * Production sequence: the post-sign-in navigation brings the user to the
+ * protected area while the role lookup is still in flight (LoginPage
+ * navigates as soon as signInWithPassword resolves). ProtectedRoute used to
+ * treat "role not yet resolved" as "unauthorized" and bounced the
+ * authenticated user back to /login ~165ms before the valid role arrived
+ * (reproduced 13/19 times under back-to-back timing).
+ *
+ * Invariant under test:
+ *   AUTHENTICATED + resolution pending => WAIT (spinner), NEVER /login.
+ *   Every resolution path must terminate (found / absence / failure).
+ */
+/** Stand-in for LoginPage's post-sign-in `navigate('/')`. */
+function GoToCoachAreaButton() {
+  const navigate = useNavigate();
+  return (
+    <div>
+      LOGIN_PAGE
+      <button type="button" onClick={() => navigate('/coach-area', { replace: true })}>
+        GO_TO_COACH_AREA
+      </button>
+    </div>
+  );
+}
+
+describe('useAuth / ProtectedRoute — auth resolution race (regression)', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    h.resetAttempts();
+    h.setRoleResponse(ROLE_FOUND);
+    h.setClientsResponse({ data: null, error: null });
+    h.setSession(null);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const renderGuard = () =>
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/coach-area']}>
+          <Routes>
+            <Route
+              path="/login"
+              element={<GoToCoachAreaButton />}
+            />
+            <Route
+              path="/coach-area"
+              element={
+                <ProtectedRoute role="coach">
+                  <div>COACH_CONTENT</div>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>,
+    );
+
+  /** Mirror the production flow: the post-sign-in navigation brings the
+   * user to the protected area WHILE the role lookup is still in flight
+   * (LoginPage navigates as soon as signInWithPassword resolves). */
+  const signInThenNavigateWhilePending = async () => {
+    const view = renderGuard();
+    // Signed out initially → login page is the correct starting point.
+    await waitFor(() => expect(screen.getByText('LOGIN_PAGE')).toBeInTheDocument());
+    h.deferNextRoleLookup();
+    await act(async () => {
+      h.emitAuthEvent('SIGNED_IN', SESSION);
+    });
+    // The sign-in resolved → the app navigates to the protected area.
+    await act(async () => {
+      screen.getByText('GO_TO_COACH_AREA').click();
+    });
+    // Deterministic: the deferred role lookup is now registered (pending).
+    await waitFor(() => expect(h.getPendingRoleLookups()).toBe(1));
+    return view;
+  };
+
+  it('1. authenticated + role resolution pending: must NOT redirect to /login', async () => {
+    const { container } = await signInThenNavigateWhilePending();
+
+    // While the role lookup is pending the guard must WAIT (spinner)…
+    await waitFor(() => {
+      expect(container.querySelector('.animate-spin')).toBeTruthy();
+    });
+    // …and NEVER land on /login for an authenticated user.
+    expect(screen.queryByText('LOGIN_PAGE')).not.toBeInTheDocument();
+  });
+
+  it('2. authenticated + role resolves to coach: renders the protected content', async () => {
+    const { container } = await signInThenNavigateWhilePending();
+    await waitFor(() => {
+      expect(container.querySelector('.animate-spin')).toBeTruthy();
+    });
+
+    await act(async () => {
+      h.releaseRole(ROLE_FOUND);
+    });
+
+    await waitFor(() => expect(screen.getByText('COACH_CONTENT')).toBeInTheDocument());
+    expect(screen.queryByText('LOGIN_PAGE')).not.toBeInTheDocument();
+  });
+
+  it('3. authenticated + resolution completes with no valid role: follows existing authorization behavior', async () => {
+    const { container } = await signInThenNavigateWhilePending();
+    await waitFor(() => {
+      expect(container.querySelector('.animate-spin')).toBeTruthy();
+    });
+
+    await act(async () => {
+      h.releaseRole(ROLE_ABSENT);
+    });
+
+    await waitFor(() => expect(screen.getByText('LOGIN_PAGE')).toBeInTheDocument());
+    expect(screen.queryByText('COACH_CONTENT')).not.toBeInTheDocument();
+  });
+
+  it('4. role lookup failure terminates resolution (no infinite spinner) and follows the existing fallback', async () => {
+    const { container } = renderGuard();
+    // Signed out initially → login page is the correct starting point.
+    await waitFor(() => expect(screen.getByText('LOGIN_PAGE')).toBeInTheDocument());
+
+    // EVERY role lookup attempt fails (network-level failure, resolves with
+    // an error exactly as supabase-js does in production).
+    h.setRoleResponse(ROLE_FETCH_FAILED);
+    await act(async () => {
+      h.emitAuthEvent('SIGNED_IN', SESSION);
+    });
+    // Simulate the post-sign-in navigation while resolution is in flight.
+    await act(async () => {
+      screen.getByText('GO_TO_COACH_AREA').click();
+    });
+    await waitFor(() => {
+      expect(container.querySelector('.animate-spin')).toBeTruthy();
+    });
+
+    // Retries exhaust (5 attempts) → resolution TERMINATES, spinner released…
+    await waitFor(
+      () => expect(container.querySelector('.animate-spin')).toBeNull(),
+      { timeout: 15000 },
+    );
+    // …and the existing authorization fallback applies (no valid role).
+    await waitFor(() => expect(screen.getByText('LOGIN_PAGE')).toBeInTheDocument());
+    expect(screen.queryByText('COACH_CONTENT')).not.toBeInTheDocument();
+  });
+
+  it('5. a stale concurrent resolution must not overwrite newer auth state', async () => {
+    const SESSION_B = { user: { id: 'uid-2' } } as unknown as Session;
+    const ROLE_CLIENT: LookupResponse = { data: { role: 'client' }, error: null };
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    // Start from the settled signed-out state so the emitted events are the
+    // only resolutions in play.
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isAuthenticated).toBe(false);
+
+    // Resolution A starts (older session) and hangs on its role lookup…
+    h.deferNextRoleLookup();
+    await act(async () => {
+      h.emitAuthEvent('SIGNED_IN', SESSION);
+    });
+    await waitFor(() => expect(h.getPendingRoleLookups()).toBe(1));
+    // …resolution B (newer session) supersedes it and completes.
+    await act(async () => {
+      h.emitAuthEvent('SIGNED_IN', SESSION_B);
+    });
+    await waitFor(() => expect(result.current.userRole).toBe('coach'));
+
+    // The OLDER resolution finally returns — it must not win.
+    await act(async () => {
+      h.releaseRole(ROLE_CLIENT);
+    });
+    await waitFor(() => expect(result.current.isResolving).toBe(false));
+    expect(result.current.userRole).toBe('coach');
+    expect(result.current.isAuthenticated).toBe(true);
+    // Both lookups were issued (A's deferred, B's immediate), A for uid-1, B for uid-2.
+    expect(h.getRoleLookupUids()).toEqual(['uid-1', 'uid-2']);
+  });
 });
 
