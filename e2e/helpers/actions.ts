@@ -184,7 +184,16 @@ export async function setupLockedClientWithInvite(
     page.getByRole('heading', { name: /Meal Plan Generation/i })
   ).toBeVisible();
 
-  await expect(page.getByText('Loading plan from database...')).not.toBeVisible({ timeout: 10_000 });
+  // Deterministic readiness: wait for the plan state machine to SETTLE.
+  // `not.toBeVisible()` on the loading text is NOT a valid signal — Playwright
+  // treats a not-yet-mounted element as "not visible", so it can pass before
+  // the load has even started, and the subsequent generate click then races the
+  // in-flight load. For a freshly created client the settled state is the
+  // explicit "No nutrition plan" empty state (rendered only when the load has
+  // completed and is no longer loading).
+  await expect(
+    page.getByRole('heading', { name: 'No nutrition plan' })
+  ).toBeVisible({ timeout: 15_000 });
 
   await page
     .getByRole('button', { name: /^(Weekly Plan|Regenerate)$/i })

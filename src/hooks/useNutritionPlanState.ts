@@ -279,6 +279,12 @@ export function useNutritionPlanState() {
       setClientMetrics(clientMetricsInput ?? null);
       setLikedIngredients(ingredients);
 
+      // Stale-load guard (proven draft-loss race): any plan load started
+      // BEFORE this draft was created is now stale. Bumping the load-request
+      // epoch makes usePlanFetch's staleness checks drop the in-flight
+      // response instead of overwriting the newer draft with it.
+      loadRequestIdRef.current += 1;
+
       // Phase 8: capture the draft's effective weekly rate so locking THIS
       // draft persists its prescription record. The ACTIVE PRESCRIPTION itself
       // is deliberately left untouched — drafts are never authoritative.
