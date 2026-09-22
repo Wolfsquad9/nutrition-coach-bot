@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { todayIso, useCoachingDecision } from './useCoachingDecision';
+import { todayIso, scopeCoachingDecisionToClient, useCoachingDecision } from './useCoachingDecision';
 
 const DECISION_DATE = '2026-09-15';
 
@@ -118,5 +118,73 @@ describe('useCoachingDecision — recordDecision', () => {
       expect(result.current.recorded?.id).toBe('d-1');
     });
     expect(persist).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Client-switch scoping (regression): the recording hook is page-scoped, so
+ * its lifecycle state must carry the clientId it was recorded FOR, and the
+ * page must scope it to the ACTIVE client. Without this, a decision recorded
+ * for client A would keep taking precedence over client B's own persisted
+ * current decision after switching to B — hiding B's available actions.
+ */
+describe('useCoachingDecision — client-switch scoping (regression)', () => {
+  it('tags the recording lifecycle with the clientId it was recorded for', async () => {
+    const persist = vi.fn().mockResolvedValue({
+      data: { id: 'd-a', ...input({ clientId: 'client-a' }) },
+      error: null,
+    });
+    const { result } = renderHook(() => useCoachingDecision({ persist }));
+
+    await act(async () => {
+      await result.current.recordDecision(input({ clientId: 'client-a' }));
+    });
+
+    expect(result.current.recorded?.id).toBe('d-a');
+    expect(result.current.clientId).toBe('client-a');
+  });
+
+  it('scopes a previous client\u2019s recording OUT of a newly active client', async () => {
+    const persist = vi.fn().mockResolvedValue({
+      data: { id: 'd-a', ...input({ clientId: 'client-a' }) },
+      error: null,
+    });
+    const { result } = renderHook(() => useCoachingDecision({ persist }));
+
+    // 1. Coach reviews client A and records a decision.
+    await act(async () => {
+      await result.current.recordDecision(input({ clientId: 'client-a' }));
+    });
+    expect(result.current.recorded?.id).toBe('d-a');
+
+    // 2. Coach switches to client B (page stays mounted).
+    const forClientB = scopeCoachingDecisionToClient(result.current, 'client-b');
+
+    // 3. Client B must NOT inherit client A's recorded state…
+    expect(forClientB.recorded).toBeNull();
+    expect(forClientB.isSaving).toBe(false);
+    expect(forClientB.error).toBeNull();
+    // …and therefore falls back to B's OWN persisted current decision
+    // (hydrated from persistence), never to A's in-memory recording.
+    const clientBPersisted = { id: 'd-b', clientId: 'client-b' };
+    expect(forClientB.recorded ?? clientBPersisted).toEqual(clientBPersisted);
+  });
+
+  it('keeps the same-client recording intact (switch back preserves save/retry state)', async () => {
+    const persist = vi.fn().mockResolvedValue({
+      data: { id: 'd-a', ...input({ clientId: 'client-a' }) },
+      error: null,
+    });
+    const { result } = renderHook(() => useCoachingDecision({ persist }));
+
+    await act(async () => {
+      await result.current.recordDecision(input({ clientId: 'client-a' }));
+    });
+
+    // Switch away and back to A: A's own lifecycle is unchanged.
+    expect(scopeCoachingDecisionToClient(result.current, 'client-b').recorded).toBeNull();
+    const backOnA = scopeCoachingDecisionToClient(result.current, 'client-a');
+    expect(backOnA.recorded?.id).toBe('d-a');
+    expect(backOnA.clientId).toBe('client-a');
   });
 });

@@ -21,7 +21,12 @@
  */
 
 import type { ClientReviewStatus } from '@/domain/review/reviewModel';
-import { reconcileTarget } from '@/domain/nutrition/engine';
+import {
+  reconcileTarget,
+  resolveProteinPriority,
+  type ActivityLevel,
+  type PrimaryGoal,
+} from '@/domain/nutrition/engine';
 
 // ============================================================================
 // TYPES
@@ -94,9 +99,18 @@ export interface CoachingDecision extends CoachingDecisionInput {
   readonly createdAt: string;
 }
 
-/** Extra data the validator needs (client body weight for feasibility). */
+/**
+ * Extra data the validator needs to decide feasibility exactly like the
+ * canonical nutrition engine:
+ *  - body weight (drives the protein target and the fat floor);
+ *  - the client's goal and training context, from which the engine derives
+ *    the protein priority (`resolveProteinPriority` — the single source of
+ *    truth; no second definition of nutrition priority lives here).
+ */
 export interface ValidationContext {
   readonly weightKg: number;
+  readonly primaryGoal: PrimaryGoal;
+  readonly activityLevel: ActivityLevel;
 }
 
 export interface ValidationResult {
@@ -165,12 +179,15 @@ export function validateCoachingDecisionInput(
       errors.push('finalTargetCalories must be positive');
     } else if (input.coachAction === 'modified') {
       // Reuse the canonical macro-floor feasibility check (single mechanism —
-      // no second calorie-bound algorithm). The engine reconciles protein + the
-      // fat floor against the target and flags a target that cannot cover them.
+      // no second calorie-bound algorithm, and the protein priority is derived
+      // by the engine's own `resolveProteinPriority` from the client's real
+      // goal/training context — never hardcoded). The engine reconciles
+      // protein + the fat floor against the target and flags a target that
+      // cannot cover them.
       const reconciled = reconcileTarget(
         input.finalTargetCalories,
         context.weightKg,
-        'normal',
+        resolveProteinPriority(context.primaryGoal, context.activityLevel),
       );
       if (!reconciled.isFeasible) {
         errors.push(
