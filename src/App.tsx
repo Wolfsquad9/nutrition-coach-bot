@@ -11,6 +11,8 @@ import ClientLayout from "@/layouts/ClientLayout";
 import ClientPage from "@/pages/ClientPage";
 import IngredientsPage from "@/pages/IngredientsPage";
 import NutritionPage from "@/pages/NutritionPage";
+import ClientReviewPage from "@/pages/ClientReviewPage";
+import ReviewQueuePage from "@/pages/ReviewQueuePage";
 import TrainingPage from "@/pages/TrainingPage";
 import ProgressPage from "@/pages/ProgressPage";
 import CheckinPage from "@/pages/CheckinPage";
@@ -44,10 +46,12 @@ const App = () => (
               {/* Coach-facing protected routes — coach only */}
               <Route element={<ProtectedRoute role="coach"><AppLayout /></ProtectedRoute>}>
                 <Route index element={<ClientPage />} />
+                <Route path="review" element={<ReviewQueuePage />} />
                 <Route path="clients/:clientId" element={<ClientPage />} />
                 <Route path="clients/:clientId/ingredients" element={<IngredientsPage />} />
                 <Route path="clients/:clientId/checkin" element={<CheckinPage />} />
                 <Route path="clients/:clientId/nutrition" element={<NutritionPage />} />
+                <Route path="clients/:clientId/review" element={<ClientReviewPage />} />
                 <Route path="clients/:clientId/training" element={<TrainingPage />} />
                 <Route path="clients/:clientId/progress" element={<ProgressPage />} />
               </Route>
