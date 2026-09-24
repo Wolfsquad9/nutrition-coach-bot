@@ -14,7 +14,10 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAppLayout } from '@/hooks/useAppLayout';
 import { useClientReview } from '@/hooks/useClientReview';
-import { useCoachingDecision } from '@/hooks/useCoachingDecision';
+import {
+  scopeCoachingDecisionToClient,
+  useCoachingDecision,
+} from '@/hooks/useCoachingDecision';
 import { useCurrentCoachingDecision } from '@/hooks/useCurrentCoachingDecision';
 import { useCoachingDecisionHistory } from '@/hooks/useCoachingDecisionHistory';
 import { NoClientGuard } from '@/components/NoClientGuard';
@@ -29,18 +32,27 @@ export default function ClientReviewPage() {
   const view = useClientReview(hasClient ? activeClient : null);
   const recording = useCoachingDecision();
 
+  // A recording lifecycle belongs to the client it was recorded FOR. The
+  // recording hook is page-scoped (not per-client), so it is explicitly scoped
+  // to the ACTIVE client here: switching clients can never leak a previous
+  // client's recorded/saving/error state into this client's review. This is a
+  // per-render derivation, so there is no effect-ordering window in which a
+  // previous client's decision could be rendered for the new client.
+  const activeRecording = scopeCoachingDecisionToClient(recording, activeClientId);
+
   // Phase 13F: the persisted decision for the CURRENT decision date is the
-  // source of truth for "recorded". The in-hook recording (only set after a
-  // successful save) takes precedence; persistence hydrates refresh/navigation.
+  // source of truth for "recorded". The in-session recording for THIS client
+  // (only set after a successful save) takes precedence; persistence hydrates
+  // refresh/navigation.
   const current = useCurrentCoachingDecision(hasClient ? activeClientId : null, {
-    refreshKey: recording.recorded?.id ?? null,
+    refreshKey: activeRecording.recorded?.id ?? null,
   });
-  const recorded = recording.recorded ?? current.currentDecision;
+  const recorded = activeRecording.recorded ?? current.currentDecision;
 
   // Phase 13F: after a successful save the Decision History re-reads the
   // authoritative persisted data through its existing read-only path.
   const history = useCoachingDecisionHistory(hasClient ? activeClientId : null, {
-    refreshKey: recording.recorded?.id ?? null,
+    refreshKey: activeRecording.recorded?.id ?? null,
   });
 
   if (!hasClient) {
@@ -59,7 +71,12 @@ export default function ClientReviewPage() {
       <ClientReviewView
         client={activeClient!}
         view={view}
-        recording={{ ...recording, recorded, persistedRecorded: current.currentDecision }}
+        recording={{
+          isSaving: activeRecording.isSaving,
+          error: activeRecording.error,
+          recorded,
+          persistedRecorded: current.currentDecision,
+        }}
         onRecord={recording.recordDecision}
         history={history}
         isCheckingRecorded={current.isLoading}

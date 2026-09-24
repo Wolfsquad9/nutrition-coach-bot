@@ -21,15 +21,19 @@ import {
   type CoachingDecision,
   type CoachingDecisionInput,
 } from '@/domain/coaching/coachingDecision';
+import type { ActivityLevel, PrimaryGoal } from '@/domain/nutrition/engine';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-/** The persistence payload: the domain decision plus the client body weight
- *  needed by the canonical feasibility check for modified targets. */
+/** The persistence payload: the domain decision plus the client context
+ *  needed by the canonical feasibility check for modified targets (body
+ *  weight + the goal/training context that determines protein priority). */
 export interface CreateCoachingDecisionInput extends CoachingDecisionInput {
   readonly clientWeightKg: number;
+  readonly clientPrimaryGoal: PrimaryGoal;
+  readonly clientActivityLevel: ActivityLevel;
 }
 
 interface RecordCoachingDecisionRow {
@@ -68,6 +72,8 @@ export async function createCoachingDecision(
   try {
     const validation = validateCoachingDecisionInput(input, {
       weightKg: input.clientWeightKg,
+      primaryGoal: input.clientPrimaryGoal,
+      activityLevel: input.clientActivityLevel,
     });
     if (!validation.valid) {
       return { data: null, error: validation.errors.join(' ') };

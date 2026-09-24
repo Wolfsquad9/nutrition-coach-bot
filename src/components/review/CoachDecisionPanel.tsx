@@ -100,7 +100,13 @@ export function CoachDecisionPanel({
       finalTargetCalories,
       note,
     });
-    const validation = validateCoachingDecisionInput(input, { weightKg: client.weight });
+    const validation = validateCoachingDecisionInput(input, {
+      weightKg: client.weight,
+      // The client's real goal/training context: the validator derives the
+      // protein priority through the canonical engine derivation.
+      primaryGoal: client.primaryGoal,
+      activityLevel: client.activityLevel,
+    });
     if (!validation.valid) {
       setLocalError(validation.errors.join(' '));
       return;
@@ -331,7 +337,12 @@ export function buildDecisionInput(args: BuildInputArgs): CoachingDecisionInput 
 
 function buildInput(args: BuildInputArgs): CreateCoachingDecisionInput {
   const input = buildDecisionInput(args);
-  return { ...input, clientWeightKg: args.client.weight };
+  return {
+    ...input,
+    clientWeightKg: args.client.weight,
+    clientPrimaryGoal: args.client.primaryGoal,
+    clientActivityLevel: args.client.activityLevel,
+  };
 }
 
 function RecordedState({ recorded, review }: { recorded: CoachingDecision; review: ClientReview }) {

@@ -36,6 +36,35 @@ export interface CoachingDecisionRecordState {
   readonly error: string | null;
   /** The last successfully persisted decision, once one exists. */
   readonly recorded: CoachingDecision | null;
+  /**
+   * The client this submission lifecycle belongs to (from the submitted
+   * input's clientId). The hook is page-scoped, not per-client, so consumers
+   * MUST scope this state to the active client before rendering it —
+   * otherwise a decision recorded for client A would leak into client B's
+   * review after an active-client switch.
+   */
+  readonly clientId: string | null;
+}
+
+/** A neutral recording lifecycle (nothing in flight, nothing recorded). */
+export function idleCoachingDecisionState(): CoachingDecisionRecordState {
+  return { isSaving: false, error: null, recorded: null, clientId: null };
+}
+
+/**
+ * Scope a recording lifecycle to the client being viewed. The recording hook
+ * is page-scoped (not per-client); without this scoping, a decision recorded
+ * for client A would leak into client B's review after an active-client
+ * switch. Returns the lifecycle unchanged when it belongs to the active
+ * client (same-client save/retry/error behavior is fully preserved), and a
+ * neutral lifecycle otherwise — in which case the consumer falls back to the
+ * client's own persisted current decision.
+ */
+export function scopeCoachingDecisionToClient(
+  state: CoachingDecisionRecordState,
+  activeClientId: string | null,
+): CoachingDecisionRecordState {
+  return state.clientId === activeClientId ? state : idleCoachingDecisionState();
 }
 
 /** Today's date as YYYY-MM-DD (local time). */
@@ -58,11 +87,7 @@ export function useCoachingDecision(
   const persist = options?.persist ?? createCoachingDecision;
   const now = options?.now ?? currentTodayIso;
 
-  const [state, setState] = useState<CoachingDecisionRecordState>({
-    isSaving: false,
-    error: null,
-    recorded: null,
-  });
+  const [state, setState] = useState<CoachingDecisionRecordState>(idleCoachingDecisionState());
   const busyRef = useRef(false);
 
   const recordDecision = useCallback(
@@ -77,7 +102,9 @@ export function useCoachingDecision(
       }
 
       busyRef.current = true;
-      setState({ isSaving: true, error: null, recorded: null });
+      // The lifecycle is scoped to the client the input was recorded FOR so
+      // consumers can ignore it when viewing a different client.
+      setState({ isSaving: true, error: null, recorded: null, clientId: rawInput.clientId });
 
       const payload: CreateCoachingDecisionInput = {
         ...rawInput,
@@ -87,7 +114,7 @@ export function useCoachingDecision(
       try {
         const result = await persist(payload);
         if (result.error) {
-          setState({ isSaving: false, error: result.error, recorded: null });
+          setState({ isSaving: false, error: result.error, recorded: null, clientId: payload.clientId });
           toast({
             title: 'Decision not recorded',
             description: result.error,
@@ -95,7 +122,7 @@ export function useCoachingDecision(
           });
           return;
         }
-        setState({ isSaving: false, error: null, recorded: result.data });
+        setState({ isSaving: false, error: null, recorded: result.data, clientId: payload.clientId });
         toast({
           title: 'Decision recorded',
           description:
@@ -104,7 +131,7 @@ export function useCoachingDecision(
       } catch (err: unknown) {
         const message =
           err instanceof Error ? err.message : 'Unknown error recording the decision';
-        setState({ isSaving: false, error: message, recorded: null });
+        setState({ isSaving: false, error: message, recorded: null, clientId: payload.clientId });
         toast({ title: 'Decision not recorded', description: message, variant: 'destructive' });
       } finally {
         busyRef.current = false;
@@ -114,7 +141,7 @@ export function useCoachingDecision(
   );
 
   const resetDecision = useCallback(() => {
-    setState({ isSaving: false, error: null, recorded: null });
+    setState(idleCoachingDecisionState());
   }, []);
 
   return { ...state, recordDecision, resetDecision };

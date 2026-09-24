@@ -28,6 +28,8 @@ const DATE = '2026-09-15';
 function validInput(overrides: Partial<CreateCoachingDecisionInput> = {}): CreateCoachingDecisionInput {
   return {
     clientWeightKg: 80,
+    clientPrimaryGoal: 'maintenance',
+    clientActivityLevel: 'moderately_active',
     clientId: 'client-13c',
     recommendationStatus: 'adjustment_recommended',
     coachAction: 'accepted',
@@ -59,6 +61,36 @@ describe('createCoachingDecision', () => {
     );
     expect(result.data).toBeNull();
     expect(result.error).toContain('finalTargetCalories must be null');
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('validates a modified target against the client\u2019s protein priority (regression)', async () => {
+    // 1000 kcal covers a 'normal' 80kg client's protein+fat floor (944 kcal)
+    // but NOT a fat-loss (priority) client's (1072 kcal) — the boundary must
+    // use the client's real goal/training context, not a hardcoded priority.
+    mockRpc.mockResolvedValue({
+      data: [{ success: true, coaching_decision_id: 'd-1', coach_id: 'coach-1', error: null }],
+      error: null,
+    });
+
+    const normalResult = await createCoachingDecision(
+      validInput({ coachAction: 'modified', finalTargetCalories: 1000 }),
+    );
+    expect(normalResult.error).toBeNull();
+    expect(normalResult.data?.id).toBe('d-1');
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+
+    mockRpc.mockClear();
+
+    const priorityResult = await createCoachingDecision(
+      validInput({
+        coachAction: 'modified',
+        finalTargetCalories: 1000,
+        clientPrimaryGoal: 'fat_loss',
+      }),
+    );
+    expect(priorityResult.data).toBeNull();
+    expect(priorityResult.error).toContain('not feasible');
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
