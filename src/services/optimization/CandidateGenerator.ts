@@ -25,7 +25,9 @@ export class SeededCandidateGenerator implements CandidateGeneratorInterface {
 
     for (let i = 0; i < candidateCount; i++) {
       const seed = createCandidateSeed(input.clientId, input.regenerationCount, i);
-      const plan = generateWeeklyMealPlan(input.likedFoods, input.macroTargets, seed);
+      const plan = generateWeeklyMealPlan(input.likedFoods, input.macroTargets, seed, {
+        allowedIngredientIds: input.allowedIngredientIds,
+      });
       candidates.push({ plan, seed, candidateIndex: i });
     }
 

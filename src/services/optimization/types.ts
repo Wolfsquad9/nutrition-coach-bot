@@ -22,6 +22,12 @@ export interface GenerationInput {
   regenerationCount: number;
   /** Number of candidate plans to generate (MVP default: 10). */
   candidateCount: number;
+  /**
+   * Eligibility allow-list (see `@/services/recipe/eligibility`). When present,
+   * it is threaded into every candidate so an ineligible ingredient can never
+   * enter a generated plan, whatever `likedFoods` contains.
+   */
+  allowedIngredientIds?: readonly string[];
 }
 
 /** A generated plan plus the metadata needed to reproduce or rank it. */

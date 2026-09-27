@@ -69,7 +69,10 @@ const restriction: ClientIngredientRestrictions = {
   clientId: 'client-1',
   clientName: 'Test Client',
   blockedIngredients: [],
-  preferredIngredients: ['ing-1', 'ing-2', 'ing-3', 'ing-4', 'ing-5'],
+  // Real library ids: the Phase 1 eligibility boundary rejects unknown ids, so
+  // a synthetic fixture would (correctly) leave an empty generation pool. This
+  // test is about the load/lock guard, not about ingredient validation.
+  preferredIngredients: ['chicken-breast', 'brown-rice', 'broccoli', 'olive-oil', 'eggs'],
   substitutionRules: {},
 };
 

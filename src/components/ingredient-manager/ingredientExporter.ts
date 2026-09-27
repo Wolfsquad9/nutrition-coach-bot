@@ -15,8 +15,10 @@
 import { useCallback } from "react";
 import type { Client } from "@/types";
 import type { ClientIngredientRestrictions } from "@/utils/ingredientSubstitution";
+import { coreIngredients } from "@/data/ingredientDatabase";
 import type { GeneratedDietPlan } from "./types";
 import type { ToastFn } from "./recipeActionHandler";
+import { validateImportedRestrictions, formatRestrictionImportErrors } from "./restrictionImport";
 
 export interface UseIngredientExporterArgs {
   // Restrictions I/O
@@ -64,30 +66,51 @@ export function useIngredientExporter(
 
   const importRestrictions = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const imported = JSON.parse(e.target?.result as string);
-            setClientRestrictions(imported);
-            onRestrictionsUpdate(imported);
-            toast({
-              title: 'Import successful',
-              description: 'Restrictions have been imported',
-            });
-          } catch (error) {
-            toast({
-              title: 'Import error',
-              description: 'Invalid JSON file',
-              variant: 'destructive',
-            });
-          }
-        };
-        reader.readAsText(file);
-      }
+      const input = event.target;
+      const file = input.files?.[0];
+      // Allow re-selecting the same file after a rejected import.
+      input.value = '';
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(e.target?.result as string);
+        } catch {
+          toast({
+            title: 'Import error',
+            description: 'Invalid JSON file',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        // Fail closed: never write unvalidated restriction data into state.
+        const result = validateImportedRestrictions(parsed, {
+          knownIngredientIds: coreIngredients.map((ingredient) => ingredient.id),
+          expectedClientId: activeClient?.id ?? null,
+        });
+
+        if (!result.ok) {
+          toast({
+            title: 'Import rejected',
+            description: formatRestrictionImportErrors(result.errors),
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        setClientRestrictions(result.restrictions);
+        onRestrictionsUpdate(result.restrictions);
+        toast({
+          title: 'Import successful',
+          description: 'Restrictions have been imported',
+        });
+      };
+      reader.readAsText(file);
     },
-    [setClientRestrictions, onRestrictionsUpdate, toast]
+    [activeClient, setClientRestrictions, onRestrictionsUpdate, toast]
   );
 
   const handlePrintPlan = useCallback(() => {

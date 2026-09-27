@@ -1,5 +1,22 @@
 export type MealTimeType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+/**
+ * Structured allergen vocabulary.
+ *
+ * Single source of truth for allergen classification. It replaces the
+ * hardcoded ingredient-ID lists that previously lived in
+ * `determineAllergens`, so adding an ingredient cannot silently leave an
+ * allergen unreported.
+ */
+export type AllergenTag = 'gluten' | 'dairy' | 'eggs' | 'fish' | 'nuts' | 'soy' | 'sesame' | 'shellfish';
+
+/**
+ * The most restrictive diet an ingredient satisfies. The nesting is defined
+ * once in `isIngredientCompatibleWithDiet`:
+ *   omnivore ⊃ pescatarian ⊃ vegetarian ⊃ vegan
+ */
+export type DietTag = 'vegan' | 'vegetarian' | 'pescatarian' | 'omnivore';
+
 import { caloriesFromMacros } from '@/domain/nutrition/engine';
 
 export interface IngredientData {
@@ -17,6 +34,15 @@ export interface IngredientData {
   key_micros?: string[];
   typical_serving_size_g: number;
   tags: string[];
+  /**
+   * Allergen classes present in this ingredient.
+   *
+   * Optional so pre-existing `IngredientData` literals stay valid; shipped-library
+   * completeness is enforced by a guard test in `eligibility.test.ts`.
+   */
+  allergens?: AllergenTag[];
+  /** Diet levels this ingredient satisfies (see `DietTag`). */
+  dietTags?: DietTag[];
 }
 
 // New data structure for daily meal planning
@@ -49,7 +75,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['B6', 'B12', 'Niacin', 'Selenium'],
     typical_serving_size_g: 150,
-    tags: ['lean', 'high-protein', 'versatile', 'budget']
+    tags: ['lean', 'high-protein', 'versatile', 'budget'],
+    allergens: [],
+    dietTags: ['omnivore']
   },
   {
     id: 'eggs',
@@ -59,7 +87,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'snack'],
     key_micros: ['Vitamin D', 'B12', 'Choline', 'Selenium'],
     typical_serving_size_g: 100,
-    tags: ['complete-protein', 'vegetarian', 'budget', 'versatile']
+    tags: ['complete-protein', 'vegetarian', 'budget', 'versatile'],
+    allergens: ['eggs'],
+    dietTags: ['vegetarian']
   },
   {
     id: 'salmon',
@@ -69,7 +99,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Omega-3', 'Vitamin D', 'B12', 'Selenium'],
     typical_serving_size_g: 120,
-    tags: ['omega-3', 'heart-healthy', 'premium']
+    tags: ['omega-3', 'heart-healthy', 'premium'],
+    allergens: ['fish'],
+    dietTags: ['pescatarian']
   },
   {
     id: 'tofu',
@@ -79,7 +111,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Iron', 'Calcium', 'Magnesium'],
     typical_serving_size_g: 150,
-    tags: ['vegetarian', 'vegan', 'plant-based', 'budget']
+    tags: ['vegetarian', 'vegan', 'plant-based', 'budget'],
+    allergens: ['soy'],
+    dietTags: ['vegan']
   },
   {
     id: 'greek-yogurt',
@@ -89,7 +123,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Calcium', 'B12', 'Probiotics'],
     typical_serving_size_g: 170,
-    tags: ['high-protein', 'probiotic', 'vegetarian', 'low-fat']
+    tags: ['high-protein', 'probiotic', 'vegetarian', 'low-fat'],
+    allergens: ['dairy'],
+    dietTags: ['vegetarian']
   },
   {
     id: 'lentils',
@@ -99,7 +135,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Folate', 'Iron', 'Manganese'],
     typical_serving_size_g: 200,
-    tags: ['vegetarian', 'vegan', 'high-fiber', 'budget', 'plant-based']
+    tags: ['vegetarian', 'vegan', 'high-fiber', 'budget', 'plant-based'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'turkey-breast',
@@ -109,7 +147,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['B6', 'Niacin', 'Selenium', 'Phosphorus'],
     typical_serving_size_g: 120,
-    tags: ['lean', 'high-protein', 'low-fat']
+    tags: ['lean', 'high-protein', 'low-fat'],
+    allergens: [],
+    dietTags: ['omnivore']
   },
   {
     id: 'cottage-cheese',
@@ -119,7 +159,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Calcium', 'B12', 'Phosphorus'],
     typical_serving_size_g: 200,
-    tags: ['high-protein', 'vegetarian', 'budget']
+    tags: ['high-protein', 'vegetarian', 'budget'],
+    allergens: ['dairy'],
+    dietTags: ['vegetarian']
   },
   {
     id: 'tuna',
@@ -129,7 +171,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner', 'snack'],
     key_micros: ['Selenium', 'B12', 'Niacin', 'Omega-3'],
     typical_serving_size_g: 100,
-    tags: ['lean', 'high-protein', 'budget', 'convenient']
+    tags: ['lean', 'high-protein', 'budget', 'convenient'],
+    allergens: ['fish'],
+    dietTags: ['pescatarian']
   },
   {
     id: 'black-beans',
@@ -139,7 +183,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Folate', 'Iron', 'Magnesium'],
     typical_serving_size_g: 170,
-    tags: ['vegetarian', 'vegan', 'high-fiber', 'budget', 'plant-based']
+    tags: ['vegetarian', 'vegan', 'high-fiber', 'budget', 'plant-based'],
+    allergens: [],
+    dietTags: ['vegan']
   },
 
   // CARBOHYDRATES
@@ -151,7 +197,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Manganese', 'Magnesium', 'B1'],
     typical_serving_size_g: 150,
-    tags: ['whole-grain', 'gluten-free', 'budget', 'staple']
+    tags: ['whole-grain', 'gluten-free', 'budget', 'staple'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'oats',
@@ -161,7 +209,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Manganese', 'Phosphorus', 'Magnesium', 'Iron'],
     typical_serving_size_g: 40,
-    tags: ['whole-grain', 'high-fiber', 'budget', 'breakfast']
+    tags: ['whole-grain', 'high-fiber', 'budget', 'breakfast'],
+    allergens: ['gluten'],
+    dietTags: ['vegan']
   },
   {
     id: 'sweet-potato',
@@ -171,7 +221,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Vitamin A', 'Manganese', 'Potassium'],
     typical_serving_size_g: 200,
-    tags: ['whole-food', 'high-fiber', 'budget', 'nutrient-dense']
+    tags: ['whole-food', 'high-fiber', 'budget', 'nutrient-dense'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'quinoa',
@@ -181,7 +233,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Manganese', 'Phosphorus', 'Magnesium'],
     typical_serving_size_g: 150,
-    tags: ['complete-protein', 'gluten-free', 'whole-grain']
+    tags: ['complete-protein', 'gluten-free', 'whole-grain'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'whole-wheat-pasta',
@@ -191,7 +245,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Manganese', 'Selenium', 'Phosphorus'],
     typical_serving_size_g: 150,
-    tags: ['whole-grain', 'high-fiber', 'budget']
+    tags: ['whole-grain', 'high-fiber', 'budget'],
+    allergens: ['gluten'],
+    dietTags: ['vegan']
   },
   {
     id: 'white-potato',
@@ -201,7 +257,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Potassium', 'Vitamin C', 'B6'],
     typical_serving_size_g: 200,
-    tags: ['budget', 'versatile', 'staple', 'gluten-free']
+    tags: ['budget', 'versatile', 'staple', 'gluten-free'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'whole-wheat-bread',
@@ -211,7 +269,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'snack'],
     key_micros: ['Selenium', 'Manganese', 'B vitamins'],
     typical_serving_size_g: 60,
-    tags: ['whole-grain', 'convenient', 'breakfast']
+    tags: ['whole-grain', 'convenient', 'breakfast'],
+    allergens: ['gluten'],
+    dietTags: ['vegan']
   },
   {
     id: 'barley',
@@ -221,7 +281,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Selenium', 'Manganese', 'Copper'],
     typical_serving_size_g: 150,
-    tags: ['whole-grain', 'high-fiber', 'budget']
+    tags: ['whole-grain', 'high-fiber', 'budget'],
+    allergens: ['gluten'],
+    dietTags: ['vegan']
   },
 
   // FATS
@@ -233,7 +295,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner'],
     key_micros: ['Vitamin E', 'Vitamin K', 'Polyphenols'],
     typical_serving_size_g: 15,
-    tags: ['heart-healthy', 'monounsaturated', 'mediterranean']
+    tags: ['heart-healthy', 'monounsaturated', 'mediterranean'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'avocado',
@@ -243,7 +307,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner', 'snack'],
     key_micros: ['Potassium', 'Vitamin K', 'Folate', 'Vitamin E'],
     typical_serving_size_g: 100,
-    tags: ['heart-healthy', 'high-fiber', 'nutrient-dense']
+    tags: ['heart-healthy', 'high-fiber', 'nutrient-dense'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'almonds',
@@ -253,7 +319,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Vitamin E', 'Magnesium', 'Manganese'],
     typical_serving_size_g: 30,
-    tags: ['high-protein', 'heart-healthy', 'snack']
+    tags: ['high-protein', 'heart-healthy', 'snack'],
+    allergens: ['nuts'],
+    dietTags: ['vegan']
   },
   {
     id: 'walnuts',
@@ -263,7 +331,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Omega-3', 'Manganese', 'Copper'],
     typical_serving_size_g: 30,
-    tags: ['omega-3', 'heart-healthy', 'brain-health']
+    tags: ['omega-3', 'heart-healthy', 'brain-health'],
+    allergens: ['nuts'],
+    dietTags: ['vegan']
   },
   {
     id: 'peanut-butter',
@@ -273,7 +343,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Niacin', 'Magnesium', 'Vitamin E'],
     typical_serving_size_g: 30,
-    tags: ['high-protein', 'convenient', 'budget']
+    tags: ['high-protein', 'convenient', 'budget'],
+    allergens: ['nuts'],
+    dietTags: ['vegan']
   },
   {
     id: 'chia-seeds',
@@ -283,7 +355,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Omega-3', 'Calcium', 'Phosphorus'],
     typical_serving_size_g: 15,
-    tags: ['omega-3', 'high-fiber', 'superfood']
+    tags: ['omega-3', 'high-fiber', 'superfood'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'flax-seeds',
@@ -293,7 +367,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Omega-3', 'Lignans', 'Manganese'],
     typical_serving_size_g: 15,
-    tags: ['omega-3', 'high-fiber', 'plant-based']
+    tags: ['omega-3', 'high-fiber', 'plant-based'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'coconut-oil',
@@ -303,7 +379,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner'],
     key_micros: ['MCTs'],
     typical_serving_size_g: 15,
-    tags: ['saturated', 'cooking', 'energy']
+    tags: ['saturated', 'cooking', 'energy'],
+    allergens: [],
+    dietTags: ['vegan']
   },
 
   // FRUITS
@@ -315,7 +393,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Potassium', 'B6', 'Vitamin C'],
     typical_serving_size_g: 120,
-    tags: ['quick-energy', 'budget', 'convenient']
+    tags: ['quick-energy', 'budget', 'convenient'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'apple',
@@ -325,7 +405,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Vitamin C', 'Polyphenols', 'Potassium'],
     typical_serving_size_g: 180,
-    tags: ['high-fiber', 'budget', 'snack']
+    tags: ['high-fiber', 'budget', 'snack'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'berries-mixed',
@@ -335,7 +417,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Vitamin C', 'Anthocyanins', 'Manganese'],
     typical_serving_size_g: 150,
-    tags: ['antioxidant', 'low-calorie', 'nutrient-dense']
+    tags: ['antioxidant', 'low-calorie', 'nutrient-dense'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'orange',
@@ -345,7 +429,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Vitamin C', 'Folate', 'Potassium'],
     typical_serving_size_g: 150,
-    tags: ['vitamin-c', 'immune-support', 'budget']
+    tags: ['vitamin-c', 'immune-support', 'budget'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'mango',
@@ -355,7 +441,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Vitamin A', 'Vitamin C', 'Folate'],
     typical_serving_size_g: 150,
-    tags: ['vitamin-a', 'tropical', 'sweet']
+    tags: ['vitamin-a', 'tropical', 'sweet'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'grapes',
@@ -365,7 +453,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['snack'],
     key_micros: ['Vitamin K', 'Resveratrol', 'Potassium'],
     typical_serving_size_g: 150,
-    tags: ['antioxidant', 'convenient', 'snack']
+    tags: ['antioxidant', 'convenient', 'snack'],
+    allergens: [],
+    dietTags: ['vegan']
   },
 
   // VEGETABLES
@@ -377,7 +467,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Vitamin C', 'Vitamin K', 'Folate'],
     typical_serving_size_g: 150,
-    tags: ['nutrient-dense', 'low-calorie', 'cruciferous']
+    tags: ['nutrient-dense', 'low-calorie', 'cruciferous'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'spinach',
@@ -387,7 +479,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner'],
     key_micros: ['Vitamin K', 'Vitamin A', 'Folate', 'Iron'],
     typical_serving_size_g: 100,
-    tags: ['nutrient-dense', 'low-calorie', 'versatile']
+    tags: ['nutrient-dense', 'low-calorie', 'versatile'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'tomato',
@@ -397,7 +491,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner'],
     key_micros: ['Lycopene', 'Vitamin C', 'Potassium'],
     typical_serving_size_g: 150,
-    tags: ['antioxidant', 'low-calorie', 'versatile']
+    tags: ['antioxidant', 'low-calorie', 'versatile'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'carrot',
@@ -407,7 +503,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner', 'snack'],
     key_micros: ['Vitamin A', 'Beta-carotene', 'Potassium'],
     typical_serving_size_g: 100,
-    tags: ['vitamin-a', 'budget', 'snack']
+    tags: ['vitamin-a', 'budget', 'snack'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'bell-pepper',
@@ -417,7 +515,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Vitamin C', 'Vitamin A', 'B6'],
     typical_serving_size_g: 150,
-    tags: ['vitamin-c', 'low-calorie', 'colorful']
+    tags: ['vitamin-c', 'low-calorie', 'colorful'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'cucumber',
@@ -427,7 +527,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner', 'snack'],
     key_micros: ['Vitamin K', 'Potassium'],
     typical_serving_size_g: 100,
-    tags: ['hydrating', 'low-calorie', 'refreshing']
+    tags: ['hydrating', 'low-calorie', 'refreshing'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'cauliflower',
@@ -437,7 +539,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Vitamin C', 'Vitamin K', 'Folate'],
     typical_serving_size_g: 150,
-    tags: ['low-carb', 'versatile', 'cruciferous']
+    tags: ['low-carb', 'versatile', 'cruciferous'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'zucchini',
@@ -447,7 +551,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Vitamin C', 'Potassium', 'Manganese'],
     typical_serving_size_g: 150,
-    tags: ['low-calorie', 'versatile', 'hydrating']
+    tags: ['low-calorie', 'versatile', 'hydrating'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'kale',
@@ -457,7 +563,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner'],
     key_micros: ['Vitamin K', 'Vitamin A', 'Vitamin C', 'Calcium'],
     typical_serving_size_g: 100,
-    tags: ['superfood', 'nutrient-dense', 'cruciferous']
+    tags: ['superfood', 'nutrient-dense', 'cruciferous'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'asparagus',
@@ -467,7 +575,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Vitamin K', 'Folate', 'Vitamin A'],
     typical_serving_size_g: 150,
-    tags: ['nutrient-dense', 'low-calorie', 'spring-vegetable']
+    tags: ['nutrient-dense', 'low-calorie', 'spring-vegetable'],
+    allergens: [],
+    dietTags: ['vegan']
   },
 
   // MISC ESSENTIALS
@@ -479,7 +589,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Manganese', 'B6', 'Vitamin C'],
     typical_serving_size_g: 5,
-    tags: ['flavor', 'immune-support', 'antimicrobial']
+    tags: ['flavor', 'immune-support', 'antimicrobial'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'ginger',
@@ -489,7 +601,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner'],
     key_micros: ['Gingerol', 'Potassium', 'Magnesium'],
     typical_serving_size_g: 5,
-    tags: ['anti-inflammatory', 'digestive', 'flavor']
+    tags: ['anti-inflammatory', 'digestive', 'flavor'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'lemon',
@@ -499,7 +613,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'lunch', 'dinner'],
     key_micros: ['Vitamin C', 'Citric acid'],
     typical_serving_size_g: 30,
-    tags: ['vitamin-c', 'flavor', 'alkalizing']
+    tags: ['vitamin-c', 'flavor', 'alkalizing'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'herbs-mixed',
@@ -509,7 +625,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['lunch', 'dinner'],
     key_micros: ['Vitamin K', 'Antioxidants', 'Essential oils'],
     typical_serving_size_g: 10,
-    tags: ['flavor', 'antioxidant', 'zero-calorie']
+    tags: ['flavor', 'antioxidant', 'zero-calorie'],
+    allergens: [],
+    dietTags: ['vegan']
   },
   {
     id: 'cinnamon',
@@ -519,7 +637,9 @@ export const coreIngredients: IngredientData[] = [
     allowedMeals: ['breakfast', 'snack'],
     key_micros: ['Manganese', 'Calcium', 'Iron'],
     typical_serving_size_g: 2,
-    tags: ['blood-sugar', 'antioxidant', 'flavor']
+    tags: ['blood-sugar', 'antioxidant', 'flavor'],
+    allergens: [],
+    dietTags: ['vegan']
   }
 ];
 

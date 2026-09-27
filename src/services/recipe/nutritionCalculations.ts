@@ -1,8 +1,9 @@
-import { type IngredientData } from '@/data/ingredientDatabase';
+import { type IngredientData, type AllergenTag } from '@/data/ingredientDatabase';
 import type { Macros, MacroTargets } from '@/types';
 import { sumMacros, caloriesFromMacros } from '@/domain/nutrition/engine';
 import { MACRO_TOLERANCES, type MealType } from './constants';
 import type { ToleranceCheckResult } from './types';
+import { isIngredientCompatibleWithDiet } from './eligibility';
 
 /**
  * Calculates total macros of selected ingredients based on their typical
@@ -76,46 +77,58 @@ export function checkMacroTolerance(
 }
 
 /**
- * Determines diet types based on ingredient profile
+ * Allergen report order — stable so UI badges and snapshots stay stable as the
+ * library grows. Derived purely from each ingredient's structured `allergens`
+ * metadata (no hardcoded ingredient-ID lists).
+ */
+const ALLERGEN_REPORT_ORDER: readonly AllergenTag[] = [
+  'eggs',
+  'dairy',
+  'nuts',
+  'fish',
+  'soy',
+  'gluten',
+  'sesame',
+  'shellfish',
+];
+
+/**
+ * Determines diet types based on each ingredient's structured `dietTags`.
+ *
+ * Replaces the previous hardcoded ingredient-ID lists, which silently
+ * mislabelled meals as soon as a new ingredient was added. The diet nesting
+ * rule lives in exactly one place (`isIngredientCompatibleWithDiet`).
  */
 export function determineDietTypes(ingredients: IngredientData[]): string[] {
   const dietTypes: string[] = [];
-  const hasAnimalProtein = ingredients.some(i => 
-    ['chicken-breast', 'salmon', 'turkey-breast', 'tuna'].includes(i.id)
-  );
-  const hasDairy = ingredients.some(i => 
-    ['greek-yogurt', 'cottage-cheese'].includes(i.id)
-  );
-  const hasEggs = ingredients.some(i => i.id === 'eggs');
-  
-  if (!hasAnimalProtein && !hasDairy && !hasEggs) {
+
+  const isVegan = ingredients.every((i) => isIngredientCompatibleWithDiet(i, 'vegan'));
+  const isVegetarian = ingredients.every((i) => isIngredientCompatibleWithDiet(i, 'vegetarian'));
+
+  if (isVegan) {
     dietTypes.push('vegan');
-  } else if (!hasAnimalProtein) {
+  } else if (isVegetarian) {
     dietTypes.push('vegetarian');
   }
-  
-  const isGlutenFree = !ingredients.some(i => 
-    ['whole-wheat-pasta', 'whole-wheat-bread', 'barley', 'oats'].includes(i.id)
-  );
+
+  // "Gluten-free" is derived from the allergen metadata, so an ingredient that
+  // carries gluten can never be presented as gluten-free.
+  const isGlutenFree = !ingredients.some((i) => (i.allergens ?? []).includes('gluten'));
   if (isGlutenFree) dietTypes.push('gluten-free');
-  
+
   return dietTypes;
 }
 
 /**
- * Determines allergens based on ingredient selection
+ * Determines allergens based on each ingredient's structured `allergens`
+ * metadata (replaces the previous hardcoded ingredient-ID lists).
  */
 export function determineAllergens(ingredients: IngredientData[]): string[] {
-  const allergens: string[] = [];
-  
-  if (ingredients.some(i => i.id === 'eggs')) allergens.push('eggs');
-  if (ingredients.some(i => ['greek-yogurt', 'cottage-cheese'].includes(i.id))) allergens.push('dairy');
-  if (ingredients.some(i => ['almonds', 'walnuts', 'peanut-butter'].includes(i.id))) allergens.push('nuts');
-  if (ingredients.some(i => ['salmon', 'tuna'].includes(i.id))) allergens.push('fish');
-  if (ingredients.some(i => i.id === 'tofu')) allergens.push('soy');
-  if (ingredients.some(i => ['whole-wheat-pasta', 'whole-wheat-bread', 'barley'].includes(i.id))) allergens.push('gluten');
-  
-  return allergens;
+  const present = new Set<AllergenTag>();
+  for (const ingredient of ingredients) {
+    for (const tag of ingredient.allergens ?? []) present.add(tag);
+  }
+  return ALLERGEN_REPORT_ORDER.filter((tag) => present.has(tag));
 }
 
 /**

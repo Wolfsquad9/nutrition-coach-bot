@@ -11,7 +11,7 @@
  */
 
 import { useCallback } from "react";
-import { generateRecipe, type GeneratedRecipe, type MealType } from '@/services/recipeService';
+import { generateRecipe, resolveEligibleIngredients, type GeneratedRecipe, type MealType } from '@/services/recipeService';
 import type { Client } from "@/types";
 import type { ClientIngredientRestrictions } from "@/utils/ingredientSubstitution";
 import type { GeneratedDietPlan } from "./types";
@@ -74,13 +74,42 @@ export function useRecipeActionHandler(
       return;
     }
 
+    // Eligibility boundary: the preview must use the same pool as full plan
+    // generation, so blocked/allergen/diet exclusions can never be bypassed by
+    // this code path.
+    const eligibility = resolveEligibleIngredients({
+      clientId: activeClientId,
+      preferredIngredientIds: preferredIngredients,
+      blockedIngredientIds: restriction.blockedIngredients,
+      allergies: activeClient.allergies,
+      intolerances: activeClient.intolerances,
+      dislikedFoods: activeClient.dislikedFoods,
+      dietType: activeClient.dietType,
+    });
+
+    if (eligibility.ingredientIds.length === 0) {
+      toast({
+        title: 'No eligible ingredients',
+        description:
+          eligibility.warnings[0] ??
+          'Every liked ingredient was excluded by a restriction. Review this client\u2019s blocked ingredients, allergies and diet.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsGeneratingRecipe(true);
 
     try {
       // Small delay for UX
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const recipe = generateRecipe(preferredIngredients, selectedMealType);
+      const recipe = generateRecipe(
+        [...eligibility.ingredientIds],
+        selectedMealType,
+        undefined,
+        { allowedIngredientIds: eligibility.ingredientIds },
+      );
       setGeneratedRecipe(recipe);
 
       toast({

@@ -10,7 +10,7 @@ import { sumMacros } from '@/domain/nutrition/engine';
 import { generateRecipe } from './recipeGenerators';
 import { generateMealRecipeText, generateFinalRecipeText } from './deterministicRecipeText';
 import { adjustMealIngredients } from './mealAdjuster';
-import type { FullDayMealPlanResult, MacroVariance, ToleranceCheckResult } from './types';
+import type { FullDayMealPlanResult, MacroVariance, ToleranceCheckResult, RecipeGenerationOptions } from './types';
 
 /**
  * Generates a complete daily meal plan with breakfast, lunch, dinner, and snack.
@@ -20,7 +20,8 @@ import type { FullDayMealPlanResult, MacroVariance, ToleranceCheckResult } from 
 export function generateFullDayMealPlan(
   selectedFoods: string[],
   macroTargets: MacroTargets,
-  seed?: string
+  seed?: string,
+  options?: RecipeGenerationOptions
 ): FullDayMealPlanResult {
   const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
   
@@ -43,7 +44,8 @@ export function generateFullDayMealPlan(
     try {
       // Generate recipe for this meal using existing logic
       // The seed (if provided) makes the recipe selection vary per candidate
-      const recipe = generateRecipe(selectedFoods, mealType, seed);
+      // (`options` carries the eligibility allow-list and must be threaded).
+      const recipe = generateRecipe(selectedFoods, mealType, seed, options);
       
       // Scale ingredients to meet calorie target for this meal
       const scaleFactor = recipe.macrosPerServing.calories > 0 

@@ -2,7 +2,7 @@ import { type IngredientData } from '@/data/ingredientDatabase';
 import { type Ingredient } from '@/types';
 import { createSeededRng, type Rng } from '@/utils/random';
 import { type MealType, RECIPE_TEMPLATES } from './constants';
-import { type GeneratedRecipe } from './types';
+import { type GeneratedRecipe, type RecipeGenerationOptions } from './types';
 import { selectBalancedIngredients } from './selectors';
 import { getSuitableIngredients, determineDietTypes, determineAllergens, determineEquipment } from './ingredientUtils';
 import { calculateTotalMacros } from './nutritionCalculations';
@@ -66,15 +66,17 @@ export function generateInstructions(
 export function generateRecipe(
   selectedFoods: string[],
   mealType: MealType,
-  seed: string = `recipe-${mealType}`
+  seed: string = `recipe-${mealType}`,
+  options?: RecipeGenerationOptions
 ): GeneratedRecipe {
   // Deterministic per (selectedFoods, mealType, seed) — same inputs = same recipe.
   // This is important: "regenerate plan" must not silently change grocery lists
   // when nothing has changed.
   const rng = createSeededRng(`${seed}-${selectedFoods.join('|')}`);
 
-  // Filter for suitable ingredients
-  const suitableIngredients = getSuitableIngredients(selectedFoods, mealType);
+  // Filter for suitable ingredients. `options.allowedIngredientIds` (from the
+  // eligibility boundary) is applied here so eligibility cannot be bypassed.
+  const suitableIngredients = getSuitableIngredients(selectedFoods, mealType, options);
 
   if (suitableIngredients.length === 0) {
     throw new Error(`No suitable ingredients selected for ${mealType}. Please select foods that are appropriate for this meal type.`);

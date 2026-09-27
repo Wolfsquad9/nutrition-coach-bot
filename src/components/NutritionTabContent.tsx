@@ -2,7 +2,7 @@
  * NutritionTabContent - Nutrition tab with Draft → Lock lifecycle
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -24,7 +24,13 @@ import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanS
 import { useAdaptiveNutritionTarget } from '@/hooks/useAdaptiveNutritionTarget';
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
 import { calculateNutritionMetrics } from '@/domain/nutrition/engine';
-import { generateFullDayMealPlan, type FullDayMealPlanResult } from '@/services/recipeService';
+import {
+  generateFullDayMealPlan,
+  resolveEligibleIngredients,
+  nextRegenerationSeed,
+  type EligibleIngredientPool,
+  type FullDayMealPlanResult,
+} from '@/services/recipeService';
 import { createDefaultOptimizationEngine } from '@/services/optimization/OptimizationEngine';
 import { DEFAULT_CANDIDATE_COUNT } from '@/services/optimization/types';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
@@ -72,7 +78,31 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const { toast } = useToast();
 
   const planState = useNutritionPlanState();
-  const ingredientValidation = useIngredientValidation(activeClientId, clientRestrictions);
+
+  /**
+   * Eligibility boundary — the single source of truth for which ingredients may
+   * enter generation (preferred minus blocked, allergens, diet-incompatible and
+   * disliked). Recipe generators are also given the same list as a HARD
+   * allow-list, so this component cannot be bypassed either.
+   */
+  const eligibility = useMemo<EligibleIngredientPool>(() => {
+    const restriction = clientRestrictions.find(r => r.clientId === activeClientId);
+    return resolveEligibleIngredients({
+      clientId: activeClientId,
+      preferredIngredientIds: restriction?.preferredIngredients ?? [],
+      blockedIngredientIds: restriction?.blockedIngredients ?? [],
+      allergies: activeClient.allergies,
+      intolerances: activeClient.intolerances,
+      dislikedFoods: activeClient.dislikedFoods,
+      dietType: activeClient.dietType,
+    });
+  }, [activeClientId, activeClient, clientRestrictions]);
+
+  const ingredientValidation = useIngredientValidation(
+    activeClientId,
+    clientRestrictions,
+    eligibility.ingredientIds,
+  );
 
   // Phase 7/8: adaptive targeting. The adaptation baseline is the client's
   // ACTIVE PRESCRIPTION (persisted with the current locked plan version and
@@ -87,9 +117,6 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const [isGeneratingDaily, setIsGeneratingDaily] = useState(false);
   const [isGeneratingWeekly, setIsGeneratingWeekly] = useState(false);
 
-  // Increments on every regeneration click so each click yields a fresh seed population.
-  const regenerationCountRef = useRef(0);
-
   useEffect(() => {
     if (activeClientId) {
       planState.loadPlanForClient(activeClientId);
@@ -98,10 +125,28 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeClientId]);
 
-  const getLikedFoods = useCallback(() => {
-    const restriction = clientRestrictions.find(r => r.clientId === activeClientId);
-    return restriction?.preferredIngredients || [];
-  }, [activeClientId, clientRestrictions]);
+  /** Eligibility-resolved pool used by every generation path in this tab. */
+  const getEligibleIngredientIds = useCallback(
+    () => [...eligibility.ingredientIds],
+    [eligibility]
+  );
+
+  /**
+   * Coach-visible explanation when liked ingredients were removed by a
+   * restriction (allergen, diet, blocked, disliked). Without this the pool
+   * would appear to shrink for no stated reason.
+   */
+  const eligibilityExclusionMessage = useMemo(() => {
+    const restricted = eligibility.excluded.filter(
+      (entry) =>
+        entry.reason === 'blocked-and-preferred' ||
+        entry.reason === 'allergen' ||
+        entry.reason === 'diet' ||
+        entry.reason === 'disliked'
+    );
+    if (restricted.length === 0) return null;
+    return `${restricted.length} liked ingredient(s) were excluded by client restrictions (allergens, diet, blocked or disliked).`;
+  }, [eligibility]);
 
   const handleGenerateDailyPlan = async () => {
     if (planState.isBlocked) return toast({ title: 'Operation blocked', description: 'Resolve the error before generating.', variant: 'destructive' });
@@ -111,7 +156,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
 
     setIsGeneratingDaily(true);
     try {
-      const likedFoods = getLikedFoods();
+      const eligibleFoods = getEligibleIngredientIds();
       const metrics = effectiveMetrics;
       const macroTargets = {
         calories: metrics.targetCalories,
@@ -119,7 +164,12 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         carbs: metrics.carbsGrams,
         fat: metrics.fatGrams,
       };
-      const result = generateFullDayMealPlan(likedFoods, macroTargets);
+      // Explicit persisted seed: two consecutive clicks produce different plans,
+      // while the same seed + inputs still reproduce the same plan exactly.
+      const { seed } = nextRegenerationSeed(activeClientId, 'daily');
+      const result = generateFullDayMealPlan(eligibleFoods, macroTargets, seed, {
+        allowedIngredientIds: eligibility.ingredientIds,
+      });
       setDailyMealPlan(result);
       toast({ title: 'Daily plan generated!', description: `${result.totalMacros.calories} kcal` });
     } catch (err: unknown) {
@@ -140,7 +190,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
     setDailyMealPlan(null);
 
     try {
-      const likedFoods = getLikedFoods();
+      const eligibleFoods = getEligibleIngredientIds();
       const metrics = effectiveMetrics;
       const macroTargets = {
         calories: metrics.targetCalories,
@@ -149,20 +199,23 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         fat: metrics.fatGrams,
       };
 
-      // Increment regeneration counter so each click produces a different seed population.
-      regenerationCountRef.current += 1;
+      // Persisted regeneration identity: each click consumes the next counter
+      // value, so regeneration #1 and #2 can never reuse a seed population and
+      // a component remount cannot silently restart the sequence.
+      const { count } = nextRegenerationSeed(activeClientId, 'weekly');
 
       const result = optimizationEngine.generate({
         clientId: activeClientId,
-        likedFoods,
+        likedFoods: eligibleFoods,
         macroTargets,
-        regenerationCount: regenerationCountRef.current,
+        regenerationCount: count,
         candidateCount: DEFAULT_CANDIDATE_COUNT,
+        allowedIngredientIds: eligibility.ingredientIds,
       });
 
-            planState.setDraftPlan(result.plan, macroTargets, likedFoods, metrics, {
-              weeklyRateKg: adaptiveTarget.effectiveWeeklyRateKg,
-            });
+      planState.setDraftPlan(result.plan, macroTargets, eligibleFoods, metrics, {
+        weeklyRateKg: adaptiveTarget.effectiveWeeklyRateKg,
+      });
       toast({ title: 'Draft generated!', description: 'Plan is in draft mode. Click "Lock Plan" to save it.' });
     } finally {
       setIsGeneratingWeekly(false);
@@ -230,7 +283,12 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
       {!ingredientValidation.canGenerateWeekly && (
         <Alert variant="default" className="border-warning/50 bg-warning/10">
           <AlertCircle className="h-4 w-4 text-warning" />
-          <AlertDescription className="text-warning">{ingredientValidation.validationMessage}</AlertDescription>
+          <AlertDescription className="text-warning">
+            {ingredientValidation.validationMessage}
+            {eligibilityExclusionMessage && (
+              <span className="mt-1 block">{eligibilityExclusionMessage}</span>
+            )}
+          </AlertDescription>
         </Alert>
       )}
       {planState.error && (

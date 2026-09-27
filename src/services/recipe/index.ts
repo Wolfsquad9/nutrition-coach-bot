@@ -1,5 +1,33 @@
 export type { MealType } from './constants';
-export type { GeneratedRecipe, FullDayMealPlanResult, WeeklyMealPlanResult, ToleranceCheckResult } from './types';
+export type {
+  GeneratedRecipe,
+  FullDayMealPlanResult,
+  WeeklyMealPlanResult,
+  ToleranceCheckResult,
+  RecipeGenerationOptions,
+} from './types';
+export {
+  resolveEligibleIngredients,
+  normalizeAllergenTokens,
+  isIngredientCompatibleWithDiet,
+  findDislikedMatch,
+} from './eligibility';
+export type {
+  EligibilityInput,
+  EligibleIngredientPool,
+  EligibilityRejection,
+  EligibilityRejectionReason,
+  DietType,
+} from './eligibility';
+export {
+  createRegenerationSeed,
+  nextRegenerationSeed,
+  regenerationStorageKey,
+  readRegenerationCount,
+  incrementRegenerationCount,
+  REGENERATION_STORAGE_PREFIX,
+} from './regeneration';
+export type { RegenerationScope, StorageLike } from './regeneration';
 export {
   calculateTotalMacros,
   determineDietTypes,

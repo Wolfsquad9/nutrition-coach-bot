@@ -59,15 +59,30 @@ function getLikedIngredientsForClient(
 
 /**
  * Hook for ingredient validation
+ *
+ * @param eligibleIngredientIds Eligibility-resolved pool (see
+ *   `resolveEligibleIngredients`). When provided it is authoritative, so the
+ *   minimum-ingredient gate counts the ingredients that may actually enter
+ *   generation (blocked / allergen / diet exclusions applied) rather than the
+ *   raw liked list.
  */
 export function useIngredientValidation(
   activeClientId: string | null,
-  clientRestrictions: ClientIngredientRestrictions[]
+  clientRestrictions: ClientIngredientRestrictions[],
+  eligibleIngredientIds?: readonly string[] | null
 ): UseIngredientValidationResult {
-  
+
+  const resolveLikedIngredients = useCallback(
+    (): string[] =>
+      eligibleIngredientIds
+        ? [...eligibleIngredientIds]
+        : getLikedIngredientsForClient(activeClientId, clientRestrictions),
+    [activeClientId, clientRestrictions, eligibleIngredientIds]
+  );
+
   // Compute validation from current state (never cached separately)
   const validation = useMemo((): IngredientValidationResult => {
-    const likedIngredients = getLikedIngredientsForClient(activeClientId, clientRestrictions);
+    const likedIngredients = resolveLikedIngredients();
     const likedCount = likedIngredients.length;
     
     const canGenerateDaily = likedCount >= INGREDIENT_MINIMUMS.dailyPlan;
@@ -94,14 +109,13 @@ export function useIngredientValidation(
       validationMessage,
       hasIngredients: likedCount > 0,
     };
-  }, [activeClientId, clientRestrictions]);
+  }, [resolveLikedIngredients]);
 
   /**
    * Validate for a specific plan type and return user-friendly message
    */
   const validateForPlanType = useCallback((planType: 'daily' | 'weekly'): { valid: boolean; message: string | null } => {
-    const likedIngredients = getLikedIngredientsForClient(activeClientId, clientRestrictions);
-    const likedCount = likedIngredients.length;
+    const likedCount = resolveLikedIngredients().length;
     const minimum = planType === 'daily' ? INGREDIENT_MINIMUMS.dailyPlan : INGREDIENT_MINIMUMS.weeklyPlan;
     
     if (likedCount < minimum) {
@@ -113,7 +127,7 @@ export function useIngredientValidation(
     }
     
     return { valid: true, message: null };
-  }, [activeClientId, clientRestrictions]);
+  }, [resolveLikedIngredients]);
 
   return {
     ...validation,
