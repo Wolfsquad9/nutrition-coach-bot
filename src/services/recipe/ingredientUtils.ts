@@ -1,15 +1,25 @@
 import { coreIngredients, type IngredientData } from '@/data/ingredientDatabase';
 import { MealType } from './constants';
 import { determineDietTypes, determineAllergens, determineEquipment } from './nutritionCalculations';
+import type { RecipeGenerationOptions } from './types';
 
 export function getSuitableIngredients(
   selectedFoods: string[],
-  mealType: MealType
+  mealType: MealType,
+  options?: RecipeGenerationOptions
 ): IngredientData[] {
+  // Hard allow-list from the eligibility boundary (see ./eligibility). When
+  // present, an ingredient outside it can never enter a recipe — not even if
+  // the caller passed it in `selectedFoods`.
+  const allowed = options?.allowedIngredientIds
+    ? new Set(options.allowedIngredientIds)
+    : null;
+
   return coreIngredients.filter(ing => {
     const isSelected = selectedFoods.includes(ing.id);
     const isSuitable = ing.allowedMeals.includes(mealType);
-    return isSelected && isSuitable;
+    const isEligible = allowed === null || allowed.has(ing.id);
+    return isSelected && isSuitable && isEligible;
   });
 }
 

@@ -2,16 +2,20 @@ import { type Macros, type MacroTargets } from '@/types';
 import { DAYS_PER_WEEK } from '@/domain/nutrition/engine';
 import { DAY_NAMES } from './constants';
 import { generateFullDayMealPlan, shuffleForDay } from './mealPlanGenerator';
-import type { WeeklyMealPlanResult } from './types';
+import type { WeeklyMealPlanResult, RecipeGenerationOptions } from './types';
 
 /**
  * Generates a complete weekly meal plan with 7 days of meals.
  * Each day uses slightly varied ingredient combinations to avoid repetition.
+ *
+ * `options.allowedIngredientIds` (eligibility boundary) is threaded through to
+ * every recipe so eligibility can never be bypassed by a caller.
  */
 export function generateWeeklyMealPlan(
   selectedFoods: string[],
   macroTargets: MacroTargets,
-  seed?: string
+  seed?: string,
+  options?: RecipeGenerationOptions
 ): WeeklyMealPlanResult {
   const days: WeeklyMealPlanResult['days'] = [];
   
@@ -23,7 +27,7 @@ export function generateWeeklyMealPlan(
     
     // Generate the daily plan with shuffled ingredients
     // The seed (if provided) makes each candidate's recipe selection vary
-    const dailyResult = generateFullDayMealPlan(shuffledFoods, macroTargets, seed);
+    const dailyResult = generateFullDayMealPlan(shuffledFoods, macroTargets, seed, options);
     
     days.push({
       dayNumber: dayIndex + 1,
