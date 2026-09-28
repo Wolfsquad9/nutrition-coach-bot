@@ -640,7 +640,721 @@ export const coreIngredients: IngredientData[] = [
     tags: ['blood-sugar', 'antioxidant', 'flavor'],
     allergens: [],
     dietTags: ['vegan']
-  }
+  },
+  // PHASE-2 EXPANSION
+  //
+  // Phase 2 (docs/recipe-phase2-plan.md §4): slot-scarcity-first expansion.
+  // Targets: lunch/dinner fats, breakfast carbs, lunch/dinner fruits, then the
+  // protein/vegetable/carb/flavour gaps.
+  //
+  // OPEN DECISION O-1 (deferred, deliberately NOT resolved here): these new
+  // rows declare calories as 4P+4C+9F. The 47 pre-existing rows use USDA table
+  // values that deviate from 4/4/9 (lemon -44%, cinnamon -30%) because the
+  // engine rule ignores fibre and alcohol energy. No library-wide energy
+  // tolerance is asserted, no existing value was changed, and the nutrition
+  // engine was not touched. A per-ingredient energy test is a follow-up task.
+
+  // PROTEINS
+  {
+    id: 'lean-beef',
+    name: 'Lean Beef',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 26.1, carbs: 0, fat: 11.8, calories: 210.6, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Iron', 'Zinc', 'B12'],
+    typical_serving_size_g: 100,
+    tags: ['meat', 'staple'],
+    allergens: [],
+    dietTags: ['omnivore']
+  },
+  {
+    id: 'pork-tenderloin',
+    name: 'Pork Tenderloin',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 26.2, carbs: 0, fat: 3.5, calories: 136.3, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Thiamin', 'Selenium', 'Protein'],
+    typical_serving_size_g: 100,
+    tags: ['meat', 'lean'],
+    allergens: [],
+    dietTags: ['omnivore']
+  },
+  {
+    id: 'cod',
+    name: 'Cod',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 17.8, carbs: 0, fat: 0.7, calories: 77.5, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Iodine', 'Selenium', 'Omega-3'],
+    typical_serving_size_g: 120,
+    tags: ['fish', 'white-fish'],
+    allergens: ['fish'],
+    dietTags: ['pescatarian']
+  },
+  {
+    id: 'mackerel',
+    name: 'Mackerel',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 19, carbs: 0, fat: 13.9, calories: 201.1, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Omega-3', 'Vitamin D', 'Selenium'],
+    typical_serving_size_g: 100,
+    tags: ['fish', 'oily-fish'],
+    allergens: ['fish'],
+    dietTags: ['pescatarian']
+  },
+  {
+    id: 'shrimp',
+    name: 'Shrimp',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 20.1, carbs: 0.2, fat: 0.3, calories: 83.9, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Selenium', 'Iodine', 'Protein'],
+    typical_serving_size_g: 120,
+    tags: ['shellfish', 'quick'],
+    allergens: ['shellfish'],
+    dietTags: ['pescatarian']
+  },
+  {
+    id: 'tempeh',
+    name: 'Tempeh',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 19.9, carbs: 7.6, fat: 10.8, calories: 207.2, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Manganese', 'Riboflavin', 'Protein'],
+    typical_serving_size_g: 80,
+    tags: ['plant-protein', 'fermented'],
+    allergens: ['soy'],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'edamame',
+    name: 'Edamame',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 11.9, carbs: 8.9, fat: 5.2, calories: 130, fiber: 5.2 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Folate', 'Vitamin K', 'Protein'],
+    typical_serving_size_g: 80,
+    tags: ['plant-protein', 'snack'],
+    allergens: ['soy'],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'chickpeas',
+    name: 'Chickpeas',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 8.9, carbs: 27.4, fat: 2.6, calories: 168.6, fiber: 7.6 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Folate', 'Manganese', 'Fiber'],
+    typical_serving_size_g: 80,
+    tags: ['legume', 'vegan'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'whey-protein-powder',
+    name: 'Whey Protein Powder',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 80, carbs: 8, fat: 6, calories: 406, fiber: 1 },
+    allowedMeals: ['breakfast', 'snack'],
+    key_micros: ['Calcium', 'Leucine', 'Protein'],
+    typical_serving_size_g: 30,
+    tags: ['protein-powder', 'quick'],
+    allergens: ['dairy'],
+    dietTags: ['vegetarian']
+  },
+  {
+    id: 'skyr',
+    name: 'Skyr',
+    category: 'protein',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 11, carbs: 4, fat: 0.2, calories: 61.8, fiber: 0 },
+    allowedMeals: ['breakfast', 'snack'],
+    key_micros: ['Calcium', 'Protein', 'Phosphorus'],
+    typical_serving_size_g: 150,
+    tags: ['dairy', 'high-protein'],
+    allergens: ['dairy'],
+    dietTags: ['vegetarian']
+  },
+
+  // CARBOHYDRATES
+  {
+    id: 'buckwheat',
+    name: 'Buckwheat',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 13.3, carbs: 71.5, fat: 3.4, calories: 369.8, fiber: 10 },
+    allowedMeals: ['breakfast', 'lunch', 'dinner'],
+    key_micros: ['Magnesium', 'Rutin', 'Fiber'],
+    typical_serving_size_g: 40,
+    tags: ['grain', 'gluten-free'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'rice-cakes',
+    name: 'Rice Cakes',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 8.2, carbs: 81.5, fat: 0.5, calories: 363.3, fiber: 4.2 },
+    allowedMeals: ['breakfast', 'snack'],
+    key_micros: ['Manganese', 'Selenium'],
+    typical_serving_size_g: 18,
+    tags: ['grain', 'gluten-free'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'granola',
+    name: 'Granola',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 10, carbs: 64, fat: 14, calories: 422, fiber: 7 },
+    allowedMeals: ['breakfast', 'snack'],
+    key_micros: ['Iron', 'Calcium', 'Fiber'],
+    typical_serving_size_g: 45,
+    tags: ['grain', 'breakfast'],
+    allergens: ['gluten', 'nuts'],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'english-muffin',
+    name: 'English Muffin',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 8.3, carbs: 49, fat: 1.8, calories: 245.4, fiber: 2 },
+    allowedMeals: ['breakfast'],
+    key_micros: ['Selenium', 'Iron', 'B vitamins'],
+    typical_serving_size_g: 55,
+    tags: ['bread', 'breakfast'],
+    allergens: ['gluten'],
+    dietTags: ['vegetarian']
+  },
+  {
+    id: 'corn-tortilla',
+    name: 'Corn Tortilla',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 5.7, carbs: 44.6, fat: 6.3, calories: 257.9, fiber: 6.3 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Lutein', 'Fiber', 'Manganese'],
+    typical_serving_size_g: 45,
+    tags: ['wrap', 'gluten-free'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'couscous',
+    name: 'Couscous',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 12.8, carbs: 77.4, fat: 0.6, calories: 366.2, fiber: 1.4 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Selenium', 'Niacin', 'Fiber'],
+    typical_serving_size_g: 60,
+    tags: ['grain'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'bulgur-wheat',
+    name: 'Bulgur Wheat',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 12.3, carbs: 75.9, fat: 0.4, calories: 356.4, fiber: 4.5 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Fiber', 'Iron', 'Protein'],
+    typical_serving_size_g: 60,
+    tags: ['grain'],
+    allergens: ['gluten'],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'rice-noodles',
+    name: 'Rice Noodles',
+    category: 'carbohydrate',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.8, carbs: 80.2, fat: 0.2, calories: 329.8, fiber: 1 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Manganese', 'Iron'],
+    typical_serving_size_g: 70,
+    tags: ['grain', 'gluten-free'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+
+  // FATS
+  {
+    id: 'tahini',
+    name: 'Tahini',
+    category: 'fat',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 17, carbs: 21.2, fat: 53.8, calories: 637, fiber: 9.3 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Calcium', 'Iron', 'Copper'],
+    typical_serving_size_g: 15,
+    tags: ['sesame', 'spread', 'sauce'],
+    allergens: ['sesame'],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'sesame-seeds',
+    name: 'Sesame Seeds',
+    category: 'fat',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 18, carbs: 23.4, fat: 49.7, calories: 612.9, fiber: 11.8 },
+    allowedMeals: ['lunch', 'dinner', 'breakfast', 'snack'],
+    key_micros: ['Calcium', 'Iron', 'Magnesium'],
+    typical_serving_size_g: 10,
+    tags: ['seeds', 'topping'],
+    allergens: ['sesame'],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'pumpkin-seeds',
+    name: 'Pumpkin Seeds',
+    category: 'fat',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 30.2, carbs: 10.7, fat: 49, calories: 604.6, fiber: 6 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Magnesium', 'Zinc', 'Iron'],
+    typical_serving_size_g: 15,
+    tags: ['seeds', 'topping'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'kalamata-olives',
+    name: 'Kalamata Olives',
+    category: 'fat',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 0.8, carbs: 3.8, fat: 10.6, calories: 113.8, fiber: 2.8 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Monounsaturated fats', 'Vitamin E'],
+    typical_serving_size_g: 20,
+    tags: ['savory', 'salty'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'feta-cheese',
+    name: 'Feta Cheese',
+    category: 'fat',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 14.2, carbs: 4.1, fat: 21.3, calories: 264.9, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Calcium', 'Sodium', 'Protein'],
+    typical_serving_size_g: 30,
+    tags: ['cheese', 'salty'],
+    allergens: ['dairy'],
+    dietTags: ['vegetarian']
+  },
+  {
+    id: 'parmesan-cheese',
+    name: 'Parmesan Cheese',
+    category: 'fat',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 35.8, carbs: 3.2, fat: 25.8, calories: 388.2, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Calcium', 'Protein', 'Phosphorus'],
+    typical_serving_size_g: 10,
+    tags: ['cheese', 'flavor'],
+    allergens: ['dairy'],
+    dietTags: ['vegetarian']
+  },
+  {
+    id: 'cashews',
+    name: 'Cashews',
+    category: 'fat',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 18.2, carbs: 30.2, fat: 44.3, calories: 592.3, fiber: 3.3 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Magnesium', 'Copper', 'Zinc'],
+    typical_serving_size_g: 20,
+    tags: ['nuts', 'snack'],
+    allergens: ['nuts'],
+    dietTags: ['vegan']
+  },
+
+  // FRUITS
+  {
+    id: 'pomegranate-arils',
+    name: 'Pomegranate Arils',
+    category: 'fruit',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.7, carbs: 18.7, fat: 2.2, calories: 101.4, fiber: 4 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Polyphenols', 'Vitamin C', 'Fiber'],
+    typical_serving_size_g: 60,
+    tags: ['fruit', 'salty-sweet'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'pineapple',
+    name: 'Pineapple',
+    category: 'fruit',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 0.5, carbs: 13.1, fat: 0.1, calories: 55.3, fiber: 1.4 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Vitamin C', 'Manganese', 'Bromelain'],
+    typical_serving_size_g: 100,
+    tags: ['fruit', 'grilled'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'pear',
+    name: 'Pear',
+    category: 'fruit',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 0.4, carbs: 15.2, fat: 0.1, calories: 63.3, fiber: 3.1 },
+    allowedMeals: ['breakfast', 'lunch', 'dinner', 'snack'],
+    key_micros: ['Fiber', 'Vitamin C', 'Copper'],
+    typical_serving_size_g: 140,
+    tags: ['fruit'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'melon',
+    name: 'Melon',
+    category: 'fruit',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 0.6, carbs: 8.1, fat: 0.2, calories: 36.6, fiber: 0.8 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Hydration', 'Vitamin C', 'Potassium'],
+    typical_serving_size_g: 120,
+    tags: ['fruit', 'refreshing'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'dates',
+    name: 'Medjool Dates',
+    category: 'fruit',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.8, carbs: 75, fat: 0.2, calories: 309, fiber: 6.7 },
+    allowedMeals: ['breakfast', 'snack'],
+    key_micros: ['Potassium', 'Magnesium', 'Fiber'],
+    typical_serving_size_g: 30,
+    tags: ['fruit', 'energy'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'kiwi',
+    name: 'Kiwi Fruit',
+    category: 'fruit',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.1, carbs: 14.7, fat: 0.5, calories: 67.7, fiber: 3 },
+    allowedMeals: ['breakfast', 'snack'],
+    key_micros: ['Vitamin C', 'Vitamin K', 'Fiber'],
+    typical_serving_size_g: 70,
+    tags: ['fruit'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+
+  // VEGETABLES
+  {
+    id: 'yellow-onion',
+    name: 'Yellow Onion',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.1, carbs: 9.3, fat: 0.1, calories: 42.5, fiber: 1.7 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Quercetin', 'Vitamin C', 'Fiber'],
+    typical_serving_size_g: 80,
+    tags: ['aromatic', 'base'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'mushrooms',
+    name: 'Button Mushrooms',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 3.1, carbs: 3.3, fat: 0.3, calories: 28.3, fiber: 1 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Riboflavin', 'Selenium', 'Vitamin D'],
+    typical_serving_size_g: 80,
+    tags: ['umami', 'base'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'eggplant',
+    name: 'Eggplant',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1, carbs: 5.9, fat: 0.2, calories: 29.4, fiber: 3 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Manganese', 'Folate', 'Fiber'],
+    typical_serving_size_g: 100,
+    tags: ['vegetable', 'staple'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'green-beans',
+    name: 'Green Beans',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.8, carbs: 7, fat: 0.2, calories: 37, fiber: 2.7 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin K', 'Folate', 'Fiber'],
+    typical_serving_size_g: 100,
+    tags: ['vegetable'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'red-cabbage',
+    name: 'Red Cabbage',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.4, carbs: 7.4, fat: 0.2, calories: 37, fiber: 2.1 },
+    allowedMeals: ['lunch', 'dinner', 'snack'],
+    key_micros: ['Vitamin C', 'Vitamin K', 'Fiber'],
+    typical_serving_size_g: 80,
+    tags: ['slaw', 'colorful'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'peas',
+    name: 'Green Peas',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 5.4, carbs: 15.6, fat: 0.4, calories: 87.6, fiber: 5.7 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin K', 'Protein', 'Fiber'],
+    typical_serving_size_g: 80,
+    tags: ['legume', 'vegetable'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'mixed-leaf-salad',
+    name: 'Mixed Leaf Salad',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.4, carbs: 2.9, fat: 0.2, calories: 19, fiber: 1.8 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin K', 'Folate', 'Vitamin A'],
+    typical_serving_size_g: 50,
+    tags: ['salad', 'base'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'sweetcorn',
+    name: 'Sweetcorn',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 3.3, carbs: 22.8, fat: 1.4, calories: 117, fiber: 2 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin C', 'Lutein', 'Fiber'],
+    typical_serving_size_g: 100,
+    tags: ['vegetable'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'brussels-sprouts',
+    name: 'Brussels Sprouts',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 3.4, carbs: 9, fat: 0.3, calories: 52.3, fiber: 3.8 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin C', 'Vitamin K', 'Fiber'],
+    typical_serving_size_g: 100,
+    tags: ['cruciferous'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'beetroot',
+    name: 'Beetroot',
+    category: 'vegetable',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1.6, carbs: 10, fat: 0.2, calories: 48.2, fiber: 2.8 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Nitrates', 'Folate', 'Potassium'],
+    typical_serving_size_g: 100,
+    tags: ['vegetable', 'colorful'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+
+  // MISC ESSENTIALS
+  {
+    id: 'cumin',
+    name: 'Cumin',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 12, carbs: 44, fat: 22, calories: 422, fiber: 11 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Iron', 'Magnesium'],
+    typical_serving_size_g: 2,
+    tags: ['spice', 'aromatic'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'smoked-paprika',
+    name: 'Smoked Paprika',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 14, carbs: 54, fat: 13, calories: 389, fiber: 35 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin A', 'Antioxidants'],
+    typical_serving_size_g: 2,
+    tags: ['spice', 'color'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'chilli-flakes',
+    name: 'Chilli Flakes',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 17, carbs: 50, fat: 14, calories: 394, fiber: 30 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin C', 'Capsaicin'],
+    typical_serving_size_g: 1,
+    tags: ['spice', 'heat'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'fresh-coriander',
+    name: 'Fresh Coriander',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 2.1, carbs: 3.7, fat: 0.5, calories: 27.7, fiber: 2.8 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin K', 'Antioxidants'],
+    typical_serving_size_g: 5,
+    tags: ['herb', 'fresh'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'fresh-basil',
+    name: 'Fresh Basil',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 3.2, carbs: 2.7, fat: 0.6, calories: 29, fiber: 1.6 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Vitamin K', 'Vitamin C'],
+    typical_serving_size_g: 5,
+    tags: ['herb', 'fresh'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'dried-oregano',
+    name: 'Dried Oregano',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 9, carbs: 68.9, fat: 4.3, calories: 350.3, fiber: 42 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Iron', 'Manganese'],
+    typical_serving_size_g: 2,
+    tags: ['herb', 'dried'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'soy-sauce',
+    name: 'Soy Sauce',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 8.1, carbs: 4.9, fat: 0.6, calories: 57.4, fiber: 0.8 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Sodium', 'Manganese'],
+    typical_serving_size_g: 15,
+    tags: ['umami', 'sauce'],
+    allergens: ['soy', 'gluten'],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'balsamic-vinegar',
+    name: 'Balsamic Vinegar',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 0.5, carbs: 33, fat: 0, calories: 134, fiber: 0 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Antioxidants', 'Potassium'],
+    typical_serving_size_g: 15,
+    tags: ['acid', 'dressing'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'dijon-mustard',
+    name: 'Dijon Mustard',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 4.4, carbs: 14, fat: 3.3, calories: 103.3, fiber: 3.3 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Sodium', 'Vitamin C'],
+    typical_serving_size_g: 10,
+    tags: ['condiment', 'sharp'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'curry-powder',
+    name: 'Curry Powder',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 14, carbs: 33, fat: 14, calories: 314, fiber: 33 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Iron', 'Manganese'],
+    typical_serving_size_g: 2,
+    tags: ['spice', 'blend'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'vegetable-stock',
+    name: 'Vegetable Stock',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 1, carbs: 8, fat: 0.5, calories: 40.5, fiber: 1 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Sodium', 'Potassium'],
+    typical_serving_size_g: 250,
+    tags: ['liquid', 'base'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+  {
+    id: 'tomato-paste',
+    name: 'Tomato Paste',
+    category: 'misc',
+    // calories derived via the canonical 4P+4C+9F rule (see engine.caloriesFromMacros)
+    macros: { protein: 4.3, carbs: 18.9, fat: 0.5, calories: 97.3, fiber: 4.3 },
+    allowedMeals: ['lunch', 'dinner'],
+    key_micros: ['Lycopene', 'Vitamin C'],
+    typical_serving_size_g: 20,
+    tags: ['umami', 'sauce'],
+    allergens: [],
+    dietTags: ['vegan']
+  },
+
 ];
 
 // Helper function to get ingredients by category
