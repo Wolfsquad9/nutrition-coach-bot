@@ -1,5 +1,6 @@
 import type { MacroTargets } from '@/types';
 import type { WeeklyMealPlanResult } from '@/services/recipe/types';
+import type { DietType } from '@/services/recipe/eligibility';
 
 /**
  * Optimization engine types.
@@ -28,6 +29,17 @@ export interface GenerationInput {
    * enter a generated plan, whatever `likedFoods` contains.
    */
   allowedIngredientIds?: readonly string[];
+  /**
+   * Phase 3C opt-in. Omitted/false keeps every candidate on the legacy
+   * generation path — the flag is threaded per candidate and changes nothing
+   * unless explicitly set, so existing callers are unaffected.
+   */
+  archetypeGeneration?: boolean;
+  /**
+   * Client diet, used only to filter archetypes on the archetype path.
+   * Ignored entirely when `archetypeGeneration` is falsy.
+   */
+  dietType?: DietType | null;
 }
 
 /** A generated plan plus the metadata needed to reproduce or rank it. */

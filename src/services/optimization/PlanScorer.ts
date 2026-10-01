@@ -60,11 +60,31 @@ export const macroAccuracyCriterion: ScoringCriterion = {
 };
 
 /**
+ * Count excess repeats of the SAME archetype across meals of a plan.
+ *
+ * Archetype id is the structural diversity signal: two meals that pick
+ * different proteins but the same archetype are structurally the same meal.
+ *
+ * Returns 0 on the legacy path. Every legacy meal has no `archetypeId`, and
+ * counting `undefined` as a repeated value would penalise the legacy path for
+ * a field it never sets — so only meals that actually carry an archetype are
+ * considered. With no archetype-tagged meal the term is exactly 0, which keeps
+ * legacy scores byte-identical (proved in archetypeGeneration.test.ts).
+ */
+export function countRepeatedArchetypes(plan: WeeklyMealPlanResult): number {
+  const ids = extractMeals(plan)
+    .map((meal) => meal.archetypeId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  return ids.length > 1 ? countDuplicates(ids) : 0;
+}
+
+/**
  * Diversity criterion.
  * Penalizes:
  *  - repeated recipe texts across meals
  *  - repeated ingredient-ID combinations across meals
  *  - repeated meal structure (same protein in the same meal slot across days)
+ *  - repeated archetypes across meals (0 on the legacy path — see above)
  * Normalized by total meal count. Lower = better.
  */
 export const diversityCriterion: ScoringCriterion = {
@@ -83,8 +103,9 @@ export const diversityCriterion: ScoringCriterion = {
     const repeatedRecipes = countDuplicates(recipeTexts);
     const repeatedCombos = countDuplicates(ingredientCombos);
     const repeatedStructure = countRepeatedMealStructure(candidate.plan);
+    const repeatedArchetypes = countRepeatedArchetypes(candidate.plan);
 
-    return (repeatedRecipes + repeatedCombos + repeatedStructure) / totalMeals;
+    return (repeatedRecipes + repeatedCombos + repeatedStructure + repeatedArchetypes) / totalMeals;
   },
 };
 

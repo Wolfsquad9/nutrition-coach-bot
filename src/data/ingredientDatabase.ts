@@ -56,6 +56,12 @@ export interface MealData {
     calories: number;
     fiber?: number;
   };
+  /**
+   * Phase 3C: id of the archetype that structured this meal, when the archetype
+   * generation path was explicitly enabled. Absent on the legacy path, so
+   * existing persisted plans and snapshots are unaffected.
+   */
+  archetypeId?: string;
 }
 
 export interface DailyMealPlan {

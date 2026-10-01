@@ -74,6 +74,8 @@ export function generateFullDayMealPlan(
         ingredients: scaledIngredients,
         recipeText,
         macros: scaledMacros,
+        // Present only on the archetype path; omitted (key absent) on legacy.
+        ...(recipe.archetypeId ? { archetypeId: recipe.archetypeId } : {}),
       };
       
       // Accumulate total macros
