@@ -4,6 +4,7 @@ import { createSeededRng, type Rng } from '@/utils/random';
 import { type MealType, RECIPE_TEMPLATES } from './constants';
 import { type GeneratedRecipe, type RecipeGenerationOptions } from './types';
 import { selectBalancedIngredients } from './selectors';
+import { selectArchetypeForMeal } from './archetypeSelection';
 import { getSuitableIngredients, determineDietTypes, determineAllergens, determineEquipment } from './ingredientUtils';
 import { calculateTotalMacros } from './nutritionCalculations';
 
@@ -82,8 +83,40 @@ export function generateRecipe(
     throw new Error(`No suitable ingredients selected for ${mealType}. Please select foods that are appropriate for this meal type.`);
   }
 
-  // Select balanced combination
-  const selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
+  // Select the ingredient combination.
+  //
+  // LEGACY PATH (default, `archetypeGeneration` falsy): the original fixed
+  // protein+carb+veg+fruit+fat+misc heuristic. The rng is consumed in exactly the
+  // same order as before, so output is unchanged for the same inputs/seed.
+  //
+  // ARCHETYPE PATH (opt-in): the archetype catalogue picks the meal's structure
+  // and resolves its required roles from the SAME eligible pool. It cannot widen
+  // eligibility — `suitableIngredients` is already `allowedIngredientIds ∩
+  // meal-slot`. If no archetype's required roles can be filled, the meal is
+  // skipped (empty placeholder upstream) rather than partially filled or given
+  // another archetype's structure.
+  let selectedIngredients: IngredientData[];
+  let archetypeId: string | undefined;
+
+  if (options?.archetypeGeneration) {
+    const selection = selectArchetypeForMeal(
+      suitableIngredients,
+      mealType,
+      options.dietType,
+      rng
+    );
+
+    if (!selection) {
+      throw new Error(
+        `No archetype could satisfy its required roles for ${mealType} from the eligible ingredients.`
+      );
+    }
+
+    selectedIngredients = selection.ingredients;
+    archetypeId = selection.archetype.id;
+  } else {
+    selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
+  }
 
   if (selectedIngredients.length === 0) {
     throw new Error(`Could not build a balanced recipe. Please select more variety of ingredients.`);
@@ -133,6 +166,7 @@ export function generateRecipe(
     difficulty: mealType === 'snack' ? 'easy' : 'medium',
     suitableFor: mealType,
     selectedIngredients,
+    ...(archetypeId ? { archetypeId } : {}),
   };
   
   return recipe;

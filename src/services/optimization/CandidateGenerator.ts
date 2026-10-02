@@ -27,6 +27,11 @@ export class SeededCandidateGenerator implements CandidateGeneratorInterface {
       const seed = createCandidateSeed(input.clientId, input.regenerationCount, i);
       const plan = generateWeeklyMealPlan(input.likedFoods, input.macroTargets, seed, {
         allowedIngredientIds: input.allowedIngredientIds,
+        // Phase 3C opt-in: forwarded verbatim. When undefined the object key is
+        // still absent at runtime, so `options?.archetypeGeneration` in
+        // generateRecipe stays falsy and the legacy path runs unchanged.
+        archetypeGeneration: input.archetypeGeneration,
+        dietType: input.dietType,
       });
       candidates.push({ plan, seed, candidateIndex: i });
     }
