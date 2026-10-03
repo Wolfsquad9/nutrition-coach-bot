@@ -28,6 +28,7 @@ import {
   generateFullDayMealPlan,
   resolveEligibleIngredients,
   nextRegenerationSeed,
+  buildRecipeGenerationOptions,
   type EligibleIngredientPool,
   type FullDayMealPlanResult,
 } from '@/services/recipeService';
@@ -167,9 +168,15 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
       // Explicit persisted seed: two consecutive clicks produce different plans,
       // while the same seed + inputs still reproduce the same plan exactly.
       const { seed } = nextRegenerationSeed(activeClientId, 'daily');
-      const result = generateFullDayMealPlan(eligibleFoods, macroTargets, seed, {
-        allowedIngredientIds: eligibility.ingredientIds,
-      });
+      const result = generateFullDayMealPlan(
+        eligibleFoods,
+        macroTargets,
+        seed,
+        buildRecipeGenerationOptions({
+          allowedIngredientIds: eligibility.ingredientIds,
+          dietType: activeClient.dietType,
+        }),
+      );
       setDailyMealPlan(result);
       toast({ title: 'Daily plan generated!', description: `${result.totalMacros.calories} kcal` });
     } catch (err: unknown) {
@@ -210,7 +217,10 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
         macroTargets,
         regenerationCount: count,
         candidateCount: DEFAULT_CANDIDATE_COUNT,
-        allowedIngredientIds: eligibility.ingredientIds,
+        ...buildRecipeGenerationOptions({
+          allowedIngredientIds: eligibility.ingredientIds,
+          dietType: activeClient.dietType,
+        }),
       });
 
       planState.setDraftPlan(result.plan, macroTargets, eligibleFoods, metrics, {

@@ -7,6 +7,12 @@ export type {
   RecipeGenerationOptions,
 } from './types';
 export {
+  RECIPE_ACTIVATION,
+  buildRecipeGenerationOptions,
+  canFallBackToLegacy,
+} from './activation';
+export type { RecipeActivationConfig, BuildGenerationOptionsInput } from './activation';
+export {
   resolveEligibleIngredients,
   normalizeAllergenTokens,
   isIngredientCompatibleWithDiet,

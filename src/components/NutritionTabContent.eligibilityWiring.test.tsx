@@ -198,10 +198,18 @@ describe('NutritionTabContent — passes the eligibility-resolved pool into prod
     });
 
     await waitFor(() => expect(h.dailyCalls).toHaveLength(1));
-    const [foods, , seed, options] = h.dailyCalls[0] as [string[], unknown, string, { allowedIngredientIds: string[] }];
+    const [foods, , seed, options] = h.dailyCalls[0] as [
+      string[],
+      unknown,
+      string,
+      { allowedIngredientIds: string[] },
+    ];
 
     // The allow-list is threaded through — this is the wiring under test.
-    expect(options).toEqual({ allowedIngredientIds: EXPECTED_ELIGIBLE });
+    // Asserted on the allow-list itself rather than by deep-equality on the whole
+    // options object, which would over-couple this test to unrelated option
+    // fields (e.g. archetype activation) that are covered by their own suites.
+    expect(options.allowedIngredientIds).toEqual(EXPECTED_ELIGIBLE);
     // The generation pool is the resolved pool, not the raw preferred list.
     expect(foods).toEqual(EXPECTED_ELIGIBLE);
     expect(foods).not.toEqual(restriction.preferredIngredients);
