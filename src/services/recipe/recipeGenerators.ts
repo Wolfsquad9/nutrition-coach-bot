@@ -5,6 +5,7 @@ import { type MealType, RECIPE_TEMPLATES } from './constants';
 import { type GeneratedRecipe, type RecipeGenerationOptions } from './types';
 import { selectBalancedIngredients } from './selectors';
 import { selectArchetypeForMeal } from './archetypeSelection';
+import { canFallBackToLegacy } from './activation';
 import { getSuitableIngredients, determineDietTypes, determineAllergens, determineEquipment } from './ingredientUtils';
 import { calculateTotalMacros } from './nutritionCalculations';
 
@@ -92,9 +93,17 @@ export function generateRecipe(
   // ARCHETYPE PATH (opt-in): the archetype catalogue picks the meal's structure
   // and resolves its required roles from the SAME eligible pool. It cannot widen
   // eligibility — `suitableIngredients` is already `allowedIngredientIds ∩
-  // meal-slot`. If no archetype's required roles can be filled, the meal is
-  // skipped (empty placeholder upstream) rather than partially filled or given
-  // another archetype's structure.
+  // meal-slot`.
+  //
+  // Phase 4 fallback: when the eligible pool cannot satisfy ANY archetype's
+  // required roles we degrade to the legacy balanced selector over that very
+  // same pool instead of throwing. Throwing here surfaced upstream as an EMPTY
+  // production meal, which would have been a regression the moment archetypes
+  // were activated. The fallback never partially fills an archetype, never
+  // substitutes another archetype's structure, and uses the identical
+  // `allowedIngredientIds` — the pool it selects from is already the
+  // allow-list. The resulting recipe carries no `archetypeId`, which is how
+  // callers can tell a degraded meal from a structured one.
   let selectedIngredients: IngredientData[];
   let archetypeId: string | undefined;
 
@@ -106,14 +115,18 @@ export function generateRecipe(
       rng
     );
 
-    if (!selection) {
+    if (selection) {
+      selectedIngredients = selection.ingredients;
+      archetypeId = selection.archetype.id;
+    } else if (canFallBackToLegacy(suitableIngredients)) {
+      selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
+    } else {
+      // No eligible ingredients at all: neither path can build a meal, so the
+      // original empty-pool error still applies.
       throw new Error(
-        `No archetype could satisfy its required roles for ${mealType} from the eligible ingredients.`
+        `No suitable ingredients selected for ${mealType}. Please select foods that are appropriate for this meal type.`
       );
     }
-
-    selectedIngredients = selection.ingredients;
-    archetypeId = selection.archetype.id;
   } else {
     selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
   }

@@ -11,7 +11,7 @@
  */
 
 import { useCallback } from "react";
-import { generateRecipe, resolveEligibleIngredients, type GeneratedRecipe, type MealType } from '@/services/recipeService';
+import { generateRecipe, resolveEligibleIngredients, buildRecipeGenerationOptions, type GeneratedRecipe, type MealType } from '@/services/recipeService';
 import type { Client } from "@/types";
 import type { ClientIngredientRestrictions } from "@/utils/ingredientSubstitution";
 import type { GeneratedDietPlan } from "./types";
@@ -108,7 +108,12 @@ export function useRecipeActionHandler(
         [...eligibility.ingredientIds],
         selectedMealType,
         undefined,
-        { allowedIngredientIds: eligibility.ingredientIds },
+        // Same single activation point as plan generation, so the preview and
+        // the generated plan can never disagree about which generator is live.
+        buildRecipeGenerationOptions({
+          allowedIngredientIds: eligibility.ingredientIds,
+          dietType: activeClient.dietType,
+        }),
       );
       setGeneratedRecipe(recipe);
 
