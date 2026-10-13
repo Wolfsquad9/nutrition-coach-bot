@@ -32,6 +32,11 @@ export class SeededCandidateGenerator implements CandidateGeneratorInterface {
         // generateRecipe stays falsy and the legacy path runs unchanged.
         archetypeGeneration: input.archetypeGeneration,
         dietType: input.dietType,
+        // Phase 5 3A — candidate plans are always weekly plans, so cross-day
+        // ingredient diversity is enabled here explicitly. The flag is opt-in
+        // at the generateWeeklyMealPlan boundary, so scoping it to this weekly
+        // path never silently affects any non-weekly generation path.
+        weekIngredientDiversity: true,
       });
       candidates.push({ plan, seed, candidateIndex: i });
     }

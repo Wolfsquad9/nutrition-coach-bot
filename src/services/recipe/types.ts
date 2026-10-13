@@ -33,6 +33,33 @@ export interface RecipeGenerationOptions {
    * it never re-interprets ingredient `dietTags` itself.
    */
   dietType?: DietType | null;
+  /**
+   * Phase 5 3A — ids already used by EARLIER days of the current weekly
+   * generation (accumulated by `generateWeeklyMealPlan`).
+   *
+   * SOFT diversity preference only: when an unused candidate exists for a pick
+   * it is preferred; when every candidate is used the full candidate list is
+   * used exactly as before. It NEVER filters the eligible pool, NEVER rejects a
+   * meal, and NEVER adds an id — so it cannot override nutrition validity
+   * (computed downstream by the canonical engine), dietary filters, or
+   * `allowedIngredientIds` (both resolved upstream of every pick).
+   *
+   * Absent (all daily and single-recipe callers) = byte-identical legacy
+   * selection behaviour.
+   */
+  weekUsedIngredientIds?: readonly string[];
+  /**
+   * Phase 5 3A — EXPLICIT opt-in for cross-day ingredient diversity during
+   * weekly generation. When `true`, `generateWeeklyMealPlan` accumulates each
+   * day's used ingredient ids and threads them to later days via
+   * `weekUsedIngredientIds`. When absent/false, weekly output is byte-identical
+   * to the pre-3A implementation and no accumulation happens, so existing
+   * weekly callers (e.g. the optimizer) keep their behaviour unless they
+   * deliberately enable diversity. This mirrors the Phase 3C
+   * `archetypeGeneration` opt-in convention. `weekUsedIngredientIds` remains an
+   * optional initial history input; it does NOT activate the feature on its own.
+   */
+  weekIngredientDiversity?: boolean;
 }
 
 export interface GeneratedRecipe extends Recipe {

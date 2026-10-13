@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Search, Check, X, Download, Upload, FileJson, Loader2, Sparkles, Clock, Utensils, Flame, Printer } from 'lucide-react';
+import { Search, Check, X, Download, Upload, FileJson, Loader2, Sparkles, Clock, Flame, Printer } from 'lucide-react';
 import { coreIngredients, type IngredientData } from '@/data/ingredientDatabase';
 import { Client } from '@/types';
 import {
@@ -20,6 +20,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { MacroDonutChart } from './MacroDonutChart';
 import { DietPlanDisplay } from './DietPlanDisplay';
+import { GeneratedRecipeCardTitle } from './GeneratedRecipeCardTitle';
 import { formatMacro, formatCalories } from '@/utils/formatters';
 import { type GeneratedRecipe, type MealType } from '@/services/recipeService';
 import { getClientLabel } from '@/utils/clientHelpers';
@@ -366,10 +367,7 @@ export default function EnhancedIngredientManager({
             <Card className="bg-gradient-card border-primary/20 shadow-elegant mt-6">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-                    <Utensils className="h-5 w-5 text-primary" />
-                    {generatedRecipe.name}
-                  </CardTitle>
+                  <GeneratedRecipeCardTitle recipe={generatedRecipe} />
                   <Badge variant="secondary" className="capitalize">
                     {selectedMealType === 'breakfast' ? 'Breakfast' : 
                      selectedMealType === 'lunch' ? 'Lunch' : 

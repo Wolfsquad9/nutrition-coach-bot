@@ -8,6 +8,7 @@ import {
   type RecipeArchetype,
 } from './archetypes';
 import type { DietType } from './eligibility';
+import { preferUnusedOrdered } from './selectors';
 
 /**
  * Phase 3C — archetype selection and role resolution.
@@ -92,11 +93,19 @@ export function isArchetypeSatisfiable(
  * in catalogue order, only while capacity remains, and never at the cost of a
  * required role. Returns `null` if the archetype is unsatisfiable — the caller
  * must skip it rather than fall back.
+ *
+ * `weekUsedIngredientIds` (Phase 5 3A) is a SOFT preference: role candidates
+ * that earlier days of this weekly generation already used are hoisted behind
+ * unused ones before the role's `count` is sliced, so fresh ingredients win
+ * when they exist and a fully-used role still fills completely. It never
+ * changes satisfiability, never widens the pool, and performs no nutrition
+ * maths.
  */
 export function resolveArchetypeIngredients(
   archetype: RecipeArchetype,
   pool: readonly IngredientData[],
-  rng: Rng
+  rng: Rng,
+  weekUsedIngredientIds?: ReadonlySet<string>
 ): IngredientData[] | null {
   if (!isArchetypeSatisfiable(archetype, pool)) return null;
 
@@ -105,7 +114,11 @@ export function resolveArchetypeIngredients(
 
   for (const [role, count] of Object.entries(archetype.requiredRoles) as [ArchetypeRole, number][]) {
     const candidates = byRole(pool, role).filter((ingredient) => !taken.has(ingredient.id));
-    for (const ingredient of rng.shuffle(candidates).slice(0, count)) {
+    // Shuffle first (rng order unchanged), then hoist week-unused candidates
+    // (stable, rng-free). `slice(0, count)` still fills the role completely:
+    // fresh picks are preferred; used ones backfill when fresh run short.
+    const ordered = preferUnusedOrdered(rng.shuffle(candidates), weekUsedIngredientIds);
+    for (const ingredient of ordered.slice(0, count)) {
       selected.push(ingredient);
       taken.add(ingredient.id);
     }
@@ -116,7 +129,8 @@ export function resolveArchetypeIngredients(
     const candidates = byRole(pool, role).filter(
       (ingredient) => !taken.has(ingredient.id)
     );
-    for (const ingredient of rng.shuffle(candidates).slice(0, count)) {
+    const ordered = preferUnusedOrdered(rng.shuffle(candidates), weekUsedIngredientIds);
+    for (const ingredient of ordered.slice(0, count)) {
       if (selected.length >= archetype.maxIngredients) break;
       selected.push(ingredient);
       taken.add(ingredient.id);
@@ -138,7 +152,8 @@ export function selectArchetypeForMeal(
   pool: readonly IngredientData[],
   mealType: MealType,
   dietType: DietType | null | undefined,
-  rng: Rng
+  rng: Rng,
+  weekUsedIngredientIds?: ReadonlySet<string>
 ): ArchetypeSelection | null {
   const candidates = getArchetypesForMeal(mealType).filter(
     (archetype) =>
@@ -159,7 +174,7 @@ export function selectArchetypeForMeal(
   // ALREADY passed diet and satisfiability filtering, so it cannot widen
   // eligibility or promote an unsatisfiable archetype.
   for (const archetype of rng.shuffle(candidates)) {
-    const ingredients = resolveArchetypeIngredients(archetype, pool, rng);
+    const ingredients = resolveArchetypeIngredients(archetype, pool, rng, weekUsedIngredientIds);
     if (ingredients) return { archetype, ingredients };
   }
 

@@ -40,6 +40,13 @@ export interface GenerationInput {
    * Ignored entirely when `archetypeGeneration` is falsy.
    */
   dietType?: DietType | null;
+  /**
+   * Phase 5 3A — explicit opt-in for cross-day ingredient diversity in the
+   * generated weekly plans. Forwarded to `generateWeeklyMealPlan`; see
+   * `RecipeGenerationOptions.weekIngredientDiversity`. Defaults to disabled for
+   * callers that omit it, preserving legacy weekly output.
+   */
+  weekIngredientDiversity?: boolean;
 }
 
 /** A generated plan plus the metadata needed to reproduce or rank it. */

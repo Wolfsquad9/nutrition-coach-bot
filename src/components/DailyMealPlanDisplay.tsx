@@ -5,6 +5,7 @@ import { Separator } from '@/components/ui/separator';
 import { Utensils, Coffee, Sun, Moon, Cookie } from 'lucide-react';
 import type { DailyMealPlan, MealData } from '@/data/ingredientDatabase';
 import type { Macros } from '@/types';
+import { presentMeal } from './mealArchetypePresentation';
 
 interface DailyMealPlanDisplayProps {
   dailyPlan: DailyMealPlan;
@@ -65,6 +66,7 @@ function MealSection({
 }) {
   const config = MEAL_CONFIG[mealType];
   const Icon = config.icon;
+  const { title, recipeText } = presentMeal(mealData);
 
   if (mealData.ingredients.length === 0) {
     return (
@@ -92,10 +94,13 @@ function MealSection({
         </Badge>
       </div>
 
-      {/* Recipe Text */}
-      {mealData.recipeText && (
+      {/* Archetype title (known archetypes only) + Recipe Text */}
+      {title && (
+        <h5 className="text-sm font-semibold text-foreground mb-2">{title}</h5>
+      )}
+      {recipeText && (
         <p className="text-sm text-foreground mb-3 leading-relaxed">
-          {mealData.recipeText}
+          {recipeText}
         </p>
       )}
 

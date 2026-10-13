@@ -61,3 +61,10 @@ export {
 export { adjustMealIngredients } from './mealAdjuster';
 export { generateFullDayMealPlan, shuffleForDay } from './mealPlanGenerator';
 export { generateWeeklyMealPlan } from './weeklyPlanGenerator';
+export { resolveArchetypePresentation } from './archetypePresentation';
+export type {
+  ArchetypePresentation,
+  ArchetypePresentationResult,
+  ArchetypePresentableRecipe,
+} from './archetypePresentation';
+export { ARCHETYPES_BY_ID } from './archetypes';

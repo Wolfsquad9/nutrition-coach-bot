@@ -17,6 +17,7 @@ import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { MealTimeType, MealData } from '@/data/ingredientDatabase';
 import type { GroceryItem } from '@/types';
 import { formatCalories, formatMacro } from '@/utils/formatters';
+import { presentMeal } from './mealArchetypePresentation';
 
 interface PrintableMealPlanProps {
   weeklyPlan: WeeklyMealPlanResult;
@@ -35,6 +36,8 @@ const MEAL_LABELS: Record<MealTimeType, string> = {
 };
 
 function PrintMealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealData }) {
+  const { title, recipeText } = presentMeal(meal);
+
   if (meal.ingredients.length === 0) {
     return (
       <div className="print-meal-section print-meal-empty">
@@ -67,10 +70,10 @@ function PrintMealSection({ mealType, meal }: { mealType: MealTimeType; meal: Me
         </ul>
       </div>
 
-      {meal.recipeText && (
+      {(title || recipeText) && (
         <div className="print-recipe">
-          <h5 className="print-recipe-title">Recipe:</h5>
-          <p className="print-recipe-text">{meal.recipeText}</p>
+          <h5 className="print-recipe-title">{title ?? 'Recipe:'}</h5>
+          <p className="print-recipe-text">{recipeText}</p>
         </div>
       )}
     </div>

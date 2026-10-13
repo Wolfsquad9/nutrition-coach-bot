@@ -7,6 +7,7 @@ import type { WeeklyMealPlanResult } from '@/services/recipeService';
 import type { MealTimeType, MealData } from '@/data/ingredientDatabase';
 import { useState } from 'react';
 import { PrintableMealPlan } from './PrintableMealPlan';
+import { presentMeal } from './mealArchetypePresentation';
 
 interface WeeklyMealPlanDisplayProps {
   weeklyPlan: WeeklyMealPlanResult;
@@ -28,6 +29,7 @@ const mealLabels: Record<MealTimeType, string> = {
 
 function MealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealData }) {
   const [isOpen, setIsOpen] = useState(false);
+  const { title, recipeText } = presentMeal(meal);
 
   if (meal.ingredients.length === 0) {
     return (
@@ -80,11 +82,11 @@ function MealSection({ mealType, meal }: { mealType: MealTimeType; meal: MealDat
               ))}
             </div>
           </div>
-          {meal.recipeText && (
+          {(title || recipeText) && (
             <div>
-              <h5 className="text-sm font-medium mb-2">Recipe:</h5>
+              <h5 className="text-sm font-medium mb-2">{title ?? 'Recipe:'}</h5>
               <div className="text-sm text-muted-foreground whitespace-pre-line">
-                {meal.recipeText}
+                {recipeText}
               </div>
             </div>
           )}

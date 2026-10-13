@@ -84,6 +84,16 @@ export function generateRecipe(
     throw new Error(`No suitable ingredients selected for ${mealType}. Please select foods that are appropriate for this meal type.`);
   }
 
+  // Phase 5 3A — soft cross-day diversity: ids earlier days of this weekly
+  // generation already used. Purely advisory inside the selectors below; it
+  // cannot override `allowedIngredientIds`, diet filtering (both resolved
+  // upstream), or nutrition validity (computed downstream by the canonical
+  // engine, which keeps precedence). Absent/empty = byte-identical legacy
+  // selection.
+  const weekUsedIngredientIds = options?.weekUsedIngredientIds
+    ? new Set(options.weekUsedIngredientIds)
+    : undefined;
+
   // Select the ingredient combination.
   //
   // LEGACY PATH (default, `archetypeGeneration` falsy): the original fixed
@@ -112,14 +122,15 @@ export function generateRecipe(
       suitableIngredients,
       mealType,
       options.dietType,
-      rng
+      rng,
+      weekUsedIngredientIds
     );
 
     if (selection) {
       selectedIngredients = selection.ingredients;
       archetypeId = selection.archetype.id;
     } else if (canFallBackToLegacy(suitableIngredients)) {
-      selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
+      selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng, weekUsedIngredientIds);
     } else {
       // No eligible ingredients at all: neither path can build a meal, so the
       // original empty-pool error still applies.
@@ -128,7 +139,7 @@ export function generateRecipe(
       );
     }
   } else {
-    selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng);
+    selectedIngredients = selectBalancedIngredients(suitableIngredients, mealType, rng, weekUsedIngredientIds);
   }
 
   if (selectedIngredients.length === 0) {
