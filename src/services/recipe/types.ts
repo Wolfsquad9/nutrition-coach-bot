@@ -62,6 +62,24 @@ export interface RecipeGenerationOptions {
   weekIngredientDiversity?: boolean;
 }
 
+/**
+ * Coach-facing meal-variety preference for weekly plan generation.
+ *
+ * The UI-facing name for the Phase 5 `weekIngredientDiversity` mechanism:
+ *
+ *  - `'more'` — the cross-day ingredient-diversity preference is ENABLED for
+ *    the optimizer's weekly candidates (the established optimizer behaviour).
+ *  - `'traditional'` — the preference is disabled, so weekly generation runs
+ *    the byte-identical legacy path (`generateWeeklyMealPlan` treats an
+ *    absent and a false flag identically).
+ *
+ * It is a SOFT preference only: it can never widen or narrow the eligibility
+ * pool, override allergens/diet restrictions, or change macro convergence —
+ * eligibility stays authoritative upstream and the canonical engine stays
+ * authoritative downstream.
+ */
+export type MealVarietyPreference = 'more' | 'traditional';
+
 export interface GeneratedRecipe extends Recipe {
   suitableFor: MealType;
   selectedIngredients: IngredientData[];

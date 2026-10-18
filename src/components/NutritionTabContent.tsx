@@ -31,12 +31,14 @@ import {
   buildRecipeGenerationOptions,
   type EligibleIngredientPool,
   type FullDayMealPlanResult,
+  type MealVarietyPreference,
 } from '@/services/recipeService';
 import { createDefaultOptimizationEngine } from '@/services/optimization/OptimizationEngine';
 import { DEFAULT_CANDIDATE_COUNT } from '@/services/optimization/types';
 import { WeeklyMealPlanDisplay } from '@/components/WeeklyMealPlanDisplay';
 import { DailyMealPlanDisplay } from '@/components/DailyMealPlanDisplay';
 import { GroceryListDisplay } from '@/components/GroceryListDisplay';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LockPlanButton, DiscardDraftButton } from '@/components/LockPlanButton';
 import { SharePlanButton } from '@/components/SharePlanButton';
 import { getClientLabel } from '@/utils/clientHelpers';
@@ -117,6 +119,11 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const [dailyMealPlan, setDailyMealPlan] = useState<FullDayMealPlanResult | null>(null);
   const [isGeneratingDaily, setIsGeneratingDaily] = useState(false);
   const [isGeneratingWeekly, setIsGeneratingWeekly] = useState(false);
+  // Coach-facing meal-variety preference for WEEKLY generation. The default
+  // `'more'` preserves the optimizer's established behaviour (candidates have
+  // always been generated with cross-day ingredient diversity enabled).
+  // Daily generation is deliberately unaffected by this control.
+  const [mealVariety, setMealVariety] = useState<MealVarietyPreference>('more');
 
   useEffect(() => {
     if (activeClientId) {
@@ -221,10 +228,19 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
           allowedIngredientIds: eligibility.ingredientIds,
           dietType: activeClient.dietType,
         }),
+        // Meal variety: the coach's CURRENT selection reaches the real
+        // candidate-generation call (not a UI-only control). `'more'` keeps
+        // the optimizer's established diversity-on default; `'traditional'`
+        // disables the soft preference so candidates run the legacy path.
+        // Eligibility allow-list and macro targets above stay authoritative.
+        weekIngredientDiversity: mealVariety === 'more',
       });
 
       planState.setDraftPlan(result.plan, macroTargets, eligibleFoods, metrics, {
         weeklyRateKg: adaptiveTarget.effectiveWeeklyRateKg,
+        // Generation-time record of what produced THIS draft — persisted on
+        // lock, never re-derived from the meals themselves.
+        mealVariety,
       });
       toast({ title: 'Draft generated!', description: 'Plan is in draft mode. Click "Lock Plan" to save it.' });
     } finally {
@@ -281,7 +297,17 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
       {planState.isDraft && (
         <Alert className="border-warning/50 bg-warning/10">
           <FileEdit className="h-4 w-4 text-warning" />
-          <AlertDescription className="text-warning"><strong>Draft Mode</strong> — This plan is not yet saved.</AlertDescription>
+          <AlertDescription className="text-warning">
+            <strong>Draft Mode</strong> — This plan is not yet saved.
+            {planState.draftMealVariety && (
+              <span className="mt-1 block">
+                Meal variety:{' '}
+                {planState.draftMealVariety === 'more' ? 'More variety' : 'Traditional variety'}
+                {' — '}
+                used to generate this draft.
+              </span>
+            )}
+          </AlertDescription>
         </Alert>
       )}
       {planState.isLocked && !planState.lockStatus.isLocked && (
@@ -314,6 +340,37 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
             <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
               <CalendarDays className="h-6 w-6" /> Meal Plan Generation
             </h2>
+            {/* Meal variety — the coach's choice for WEEKLY generation only.
+                'more' (default) preserves the optimizer's established
+                behaviour; the selection is read at generation time so a
+                regeneration always honours the current value. */}
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <span id="meal-variety-label" className="text-sm text-muted-foreground">
+                Meal variety
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={mealVariety}
+                onValueChange={(value) =>
+                  setMealVariety(value === 'traditional' ? 'traditional' : 'more')
+                }
+                aria-labelledby="meal-variety-label"
+              >
+                <ToggleGroupItem value="more" aria-label="More variety">
+                  More variety
+                </ToggleGroupItem>
+                <ToggleGroupItem value="traditional" aria-label="Traditional variety">
+                  Traditional variety
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <span className="text-xs text-muted-foreground">
+                {mealVariety === 'more'
+                  ? 'Prefers unused ingredients across days (weekly plans only).'
+                  : 'Classic generation behaviour, without the cross-day preference.'}
+              </span>
+            </div>
           </div>
           <div className="flex gap-3 flex-wrap">
             <Button onClick={handleGenerateDailyPlan} disabled={planState.isLoading || isGenerating || !ingredientValidation.canGenerateDaily || planState.isBlocked} variant="outline">

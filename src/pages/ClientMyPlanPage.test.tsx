@@ -64,3 +64,80 @@ describe('ClientMyPlanPage (nutrition-only My Plan — no duplicate training pla
     expect(screen.queryByText(/Barbell Bench Press/i)).not.toBeInTheDocument();
   });
 });
+
+describe('ClientMyPlanPage — meal variety label honesty', () => {
+  it('shows the persisted preference when the locked plan records one', async () => {
+    mockFetchPlan.mockResolvedValueOnce({
+      plan: {
+        type: 'nutrition',
+        generatedAt: '2026-01-01T00:00:00.000Z',
+        macroTargets: { calories: 2100, protein: 150, carbs: 200, fat: 60 },
+        weeklyPlan: {
+          days: [],
+          weeklyTotalMacros: { calories: 2100, protein: 150, carbs: 200, fat: 60 },
+          weeklyTargetMacros: { calories: 2100, protein: 150, carbs: 200, fat: 60 },
+          weeklyVariance: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+        },
+        likedIngredients: [],
+        mealVariety: 'more',
+      },
+      planId: 'plan-1',
+      versionId: null,
+      createdAt: null,
+      snapshot: null,
+      payloadHash: null,
+      versionNumber: null,
+      error: null,
+    });
+
+    render(<ClientMyPlanPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('meal-variety-badge'))
+        .toHaveTextContent('Meal variety: More variety');
+    });
+  });
+
+  it('shows the Traditional label when that is what was persisted', async () => {
+    mockFetchPlan.mockResolvedValueOnce({
+      plan: {
+        type: 'nutrition',
+        generatedAt: '2026-01-01T00:00:00.000Z',
+        macroTargets: { calories: 2100, protein: 150, carbs: 200, fat: 60 },
+        weeklyPlan: {
+          days: [],
+          weeklyTotalMacros: { calories: 2100, protein: 150, carbs: 200, fat: 60 },
+          weeklyTargetMacros: { calories: 2100, protein: 150, carbs: 200, fat: 60 },
+          weeklyVariance: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+        },
+        likedIngredients: [],
+        mealVariety: 'traditional',
+      },
+      planId: 'plan-1',
+      versionId: null,
+      createdAt: null,
+      snapshot: null,
+      payloadHash: null,
+      versionNumber: null,
+      error: null,
+    });
+
+    render(<ClientMyPlanPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('meal-variety-badge'))
+        .toHaveTextContent('Meal variety: Traditional variety');
+    });
+  });
+
+  it('shows NO preference label when the payload does not record one (legacy plan)', async () => {
+    // beforeEach's default fixture carries no mealVariety key.
+    render(<ClientMyPlanPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('weekly-meal-plan')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('meal-variety-badge')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Meal variety/i)).not.toBeInTheDocument();
+  });
+});

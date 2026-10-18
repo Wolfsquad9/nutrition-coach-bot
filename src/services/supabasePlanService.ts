@@ -9,7 +9,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import type { WeeklyMealPlanResult } from '@/services/recipeService';
+import type { WeeklyMealPlanResult, MealVarietyPreference } from '@/services/recipeService';
 import type { PlanSnapshot } from '@/domain/nutrition/snapshot';
 import { deepFreeze } from '@/domain/nutrition/snapshot';
 import type { NutritionPrescriptionRecord } from '@/domain/nutrition/prescription';
@@ -39,6 +39,14 @@ export interface PlanPayload {
    * canonical inputs (the effective weekly rate) plus provenance.
    */
   nutritionPrescription?: NutritionPrescriptionRecord;
+  /**
+   * The coach's meal-variety preference used to generate THIS locked plan
+   * (`'more'` | `'traditional'`). Optional so legacy payloads remain valid —
+   * historical rows are never rewritten, and a payload without the key must
+   * never be labelled with a preference it does not record. Persisted in the
+   * existing `plan_payload` JSONB document; no schema change is required.
+   */
+  mealVariety?: MealVarietyPreference;
 }
 
 export interface NutritionPlanRow {
@@ -88,6 +96,12 @@ export interface BuildLockedPlanPayloadInput {
    * `buildPrescriptionRecord`; omitted for legacy/test callers.
    */
   nutritionPrescription?: NutritionPrescriptionRecord;
+  /**
+   * The meal-variety preference the CURRENT DRAFT was generated with.
+   * Omitted when unknown — the payload key is then absent, so no consumer can
+   * claim a preference the persisted plan does not record.
+   */
+  mealVariety?: MealVarietyPreference;
 }
 
 export interface LockNutritionPlanOptions {
@@ -116,6 +130,9 @@ export function buildLockedPlanPayload(input: BuildLockedPlanPayloadInput): Plan
     constraintsHitDetails: input.constraintsHitDetails,
     likedIngredients: input.likedIngredients,
     nutritionPrescription: input.nutritionPrescription,
+    // Only present when the preference was actually recorded for this draft,
+    // so a payload without it can never be shown with a preference label.
+    ...(input.mealVariety ? { mealVariety: input.mealVariety } : {}),
   };
 }
 

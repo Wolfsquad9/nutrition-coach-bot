@@ -5,6 +5,7 @@ export type {
   WeeklyMealPlanResult,
   ToleranceCheckResult,
   RecipeGenerationOptions,
+  MealVarietyPreference,
 } from './types';
 export {
   RECIPE_ACTIVATION,

@@ -41,10 +41,13 @@ export interface GenerationInput {
    */
   dietType?: DietType | null;
   /**
-   * Phase 5 3A — explicit opt-in for cross-day ingredient diversity in the
-   * generated weekly plans. Forwarded to `generateWeeklyMealPlan`; see
-   * `RecipeGenerationOptions.weekIngredientDiversity`. Defaults to disabled for
-   * callers that omit it, preserving legacy weekly output.
+   * Phase 5 3A — coach-facing meal-variety preference forwarded verbatim to
+   * `generateWeeklyMealPlan` as `weekIngredientDiversity`.
+   *
+   * `false` disables the preference so candidates run the byte-identical
+   * legacy weekly path. When omitted it stays ENABLED, preserving the
+   * optimizer's established behaviour (candidates have always been generated
+   * with cross-day diversity on).
    */
   weekIngredientDiversity?: boolean;
 }

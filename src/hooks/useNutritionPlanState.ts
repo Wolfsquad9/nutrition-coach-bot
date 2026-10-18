@@ -3,7 +3,7 @@
  */
 import { mapSnapshotToWeeklyPlan } from '@/domain/nutrition/snapshotAdapter';
 import { useState, useCallback, useRef } from "react";
-import type { WeeklyMealPlanResult } from "@/services/recipeService";
+import type { WeeklyMealPlanResult, MealVarietyPreference } from "@/services/recipeService";
 import type { PlanSnapshot } from "@/domain/nutrition/snapshot";
 import { mapWeeklyMealPlanToSnapshot } from "@/domain/nutrition/snapshotAdapter";
 import type { NutritionMetrics, MacroTargets } from "@/types";
@@ -127,6 +127,14 @@ export function useNutritionPlanState() {
   const draftWeeklyRateKgRef = useRef<number | null>(null);
   draftWeeklyRateKgRef.current = draftWeeklyRateKg;
 
+  // The meal-variety preference the CURRENT DRAFT was actually generated with
+  // (captured at generation time, exactly like the rate). Locking THIS draft
+  // persists it into plan_payload; it is deliberately NOT inferred from the
+  // meals and deliberately NOT the coach's next-selection state.
+  const [draftMealVariety, setDraftMealVariety] = useState<MealVarietyPreference | null>(null);
+  const draftMealVarietyRef = useRef<MealVarietyPreference | null>(null);
+  draftMealVarietyRef.current = draftMealVariety;
+
   /* ---------------- CANONICAL CLIENT METRICS ----------------
    * Captured at generation time so the locked snapshot carries the real
    * BMR / TDEE / fiber / water values (instead of zeroed placeholders).
@@ -226,6 +234,7 @@ export function useNutritionPlanState() {
     setSnapshot(null);
     setActivePrescription(null);
     setDraftWeeklyRateKg(null);
+    setDraftMealVariety(null);
     setPlanId(null);
     setVersionId(null);
     setVersionNumber(null);
@@ -266,7 +275,7 @@ export function useNutritionPlanState() {
       macros: MacroTargets,
       ingredients: string[],
       clientMetricsInput?: NutritionMetrics,
-      options?: { weeklyRateKg?: number | null },
+      options?: { weeklyRateKg?: number | null; mealVariety?: MealVarietyPreference },
     ) => {
       const validation = validateImmutability(lifecycleState, "REGENERATE");
       if (!validation.valid) {
@@ -290,6 +299,11 @@ export function useNutritionPlanState() {
       // is deliberately left untouched — drafts are never authoritative.
       const rate = options?.weeklyRateKg;
       setDraftWeeklyRateKg(typeof rate === "number" && Number.isFinite(rate) ? rate : null);
+
+      // The preference THIS draft was generated with (generation-time value).
+      // A draft generated without an explicit preference records none, so
+      // locking it persists no key rather than a guessed one.
+      setDraftMealVariety(options?.mealVariety ?? null);
 
       setPlanId(null);
       setVersionId(null);
@@ -318,6 +332,7 @@ export function useNutritionPlanState() {
     setLockedUntil(null);
     setClientMetrics(null);
     setSnapshot(null);
+    setDraftMealVariety(null);
 
     // Reload previously locked plan from DB if clientId provided
     if (clientId) {
@@ -363,6 +378,10 @@ export function useNutritionPlanState() {
               macroTargets,
               likedIngredients,
               nutritionPrescription,
+              // The preference this draft was generated with (generation-time
+              // value, via ref — same pattern as the weekly rate). Undefined
+              // omits the key entirely from the persisted payload.
+              mealVariety: draftMealVarietyRef.current ?? undefined,
             });
             const payloadHash = hashPlanPayload(planPayload);
 
@@ -571,6 +590,9 @@ export function useNutritionPlanState() {
 
     /** Phase 8: the client's current authoritative nutrition prescription. */
     activePrescription,
+
+    /** The meal-variety preference the CURRENT DRAFT was generated with. */
+    draftMealVariety,
 
     planId,
     versionId,

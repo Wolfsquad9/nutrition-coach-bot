@@ -15,6 +15,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchCurrentPlan } from '@/services/supabasePlanService';
@@ -94,6 +95,18 @@ export default function ClientMyPlanPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-primary">My Plan</h2>
+
+      {/* Meal variety preference recorded by the coach at lock time.
+          Rendered ONLY when the persisted payload actually carries the key —
+          legacy payloads show nothing rather than an unverifiable label. */}
+      {plan.mealVariety && (
+        <div>
+          <Badge variant="outline" data-testid="meal-variety-badge">
+            Meal variety:{' '}
+            {plan.mealVariety === 'more' ? 'More variety' : 'Traditional variety'}
+          </Badge>
+        </div>
+      )}
 
       {/* Nutrition Plan */}
       {plan.weeklyPlan && (
