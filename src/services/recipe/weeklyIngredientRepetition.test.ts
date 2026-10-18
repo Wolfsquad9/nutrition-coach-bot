@@ -11,7 +11,7 @@ import type { RecipeArchetype } from './archetypes';
 import { resolveArchetypeIngredients, selectArchetypeForMeal, isArchetypeSatisfiable } from './archetypeSelection';
 import { createSeededRng, type Rng } from '@/utils/random';
 import type { MealType } from './constants';
-import type { RecipeGenerationOptions } from './types';
+import type { RecipeGenerationOptions, WeeklyMealPlanResult } from './types';
 
 const macroTargets = { calories: 2000, protein: 150, carbs: 200, fat: 70 };
 
@@ -59,11 +59,11 @@ const legacy = (): RecipeGenerationOptions => build(false, false, []);
 const enriched = (): RecipeGenerationOptions => build(true, true);
 const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 
-function lunchProtein(plan: any, day: number): string {
+function lunchProtein(plan: WeeklyMealPlanResult, day: number): string {
   return plan.days[day].plan.dailyPlan.lunch.ingredients.find((i: IngredientData) => i.category === 'protein')!.id;
 }
 
-function repetitionReport(plan: any) {
+function repetitionReport(plan: WeeklyMealPlanResult) {
   const seen = new Set<string>();
   let repeated = 0;
   let total = 0;
@@ -82,8 +82,8 @@ function repetitionReport(plan: any) {
   return { repeated, total, empties };
 }
 
-function isFull(plan: any): boolean {
-  return plan.days.every((d: any) => mealTypes.every((m) => d.plan.dailyPlan[m].ingredients.length > 0));
+function isFull(plan: WeeklyMealPlanResult): boolean {
+  return plan.days.every((d: WeeklyMealPlanResult['days'][0]) => mealTypes.every((m) => d.plan.dailyPlan[m].ingredients.length > 0));
 }
 
 describe('selector units — unused candidates are preferred, exhausted is graceful', () => {
@@ -143,7 +143,7 @@ describe('weekly generation — flag omitted, undefined, and explicitly false ar
     const offUndefined = generateWeeklyMealPlan(WIDE, macroTargets, 'flag-state-1', build(false, undefined));
     expect(offWithHistory).toEqual(legacyPlan);
     expect(offUndefined).toEqual(legacyPlan);
-    expect(legacyPlan.days.every((d: any) => mealTypes.every((m) => d.plan.dailyPlan[m].ingredients.length > 0))).toBe(true);
+    expect(legacyPlan.days.every((d: WeeklyMealPlanResult['days'][0]) => mealTypes.every((m) => d.plan.dailyPlan[m].ingredients.length > 0))).toBe(true);
   });
 
   it('determinism holds for a fixed seed in both modes', () => {
@@ -231,7 +231,7 @@ describe('weekly generation — enabled diversity reduces repetition', () => {
 describe('weekly generation — accumulation and threading without initial history', () => {
   it('enabling the flag with no initial history still accumulates and threads across days', () => {
     const plan = generateWeeklyMealPlan(NARROW, macroTargets, 'accum-3a', enriched());
-    const sets = plan.days.map((d: any) => new Set<string>(d.plan.dailyPlan.lunch.ingredients.map((i: IngredientData) => i.id)));
+    const sets = plan.days.map((d: WeeklyMealPlanResult['days'][0]) => new Set<string>(d.plan.dailyPlan.lunch.ingredients.map((i: IngredientData) => i.id)));
     const seen = new Set<string>();
     let prev = 0;
     for (const set of sets) {
@@ -287,7 +287,7 @@ describe('weekly generation — legacy fallback preserved', () => {
       weekIngredientDiversity: true,
     });
     expect(plan.days.length).toBe(7);
-    expect(plan.days.every((d: any) => mealTypes.every((m) => d.plan.dailyPlan[m].ingredients.length > 0))).toBe(true);
+    expect(plan.days.every((d: WeeklyMealPlanResult['days'][0]) => mealTypes.every((m) => d.plan.dailyPlan[m].ingredients.length > 0))).toBe(true);
   });
 });
 
