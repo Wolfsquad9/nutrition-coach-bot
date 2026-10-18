@@ -171,7 +171,10 @@ export function calculateLockExpiry(lockedAt: Date): Date {
 }
 
 /**
- * Calculate days remaining in lock period
+ * Calculate days remaining in lock period.
+ *
+ * Measured in calendar days, consistent with `calculateLockExpiry`, so the
+ * result is immune to daylight-saving-time transitions.
  */
 export function calculateDaysRemaining(lockedAt: Date): number {
   const expiry = calculateLockExpiry(lockedAt);
@@ -181,8 +184,23 @@ export function calculateDaysRemaining(lockedAt: Date): number {
     return 0;
   }
   
-  const msRemaining = expiry.getTime() - now.getTime();
-  return Math.ceil(msRemaining / (1000 * 60 * 60 * 24));
+  // Calendar-day difference between `now` and `expiry`, computed from local
+  // calendar components via Date.UTC so the result is immune to DST
+  // transitions. This stays consistent with `calculateLockExpiry`, which
+  // shifts the calendar date by LOCK_DURATION_DAYS while preserving local
+  // wall-clock time. Dividing elapsed milliseconds by 86_400_000 would
+  // over-count across a DST boundary (a seven-calendar-day window can span
+  // 167 or 169 real hours) and incorrectly round up to LOCK_DURATION_DAYS+1.
+  const dayDiff =
+    (Date.UTC(
+      expiry.getFullYear(),
+      expiry.getMonth(),
+      expiry.getDate(),
+    ) -
+      Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) /
+    (1000 * 60 * 60 * 24);
+
+  return Math.max(0, Math.round(dayDiff));
 }
 
 // ============================================================================

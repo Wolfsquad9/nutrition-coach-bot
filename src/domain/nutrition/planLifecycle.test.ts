@@ -5,7 +5,7 @@
  * shareability checks, and immutability guarantees.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   derivePlanState,
   calculateDaysRemaining,
@@ -27,6 +27,10 @@ import {
   type PlanStateContext,
 } from './planLifecycle';
 import { LOCK_DURATION_DAYS } from '@/domain/shared/constants';
+
+// Fixed timezone so date/DST arithmetic is deterministic regardless of where
+// the suite runs (Europe/Paris observes DST on the last Sundays of Mar/Oct).
+process.env.TZ = 'Europe/Paris';
 
 describe('Plan Lifecycle State Machine', () => {
   // =========================================================================
@@ -101,6 +105,15 @@ describe('Plan Lifecycle State Machine', () => {
   });
 
   describe('calculateDaysRemaining', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-15T12:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('returns positive days when lock is active', () => {
       const lockedAt = new Date();
       lockedAt.setDate(lockedAt.getDate() - 2); // Locked 2 days ago
@@ -122,6 +135,47 @@ describe('Plan Lifecycle State Machine', () => {
       
       const remaining = calculateDaysRemaining(lockedAt);
       expect(remaining).toBe(LOCK_DURATION_DAYS);
+    });
+
+    it('returns full duration across the spring-forward DST transition', () => {
+      // Europe/Paris spring-forward 2026: Sun Mar 29, 02:00 -> 03:00.
+      vi.setSystemTime(new Date('2026-03-22T09:00:00Z')); // now = Mar 22 10:00 CET
+      const lockedAt = new Date();
+      // expiry = Mar 29 10:00 CEST (one hour is skipped during the window)
+      const remaining = calculateDaysRemaining(lockedAt);
+      expect(remaining).toBe(LOCK_DURATION_DAYS);
+    });
+
+    it('returns full duration across the fall-back DST transition', () => {
+      // Europe/Paris fall-back 2026: Sun Oct 25, 03:00 -> 02:00.
+      vi.setSystemTime(new Date('2026-10-18T08:00:00Z')); // now = Oct 18 10:00 CEST
+      const lockedAt = new Date();
+      // expiry = Oct 25 10:00 CET (one hour repeats during the window)
+      const remaining = calculateDaysRemaining(lockedAt);
+      expect(remaining).toBe(LOCK_DURATION_DAYS);
+    });
+
+    it('returns one calendar day remaining', () => {
+      vi.setSystemTime(new Date('2026-10-23T08:00:00Z')); // now = Oct 23 10:00 CEST
+      const lockedAt = new Date('2026-10-17T08:00:00Z');
+      // expiry = Oct 24 10:00 CEST
+      const remaining = calculateDaysRemaining(lockedAt);
+      expect(remaining).toBe(1);
+    });
+
+    it('returns 0 at the exact expiry instant', () => {
+      // locked Oct 18 10:00 CEST -> expiry Oct 25 10:00 CET
+      vi.setSystemTime(new Date('2026-10-25T09:00:00Z')); // now = exact expiry
+      const lockedAt = new Date('2026-10-18T08:00:00Z');
+      const remaining = calculateDaysRemaining(lockedAt);
+      expect(remaining).toBe(0);
+    });
+
+    it('returns 0 after the expiry instant', () => {
+      vi.setSystemTime(new Date('2026-10-25T10:00:00Z')); // now = Oct 25 11:00 CET
+      const lockedAt = new Date('2026-10-18T08:00:00Z');
+      const remaining = calculateDaysRemaining(lockedAt);
+      expect(remaining).toBe(0);
     });
   });
 
