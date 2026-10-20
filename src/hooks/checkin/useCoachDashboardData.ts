@@ -8,20 +8,49 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getCoachAlerts } from '@/services/checkin/alertService';
+import {
+  computeAdherenceMetrics,
+  adherenceWindowEndingOn,
+  utcMsForDate,
+  type AdherenceSource,
+  type AdherenceTrendDirection,
+} from '@/domain/coaching/adherenceMetrics';
+import type {
+  DailyCheckinLike,
+  WeeklyReviewLike,
+} from '@/domain/nutrition/adaptation';
 import type { CoachAlert } from '@/types/checkin';
 
 export interface ClientSummary {
   clientId: string;
   clientName: string;
-  complianceScore: number;
+  /**
+   * Canonical 7-day compliance score (0-100) computed from REAL persisted
+   * evidence. `null` when the client has no evidence in the window — a
+   * missing value is never fabricated as 0%.
+   */
+  complianceScore: number | null;
+  /** Which real source(s) the score was derived from. */
+  complianceSource: AdherenceSource;
+  /** Distinct check-in days in the window. */
+  checkinDays: number;
+  /** Expected days in the window. */
+  expectedDays: number;
+  /** checkinDays / expectedDays (0-1) or null when unknown. */
+  coverage: number | null;
   currentStreak: number;
   longestStreak: number;
   lastCheckinDate: string | null;
-  adherenceTrend: 'improving' | 'stable' | 'declining';
+  adherenceTrend: AdherenceTrendDirection;
 }
 
 export interface CoachAlertItem extends CoachAlert {
   clientName?: string;
+}
+
+/** Today as YYYY-MM-DD (UTC) — the anchor for every metric window. */
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export function useCoachDashboardData(trainerId: string | null) {
@@ -80,21 +109,46 @@ export function useCoachDashboardData(trainerId: string | null) {
           clientNameMap.set(c.id, name);
         });
 
-        // 3. Fetch last 7 days of checkins for all clients
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const sinceDate = sevenDaysAgo.toISOString().slice(0, 10);
+        // 3. Fetch check-in evidence for all clients (daily + weekly reviews).
+        // The canonical window is the last 7 days (inclusive of today).
+        const adherenceWindow = adherenceWindowEndingOn(todayIso(), 7);
+        // One extra week of daily rows is fetched so the "daily evidence wins
+        // per ISO week" precedence can be evaluated for weeks that start
+        // before the window.
+        const evidenceSince = new Date(
+          utcMsForDate(adherenceWindow.startDate) - 7 * 86_400_000
+        )
+          .toISOString()
+          .slice(0, 10);
 
-        const { data: checkinRows, error: checkinError } = await supabase
-          .from('daily_checkins')
-          .select('*')
-          .in('client_id', clientIds)
-          .gte('checkin_date', sinceDate)
-          .order('checkin_date', { ascending: false });
+        const [checkinResult, reviewResult] = await Promise.all([
+          supabase
+            .from('daily_checkins')
+            .select('*')
+            .in('client_id', clientIds)
+            .gte('checkin_date', evidenceSince)
+            .order('checkin_date', { ascending: false }),
+          supabase
+            .from('weekly_reviews')
+            .select('*')
+            .in('client_id', clientIds)
+            .gte('week_start_date', evidenceSince)
+            .order('week_start_date', { ascending: false }),
+        ]);
 
-        if (checkinError) {
-          throw new Error(`Failed to fetch checkins: ${checkinError.message}`);
+        if (checkinResult.error) {
+          throw new Error(`Failed to fetch checkins: ${checkinResult.error.message}`);
         }
+        if (reviewResult.error) {
+          throw new Error(`Failed to fetch weekly reviews: ${reviewResult.error.message}`);
+        }
+
+        const checkinRows = (checkinResult.data ?? []) as unknown as Array<
+          DailyCheckinLike & { client_id: string }
+        >;
+        const reviewRows = (reviewResult.data ?? []) as unknown as Array<
+          WeeklyReviewLike & { client_id: string }
+        >;
 
         // 4. Fetch streak data
         const { data: streakRows, error: streakError } = await supabase
@@ -122,51 +176,32 @@ export function useCoachDashboardData(trainerId: string | null) {
 
         const computedClients: ClientSummary[] = clientIds.map(id => {
           const streak = streakMap.get(id);
-          const checkins = (checkinRows ?? []).filter(
-            (c: { client_id: string }) => c.client_id === id
-          );
+          const clientCheckins = checkinRows.filter((c) => c.client_id === id);
+          const clientReviews = reviewRows.filter((r) => r.client_id === id);
 
-          // Compliance: avg meal_adherence over last 7 days
-          let complianceScore = 0;
-          if (checkins.length > 0) {
-            const totalAdherence = checkins.reduce(
-              (sum: number, c: { meal_adherence: number }) => sum + c.meal_adherence,
-              0
-            );
-            complianceScore = Math.round(totalAdherence / checkins.length);
-          }
+          // Canonical compliance/adherence metrics from REAL persisted
+          // evidence (daily check-ins + weekly reviews). Identical
+          // computation to the client-facing dashboard.
+          const metrics = computeAdherenceMetrics({
+            dailyCheckins: clientCheckins,
+            weeklyReviews: clientReviews,
+            window: adherenceWindow,
+          });
 
           const lastCheckinDate = streak?.lastDate ?? null;
-
-          // Adherence trend: compare first half vs second half of period
-          let adherenceTrend: 'improving' | 'stable' | 'declining' = 'stable';
-          if (checkins.length >= 4) {
-            const sorted = [...checkins].sort(
-              (a: { checkin_date: string }, b: { checkin_date: string }) =>
-                a.checkin_date.localeCompare(b.checkin_date)
-            );
-            const mid = Math.floor(sorted.length / 2);
-            const firstHalf = sorted
-              .slice(0, mid)
-              .reduce((sum: number, c: { meal_adherence: number }) => sum + c.meal_adherence, 0) / mid;
-            const secondHalf = sorted
-              .slice(mid)
-              .reduce((sum: number, c: { meal_adherence: number }) => sum + c.meal_adherence, 0) / (sorted.length - mid);
-            if (secondHalf - firstHalf > 5) {
-              adherenceTrend = 'improving';
-            } else if (firstHalf - secondHalf > 5) {
-              adherenceTrend = 'declining';
-            }
-          }
 
           return {
             clientId: id,
             clientName: clientNameMap.get(id) ?? 'Unknown Client',
-            complianceScore,
+            complianceScore: metrics.score,
+            complianceSource: metrics.source,
+            checkinDays: metrics.checkinDays,
+            expectedDays: metrics.expectedDays,
+            coverage: metrics.coverage,
             currentStreak: streak?.current ?? 0,
             longestStreak: streak?.longest ?? 0,
             lastCheckinDate,
-            adherenceTrend,
+            adherenceTrend: metrics.trend,
           };
         });
 
@@ -212,7 +247,9 @@ export function useCoachDashboardData(trainerId: string | null) {
             });
           }
 
-          if (client.complianceScore < 60) {
+          // A missing compliance score means "no evidence yet", which is
+          // itself a signal — but it is never reported as 0% compliance.
+          if (client.complianceScore !== null && client.complianceScore < 60) {
             alertItems.push({
               id: `risk-yellow-${client.clientId}`,
               client_id: client.clientId,

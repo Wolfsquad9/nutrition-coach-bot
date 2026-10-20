@@ -9,10 +9,19 @@ import { Loader2, Flame, TrendingDown, TrendingUp, Minus } from 'lucide-react';
 import { getCheckinHistory } from '@/services/checkin/dailyCheckinService';
 import { getStreak } from '@/services/checkin/streakService';
 import { getReviewHistory } from '@/services/checkin/weeklyReviewService';
+import {
+  computeAdherenceMetrics,
+  adherenceWindowEndingOn,
+} from '@/domain/coaching/adherenceMetrics';
 import type { DailyCheckin, CheckinStreak, WeeklyReview } from '@/types/checkin';
 
 interface Props {
   clientId: string;
+}
+
+/** Today as YYYY-MM-DD (UTC) — the anchor for the metric window. */
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function ClientCheckinDashboard({ clientId }: Props) {
@@ -27,7 +36,7 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
     Promise.all([
       getCheckinHistory(clientId, { limit: 30 }),
       getStreak(clientId),
-      getReviewHistory(clientId, { limit: 4 }),
+      getReviewHistory(clientId, { limit: 8 }),
     ])
       .then(([checkinResult, streakResult, reviewResult]) => {
         setCheckins(checkinResult.checkins);
@@ -62,11 +71,16 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
     );
   }
 
-  // Calculate compliance from last 7 checkins
-  const recentCheckins = checkins.slice(0, 7);
-  const avgAdherence = recentCheckins.length > 0
-    ? Math.round(recentCheckins.reduce((s, c) => s + c.meal_adherence, 0) / recentCheckins.length)
-    : 0;
+  // Canonical 7-day compliance from REAL persisted evidence — identical
+  // computation to the coach dashboard (src/domain/coaching/adherenceMetrics).
+  const adherenceWindow = adherenceWindowEndingOn(todayIso(), 7);
+  const metrics = computeAdherenceMetrics({
+    dailyCheckins: checkins,
+    weeklyReviews: reviews,
+    window: adherenceWindow,
+  });
+  // null means "no evidence" — never rendered as 0%.
+  const avgAdherence = metrics.score;
 
   // Weight trend from reviews
   const weightDeltas = reviews
@@ -88,17 +102,20 @@ export default function ClientCheckinDashboard({ clientId }: Props) {
               <circle
                 cx="32" cy="32" r="28"
                 fill="none"
-                stroke={avgAdherence >= 70 ? 'hsl(142, 76%, 36%)' : avgAdherence >= 50 ? 'hsl(38, 92%, 50%)' : 'hsl(0, 84%, 60%)'}
+                stroke={avgAdherence === null ? 'hsl(var(--muted))' : avgAdherence >= 70 ? 'hsl(142, 76%, 36%)' : avgAdherence >= 50 ? 'hsl(38, 92%, 50%)' : 'hsl(0, 84%, 60%)'}
                 strokeWidth="6"
-                strokeDasharray={`${(avgAdherence / 100) * 176} 176`}
+                strokeDasharray={`${((avgAdherence ?? 0) / 100) * 176} 176`}
                 strokeLinecap="round"
               />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">
-              {avgAdherence}%
+              {avgAdherence !== null ? `${avgAdherence}%` : '—'}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">7-day Adherence</p>
+          <p className="text-xs text-muted-foreground">
+            {metrics.checkinDays}/{metrics.expectedDays} days checked in
+          </p>
         </Card>
 
         {/* Streak */}

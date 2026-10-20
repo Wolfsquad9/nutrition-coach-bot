@@ -8,13 +8,14 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingDown, TrendingUp, Minus, Brain } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { getCheckinHistory } from '@/services/checkin/dailyCheckinService';
 import { getReviewHistory, updateCoachNotes } from '@/services/checkin/weeklyReviewService';
 import { getStreak } from '@/services/checkin/streakService';
-import { generateWeeklySummary } from '@/services/checkin/coachingIntelligenceService';
+import { getAdherenceMetrics } from '@/services/checkin/adherenceMetricsService';
 import { useToast } from '@/hooks/use-toast';
-import type { DailyCheckin, WeeklyReview, CheckinStreak, CoachingSummary } from '@/types/checkin';
+import type { AdherenceMetrics } from '@/domain/coaching/adherenceMetrics';
+import type { DailyCheckin, WeeklyReview, CheckinStreak } from '@/types/checkin';
 
 interface Props {
   clientId: string;
@@ -26,14 +27,19 @@ export default function ClientDetailView({ clientId }: Props) {
   const [checkins, setCheckins] = useState<DailyCheckin[]>([]);
   const [reviews, setReviews] = useState<WeeklyReview[]>([]);
   const [streak, setStreak] = useState<CheckinStreak | null>(null);
-  const [aiSummary, setAiSummary] = useState<CoachingSummary | null>(null);
   const [coachNotes, setCoachNotes] = useState('');
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const [savingNotes, setSavingNotes] = useState(false);
-  const [loadingAi, setLoadingAi] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [adherence, setAdherence] = useState<AdherenceMetrics | null>(null);
 
   useEffect(() => {
+    // The canonical adherence metrics are loaded independently: a failure to
+    // load them must never block the rest of the client view.
+    getAdherenceMetrics(clientId, 7)
+      .then((result) => setAdherence(result.metrics))
+      .catch(() => setAdherence(null));
+
     Promise.all([
       getCheckinHistory(clientId, { limit: 30 }),
       getReviewHistory(clientId, { limit: 8 }),
@@ -53,15 +59,6 @@ export default function ClientDetailView({ clientId }: Props) {
       setLoading(false);
     });
   }, [clientId]);
-
-  const handleGenerateAiSummary = async () => {
-    setLoadingAi(true);
-    const result = await generateWeeklySummary(clientId, new Date().toISOString().slice(0, 10));
-    if (result.summary) {
-      setAiSummary(result.summary);
-    }
-    setLoadingAi(false);
-  };
 
   const handleSaveCoachNotes = async () => {
     if (!activeReviewId) return;
@@ -89,7 +86,20 @@ export default function ClientDetailView({ clientId }: Props) {
   return (
     <div className="space-y-6">
       {/* Streak + Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card className="p-3 shadow-card text-center">
+          <p className="text-lg font-bold text-primary">
+            {adherence?.score !== null && adherence?.score !== undefined
+              ? `${adherence.score}%`
+              : '—'}
+          </p>
+          <p className="text-xs text-muted-foreground">7-day Compliance</p>
+          {adherence && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {adherence.checkinDays}/{adherence.expectedDays} days
+            </p>
+          )}
+        </Card>
         <Card className="p-3 shadow-card text-center">
           <p className="text-lg font-bold text-primary">{streak?.current_streak ?? 0}</p>
           <p className="text-xs text-muted-foreground">Current Streak</p>
@@ -107,77 +117,6 @@ export default function ClientDetailView({ clientId }: Props) {
           <p className="text-xs text-muted-foreground">Weekly Reviews</p>
         </Card>
       </div>
-
-      {/* AI Summary Section */}
-      <Card className="p-6 shadow-card">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-bold text-primary">AI Coaching Summary</h3>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGenerateAiSummary}
-            disabled={loadingAi}
-          >
-            {loadingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate Summary'}
-          </Button>
-        </div>
-
-        {aiSummary ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-primary">
-                {aiSummary.adherence_score !== null ? `${aiSummary.adherence_score}%` : '—'}
-              </span>
-              {aiSummary.trajectory === 'improving' && <TrendingUp className="h-5 w-5 text-green-500" />}
-              {aiSummary.trajectory === 'declining' && <TrendingDown className="h-5 w-5 text-red-500" />}
-              {aiSummary.trajectory === 'stable' && <Minus className="h-5 w-5 text-muted-foreground" />}
-              <Badge variant={aiSummary.trajectory === 'improving' ? 'default' : aiSummary.trajectory === 'declining' ? 'destructive' : 'secondary'}>
-                {aiSummary.trajectory}
-              </Badge>
-            </div>
-
-            {aiSummary.highlights.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-green-600 mb-1">Highlights</p>
-                <ul className="list-disc list-inside space-y-1">
-                  {aiSummary.highlights.map((h, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">{h}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {aiSummary.recommendations.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-blue-600 mb-1">Recommendations</p>
-                <ul className="list-disc list-inside space-y-1">
-                  {aiSummary.recommendations.map((r, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">{r}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {aiSummary.risk_flags.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-red-600 mb-1">Risk Flags</p>
-                <ul className="list-disc list-inside space-y-1">
-                  {aiSummary.risk_flags.map((f, i) => (
-                    <li key={i} className="text-sm text-red-500">{f}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Click "Generate Summary" to create an AI-powered coaching summary based on recent check-in data.
-          </p>
-        )}
-      </Card>
 
       {/* Weekly Review History */}
       <Card className="p-6 shadow-card">

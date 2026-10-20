@@ -33,11 +33,18 @@ export default function CoachCheckinDashboard({ trainerId, onNavigateToClient }:
   }
 
   const alertCount = alerts.filter(a => !a.read).length;
-  const avgCompliance = clients.length > 0
-    ? Math.round(clients.reduce((s, c) => s + c.complianceScore, 0) / clients.length)
-    : 0;
+  // Average over clients that actually have evidence — clients without
+  // evidence are excluded rather than counted as 0%.
+  const scoredClients = clients.filter(c => c.complianceScore !== null);
+  const avgCompliance = scoredClients.length > 0
+    ? Math.round(
+        scoredClients.reduce((s, c) => s + (c.complianceScore ?? 0), 0) / scoredClients.length
+      )
+    : null;
 
-  const atRiskCount = clients.filter(c => c.complianceScore < 50).length;
+  const atRiskCount = clients.filter(
+    c => c.complianceScore !== null && c.complianceScore < 50
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -50,7 +57,9 @@ export default function CoachCheckinDashboard({ trainerId, onNavigateToClient }:
           <p className="text-xs text-muted-foreground">Total Clients</p>
         </Card>
         <Card className="p-4 shadow-card text-center">
-          <p className="text-2xl font-bold text-primary">{avgCompliance}%</p>
+          <p className="text-2xl font-bold text-primary">
+            {avgCompliance !== null ? `${avgCompliance}%` : '—'}
+          </p>
           <p className="text-xs text-muted-foreground">Avg Compliance</p>
         </Card>
         <Card className="p-4 shadow-card text-center">

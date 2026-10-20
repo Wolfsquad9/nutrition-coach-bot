@@ -42,4 +42,17 @@ describe('ClientCheckinDashboard (smoke)', () => {
     });
     expect(screen.getByText(/network error/i)).toBeInTheDocument();
   });
+
+  it('shows an em dash instead of 0% when there is no check-in evidence', async () => {
+    render(<ClientCheckinDashboard clientId="client-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/7-day adherence/i)).toBeInTheDocument();
+    });
+
+    // A missing score must never be rendered as "0%".
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('0/7 days checked in')).toBeInTheDocument();
+  });
 });
