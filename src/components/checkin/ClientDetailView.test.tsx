@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { toComplianceScore } from '@/types/checkin';
+import type { AdherenceMetrics } from '@/domain/coaching/adherenceMetrics';
 import ClientDetailView from './ClientDetailView';
 
 vi.mock('@/services/checkin/dailyCheckinService', () => ({
@@ -63,9 +64,9 @@ describe('ClientDetailView — adherence metrics', () => {
         source: 'mixed',
         samples: [],
         dailySamples: [],
-      },
+      } as AdherenceMetrics,
       error: null,
-    } as any);
+    });
 
     render(<ClientDetailView clientId="client-1" />);
 
