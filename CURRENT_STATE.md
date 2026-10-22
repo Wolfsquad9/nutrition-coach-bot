@@ -183,17 +183,4 @@ so the casts are checked by the compiler.
 longer applicable — the stub file and its tests were deleted as part of stub
 removal (see §4b "Legacy stub disposition").
 
-**B. Sentry initializes gated-but-empty — CONFIRMED (config), delivery UNVERIFIED.**
-
-- `src/main.tsx:4-31`: init is gated on `VITE_SENTRY_DSN`; PII stripping
-  (`sendDefaultPii: false`) is coded; `tracesSampleRate: 0.1`.
-- `.env` (gitignored, never committed) contains a `VITE_SENTRY_DSN` line whose
-  value matches the `.env.example:25` placeholder pattern
-  (`https://<key>@<org>.ingest.sentry.io/<project>`) — i.e. **placeholder, not a
-  real project DSN** (pattern confirmed; no secret values read or reproduced).
-  With the placeholder, the SDK reports `Invalid Sentry Dsn` and sends nothing —
-  consistent with the boot-time console error observed in the prior session.
-- **What remains unverified:** whether any environment (preview/prod) injects a
-  real DSN; whether an error ever reaches a Sentry project (no test event sent —
-  forbidden). **Safest next action:** either provision a real project DSN via
-  deployment-env config or remove the SDK until then. (Recommendation only.)
+**B. Sentry SDK removed — was gated-but-empty. `src/main.tsx` previously initialized Sentry on `VITE_SENTRY_DSN`; the `.env` value was a placeholder (`https://<key>@<org>.ingest.sentry.io/<project>`) causing a misleading "Invalid Sentry DSN" boot warning with zero observability. The SDK (`@sentry/react`) was removed to eliminate the warning, the ~60KB bundle penalty, and the unnecessary `tracesSampleRate: 0.1` configuration. The in-memory PII-safe logger in `src/utils/logger` now handles error logging (console + ring buffer only). PII stripping (`sendDefaultPii: false`) is no longer applicable. **What remains verified:** the app boots cleanly with no Sentry-related warnings. **What requires manual setup:** to re-enable Sentry, obtain a real DSN from Sentry.io → Project Settings → Client Keys → DSN, add `VITE_SENTRY_DSN` to the deployment `.env` (gitignored), and redeploy.
