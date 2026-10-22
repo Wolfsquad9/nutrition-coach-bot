@@ -112,10 +112,7 @@ default, or should Traditional be default until variety is user-validated?
 
 ## Open O4 — Observability posture (open, recorded 2026-10-18)
 
-Real Sentry DSN via deployment-env config (PII-stripping already coded in
-`main.tsx`) vs removal. Current `.env` value matches the `.env.example`
-placeholder pattern, so the SDK sends nothing. *Revisit when:* a real project
-receives a non-prod test event, or the SDK is removed.
+Real Sentry DSN via deployment-env config was evaluated but not implemented — the `.env` value was a placeholder (`https://<key>@<org>.ingest.sentry.io/<project>`) that caused a misleading "Invalid Sentry DSN" boot warning with zero observability. The SDK (`@sentry/react`, ~60KB bundle) was removed to eliminate the warning, reduce bundle size, and avoid paid feature exposure. The in-memory PII-safe logger in `src/utils/logger` provides console-backed error tracking without external dependencies. *Revisit when:* a real DSN is needed and obtained from Sentry.io, or alternative observability requirements emerge.
 
 ## Open O5 — Multi-tenant readiness (open, recorded 2026-10-18)
 

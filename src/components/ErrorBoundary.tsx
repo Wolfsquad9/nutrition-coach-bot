@@ -33,8 +33,9 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Centralized error log. Wire to Sentry/PostHog from src/utils/logger.ts
-    // when ready — no call-site change needed.
+    // Log error via in-memory logger (console + ring buffer).
+    // To enable Sentry integration: wire logger.error to Sentry.captureException
+    // when a real VITE_SENTRY_DSN is configured.
     logger.error(
       error.message,
       { stack: error.stack, componentStack: info.componentStack },
