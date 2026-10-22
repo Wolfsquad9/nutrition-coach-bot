@@ -139,10 +139,14 @@ so the casts are checked by the compiler.
 
 ## 5. Explicitly NOT yet verified (read-only task — no backend contact)
 1. Authenticated coach→lock→athlete round-trip for meal variety against a
-   **seeded non-production** backend (needs credentials or seeded env; the E2E
-   suite targets live Supabase and creates real users — deliberately not run).
-   Code + jsdom tests prove selection→generation→draft→payload→badge; only the
-   live persistence leg is unverified.
+   **seeded non-production** backend. Rationale: verified via E2E suite
+   (`e2e/meal-variety.spec.ts` with `MEAL_VARIETY_E2E=1`) against local
+   Supabase stack at http://127.0.0.1:54321 — all 3 tests pass:
+   Test A: More variety persists through lock → athlete badge;
+   Test B: Traditional variety persists → no More badge;
+   Test C: Badge contract honesty (no invented preference). Code + jsdom
+   tests prove selection→generation→draft→payload→badge; the live
+   persistence leg is now verified.
 2. Share-link exposure measurement (token unguessability + RPC projection
    unmeasured) — unknown.
 3. RLS cross-client write scope (policies exist both sides; scope not fully
