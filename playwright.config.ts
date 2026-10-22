@@ -9,6 +9,14 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env' });
 dotenv.config({ path: '.env.local' });
 
+// Load `.env.test.local` only when MEAL_VARIETY_E2E=1 so the
+// meal-variety E2E suite targets the local Supabase stack. Without the
+// flag the normal `.env` + `.env.local` config is left intact for all
+// other tests and dev runs.
+if (process.env.MEAL_VARIETY_E2E === '1') {
+  dotenv.config({ path: '.env.test.local', override: true });
+}
+
 /**
  * Playwright E2E config for the coach flow.
  *
