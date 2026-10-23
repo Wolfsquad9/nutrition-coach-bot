@@ -52,11 +52,87 @@ jobs:
       - name: Database Bootstrap Verification
         run: npm run db:verify
 
-  # Phase 12: the canonical E2E suite previously escaped CI entirely. Run it
-  # against the real Supabase project with the publishable/anon identity only
-  # (never service credentials). Test users are tagged e2e-test-* and cleaned
-  # up by the suite's cleanup fixtures + the guarded e2e_force_delete_test_user
-  # RPC (regex-locked to the e2e-test- prefix).
+  # --- NEW: Isolated local Supabase E2E job ---
+  # This job starts a local Supabase stack via the supabase CLI,
+  # applies the repository's migrations, and runs the meal-variety
+  # E2E tests with MEAL_VARIETY_E2E=1. It does NOT use hosted Supabase
+  # or any production credentials. The loopback guard in
+  # e2e/helpers/supabase.ts enforce-loopback-only; non-loopback hosts
+  # are rejected before any auth/mutation/cleanup executes.
+  e2e-local-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # The meal-variety E2E flag arms the fail-closed loopback guard.
+      # Without this, the guard permits the normal (.env + .env.local) config
+      # and the tests are skipped (guarded by MEAL_VARIETY_E2E in the spec).
+      MEAL_VARIETY_E2E: '1'
+      # VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are obtained from the
+      # running local Supabase instance and exported via $GITHUB_ENV in the
+      # "Export Supabase credentials" step below. .env.test.local is gitignored
+      # and will not exist on CI runners; the values from $GITHUB_ENV take
+      # precedence when .env.test.local is absent.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install supabase CLI
+        run: npm i -g supabase
+
+      - name: Start local Supabase stack
+        run: supabase start --no-open
+
+      - name: Export Supabase credentials
+        run: |
+          # supabase status --output=env prints key=value pairs for the local stack
+          # Map Supabase CLI names to the app's expected VITE_* env var names
+          supabase status --output=env > .supabase.env
+          URL=$(grep -E '^(API_URL|SUPABASE_URL)=' .supabase.env | head -1 | cut -d= -f2-)
+          KEY=$(grep -E '^(ANON_KEY|SUPABASE_ANON_KEY)=' .supabase.env | head -1 | cut -d= -f2-)
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "Missing Supabase credentials from local stack"
+            exit 1
+          fi
+          echo "VITE_SUPABASE_URL=$URL" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_ANON_KEY=$KEY" >> $GITHUB_ENV
+
+      - name: Apply migrations and seed data
+        run: |
+          supabase migration up
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run meal-variety E2E tests
+        # The MEAL_VARIETY_E2E=1 flag causes playwright.config.ts to load
+        # .env.test.local if present; VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY
+        # from $GITHUB_ENV take precedence when .env.test.local is absent (CI).
+        # The loopback guard in e2e/helpers/supabase.ts passes (rejecting any
+        # remote host before auth/mutation/cleanup), and the test suite executes
+        # instead of skipping.
+        run: MEAL_VARIETY_E2E=1 npx playwright test e2e/meal-variety.spec.ts
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-local-supabase-report
+          path: .tmp/
+          retention-days: 7
+
+  # Existing hosted-Supabase E2E job — kept completely separate.
+  # Never sets MEAL_VARIETY_E2E, never reuses these credentials for the
+  # local job, and the loopback guard ensures non-loopback targets are
+  # rejected before any network auth/mutation/cleanup executes.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
