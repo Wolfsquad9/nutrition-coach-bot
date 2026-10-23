@@ -89,7 +89,7 @@ jobs:
         run: npm i -g supabase
 
       - name: Start local Supabase stack
-        run: supabase start --no-open
+        run: supabase start
 
       - name: Export Supabase credentials
         run: |
