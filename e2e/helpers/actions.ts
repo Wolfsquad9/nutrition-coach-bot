@@ -20,6 +20,23 @@ export async function loginAsCoach(
   password: string = TEST_PASSWORD
 ): Promise<void> {
   await page.goto('/login');
+  // /login redirects away when already authenticated. Only treat as
+  // "already logged in" if we land on a protected coach route — not an
+  // arbitrary redirect (error page, etc.).
+  // page.url() returns an absolute URL (e.g. http://localhost:8080/clients/123),
+  // so parse the pathname before matching.
+  if (!page.url().includes('/login')) {
+    const pathname = new URL(page.url()).pathname;
+    const authenticatedRoute =
+      pathname.startsWith('/clients/') || pathname === '/';
+    if (authenticatedRoute) {
+      await waitForNoSpinner(page, 10_000);
+      return;
+    }
+    throw new Error(
+      `[loginAsCoach] redirected from /login to unexpected page: ${page.url()}`
+    );
+  }
   await expect(page.getByRole('heading', { name: APP_HEADING })).toBeVisible();
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
@@ -35,8 +52,40 @@ export async function signUpAsCoach(
   email: string,
   password: string = TEST_PASSWORD
 ): Promise<void> {
+  // Capture console/page errors from navigation onward so CI failures are
+  // actionable even if the page never renders the expected heading.
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      consoleErrors.push(msg.text());
+    }
+  });
+  page.on('pageerror', (err) => {
+    pageErrors.push(err.message);
+  });
+
   await page.goto('/signup');
-  await expect(page.getByRole('heading', { name: APP_HEADING })).toBeVisible();
+  try {
+    await expect(page.getByRole('heading', { name: APP_HEADING })).toBeVisible();
+  } catch (err) {
+    // Capture diagnostics before re-throwing so CI failures are actionable.
+    const url = page.url();
+    const title = await page.title().catch(() => '<unavailable>');
+    const bodyText = await page
+      .locator('body')
+      .textContent()
+      .catch(() => '<unavailable>');
+    console.error(
+      `[signUpAsCoach] heading '${APP_HEADING}' not visible on /signup\n` +
+        `  URL: ${url}\n` +
+        `  Title: ${title}\n` +
+        `  Body text (first 500 chars): ${bodyText.slice(0, 500)}\n` +
+        `  Console errors: ${JSON.stringify(consoleErrors)}\n` +
+        `  Page errors: ${JSON.stringify(pageErrors)}`
+    );
+    throw err;
+  }
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await expect(page.getByRole('button', { name: /Sign up/i })).toBeEnabled();
