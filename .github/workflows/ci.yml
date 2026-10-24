@@ -126,7 +126,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-local-supabase-report
-          path: .tmp/
+          path: |
+            test-results/
+            playwright-report/
+            .tmp/
           retention-days: 7
 
   # Existing hosted-Supabase E2E job — kept completely separate.
