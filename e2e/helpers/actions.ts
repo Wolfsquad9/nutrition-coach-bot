@@ -20,6 +20,20 @@ export async function loginAsCoach(
   password: string = TEST_PASSWORD
 ): Promise<void> {
   await page.goto('/login');
+  // /login redirects away when already authenticated. Only treat as
+  // "already logged in" if we land on a protected coach route — not an
+  // arbitrary redirect (error page, etc.).
+  if (!page.url().includes('/login')) {
+    const authenticatedRoute =
+      page.url().startsWith('/clients/') || page.url() === '/';
+    if (authenticatedRoute) {
+      await waitForNoSpinner(page, 10_000);
+      return;
+    }
+    throw new Error(
+      `[loginAsCoach] redirected from /login to unexpected page: ${page.url()}`
+    );
+  }
   await expect(page.getByRole('heading', { name: APP_HEADING })).toBeVisible();
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
