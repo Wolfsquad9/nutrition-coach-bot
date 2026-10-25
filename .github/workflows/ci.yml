@@ -52,11 +52,126 @@ jobs:
       - name: Database Bootstrap Verification
         run: npm run db:verify
 
-  # Phase 12: the canonical E2E suite previously escaped CI entirely. Run it
-  # against the real Supabase project with the publishable/anon identity only
-  # (never service credentials). Test users are tagged e2e-test-* and cleaned
-  # up by the suite's cleanup fixtures + the guarded e2e_force_delete_test_user
-  # RPC (regex-locked to the e2e-test- prefix).
+  # --- NEW: Isolated local Supabase E2E job ---
+  # This job starts a local Supabase stack via the supabase CLI,
+  # applies the repository's migrations, and runs the meal-variety
+  # E2E tests with MEAL_VARIETY_E2E=1. It does NOT use hosted Supabase
+  # or any production credentials. The loopback guard in
+  # e2e/helpers/supabase.ts enforce-loopback-only; non-loopback hosts
+  # are rejected before any auth/mutation/cleanup executes.
+  e2e-local-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # The meal-variety E2E flag arms the fail-closed loopback guard.
+      # Without this, the guard permits the normal (.env + .env.local) config
+      # and the tests are skipped (guarded by MEAL_VARIETY_E2E in the spec).
+      MEAL_VARIETY_E2E: '1'
+      # VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are obtained from the
+      # running local Supabase instance and exported via $GITHUB_ENV in the
+      # "Export Supabase credentials" step below. .env.test.local is gitignored
+      # and will not exist on CI runners; the values from $GITHUB_ENV take
+      # precedence when .env.test.local is absent.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install supabase CLI
+        run: npm i -g supabase
+
+      - name: Start local Supabase stack
+        run: supabase start
+
+      - name: Export Supabase credentials
+        run: |
+          # supabase status --output=env prints key=value pairs for the local stack
+          # Map Supabase CLI names to the app's expected VITE_* env var names
+          supabase status --output=env > .supabase.env
+          # Shell URL/KEY assignments removed; Python is the single source of truth.
+          python3 - <<'PY'
+          import os, sys
+          from urllib.parse import urlsplit
+          def get_val(prefix):
+              with open('.supabase.env') as f:
+                  for line in f:
+                      line = line.strip()
+                      if line.startswith(prefix + '='):
+                          val = line.split('=', 1)[1]
+                          if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                              val = val[1:-1]
+                          return val.strip()
+              return None
+          url = get_val('API_URL') or get_val('SUPABASE_URL')
+          key = get_val('ANON_KEY') or get_val('SUPABASE_ANON_KEY')
+          if not url or not key:
+              print("Missing Supabase credentials from local stack", file=sys.stderr)
+              sys.exit(1)
+          try:
+              parsed = urlsplit(url)
+          except ValueError:
+              print("Invalid Supabase URL: could not parse URL", file=sys.stderr)
+              sys.exit(1)
+          if not parsed.netloc or not parsed.hostname:
+              print("Invalid Supabase URL: missing hostname or netloc", file=sys.stderr)
+              sys.exit(1)
+          if parsed.scheme not in ('http', 'https'):
+              print(f"Invalid Supabase URL scheme (must be http or https): {parsed.scheme}", file=sys.stderr)
+              sys.exit(1)
+          if parsed.hostname not in ('127.0.0.1', 'localhost', '::1'):
+              print(f"Invalid Supabase URL hostname (must be loopback: 127.0.0.1, localhost, or ::1): {parsed.hostname}", file=sys.stderr)
+              sys.exit(1)
+          if parsed.username or parsed.password:
+              print("Invalid Supabase URL: embedded credentials not allowed", file=sys.stderr)
+              sys.exit(1)
+          if parsed.port is not None and not (1 <= parsed.port <= 65535):
+              print(f"Invalid Supabase URL port: {parsed.port}", file=sys.stderr)
+              sys.exit(1)
+          print(f"Supabase local stack: {parsed.scheme}://{parsed.hostname}")
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f"VITE_SUPABASE_URL={url}\n")
+              f.write(f"VITE_SUPABASE_ANON_KEY={key}\n")
+          PY
+
+      - name: Apply migrations and seed data
+        run: |
+          supabase migration up
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run meal-variety E2E tests
+        # The MEAL_VARIETY_E2E=1 flag causes playwright.config.ts to load
+        # .env.test.local if present; VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY
+        # from $GITHUB_ENV take precedence when .env.test.local is absent (CI).
+        # The loopback guard in e2e/helpers/supabase.ts passes (rejecting any
+        # remote host before auth/mutation/cleanup), and the test suite executes
+        # instead of skipping.
+        run: MEAL_VARIETY_E2E=1 npx playwright test e2e/meal-variety.spec.ts
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-local-supabase-report
+          path: |
+            test-results/
+            playwright-report/
+            .tmp/
+          retention-days: 7
+
+  # Existing hosted-Supabase E2E job — kept completely separate.
+  # Never sets MEAL_VARIETY_E2E, never reuses these credentials for the
+  # local job, and the loopback guard ensures non-loopback targets are
+  # rejected before any network auth/mutation/cleanup executes.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
