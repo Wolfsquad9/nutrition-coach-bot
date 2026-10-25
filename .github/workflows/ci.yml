@@ -96,14 +96,50 @@ jobs:
           # supabase status --output=env prints key=value pairs for the local stack
           # Map Supabase CLI names to the app's expected VITE_* env var names
           supabase status --output=env > .supabase.env
-          URL=$(grep -E '^(API_URL|SUPABASE_URL)=' .supabase.env | head -1 | cut -d= -f2-)
-          KEY=$(grep -E '^(ANON_KEY|SUPABASE_ANON_KEY)=' .supabase.env | head -1 | cut -d= -f2-)
-          if [ -z "$URL" ] || [ -z "$KEY" ]; then
-            echo "Missing Supabase credentials from local stack"
-            exit 1
-          fi
-          echo "VITE_SUPABASE_URL=$URL" >> $GITHUB_ENV
-          echo "VITE_SUPABASE_ANON_KEY=$KEY" >> $GITHUB_ENV
+          # Shell URL/KEY assignments removed; Python is the single source of truth.
+          python3 - <<'PY'
+          import os, sys
+          from urllib.parse import urlsplit
+          def get_val(prefix):
+              with open('.supabase.env') as f:
+                  for line in f:
+                      line = line.strip()
+                      if line.startswith(prefix + '='):
+                          val = line.split('=', 1)[1]
+                          if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                              val = val[1:-1]
+                          return val.strip()
+              return None
+          url = get_val('API_URL') or get_val('SUPABASE_URL')
+          key = get_val('ANON_KEY') or get_val('SUPABASE_ANON_KEY')
+          if not url or not key:
+              print("Missing Supabase credentials from local stack", file=sys.stderr)
+              sys.exit(1)
+          try:
+              parsed = urlsplit(url)
+          except ValueError:
+              print("Invalid Supabase URL: could not parse URL", file=sys.stderr)
+              sys.exit(1)
+          if not parsed.netloc or not parsed.hostname:
+              print("Invalid Supabase URL: missing hostname or netloc", file=sys.stderr)
+              sys.exit(1)
+          if parsed.scheme not in ('http', 'https'):
+              print(f"Invalid Supabase URL scheme (must be http or https): {parsed.scheme}", file=sys.stderr)
+              sys.exit(1)
+          if parsed.hostname not in ('127.0.0.1', 'localhost', '::1'):
+              print(f"Invalid Supabase URL hostname (must be loopback: 127.0.0.1, localhost, or ::1): {parsed.hostname}", file=sys.stderr)
+              sys.exit(1)
+          if parsed.username or parsed.password:
+              print("Invalid Supabase URL: embedded credentials not allowed", file=sys.stderr)
+              sys.exit(1)
+          if parsed.port is not None and not (1 <= parsed.port <= 65535):
+              print(f"Invalid Supabase URL port: {parsed.port}", file=sys.stderr)
+              sys.exit(1)
+          print(f"Supabase local stack: {parsed.scheme}://{parsed.hostname}")
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f"VITE_SUPABASE_URL={url}\n")
+              f.write(f"VITE_SUPABASE_ANON_KEY={key}\n")
+          PY
 
       - name: Apply migrations and seed data
         run: |
