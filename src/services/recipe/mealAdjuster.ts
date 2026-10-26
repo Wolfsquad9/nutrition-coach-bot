@@ -93,7 +93,15 @@ export function adjustMealIngredients(
         
         // Apply science-based constraints
         const maxGrams = enhancedIng.maxPerMealGrams;
-        const minGrams = MIN_INGREDIENT_GRAMS;
+        // Use a role-aware minimum serving size to prevent token portions
+        // of primary protein in main meals (lunch, dinner). The universal 10g
+        // floor can produce implausibly small protein servings (e.g., 10g eggs at breakfast).
+        // For protein ingredients in main meals, use 20g minimum (2x the floor,
+        // well below the role-aware preferred range lower bound of 80g,
+        // preserving convergence headroom within the ±5% calorie tolerance).
+        const isProteinInMainMeal =
+          ingRole === 'protein' && (mealType === 'lunch' || mealType === 'dinner');
+        const minGrams = isProteinInMainMeal ? 20 : MIN_INGREDIENT_GRAMS;
         
         // Clamp to science-based bounds
         const newServing = Math.max(minGrams, Math.min(maxGrams, newServingRaw));
