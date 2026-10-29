@@ -48,8 +48,9 @@ export function generateFullDayMealPlan(
       const recipe = generateRecipe(selectedFoods, mealType, seed, options);
       
       // Scale ingredients to meet calorie target for this meal
-      const scaleFactor = recipe.macrosPerServing.calories > 0 
-        ? mealTargetCalories / recipe.macrosPerServing.calories 
+      const recipeCanonicalCalories = calculateTotalMacros(recipe.selectedIngredients).calories;
+      const scaleFactor = recipeCanonicalCalories > 0
+        ? mealTargetCalories / recipeCanonicalCalories
         : 1;
       
       // Clamp scale factor to reasonable range
