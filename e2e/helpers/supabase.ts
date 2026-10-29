@@ -52,19 +52,22 @@ export function getE2eSupabaseClient() {
   if (_e2eClient) return _e2eClient;
   const url = assertMealVarietyLoopbackTarget(process.env.VITE_SUPABASE_URL);
   // E2E cleanup RPCs delete from auth.users, which is RLS-restricted. An anon
-  // key cannot do this. Use the service_role key for the cleanup client —
-  // the trusted admin context that can bypass RLS. See the migration
-  // 20260730000000_e2e_rpc_remediation.sql for the privilege change.
+  // key cannot do this. The service_role key is the only valid credential for
+  // privileged cleanup. It must come from a serverside env var, never from a
+  // Vite client variable (VITE_* variables are embedded in browser bundles
+  // and exposed to the front end).
+  // FAIL-CLOSED: throw immediately on missing service-role key. There is no
+  // silent fallback to the anon key, because an anon key cannot execute
+  // privileged cleanup RPCs and would silently break cleanup.
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anonymousKey = process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || (!serviceRoleKey && !anonymousKey)) {
+  if (!url || !serviceRoleKey) {
     throw new Error(
-      'E2E cleanup requires VITE_SUPABASE_URL and either ' +
-        'SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY in env',
+      '[E2E cleanup] missing service role key: set SUPABASE_SERVICE_ROLE_KEY in the test environment ' +
+        '(e.g. .env.test.local). Running E2E cleanup without the service role ' +
+        'key is not supported.',
     );
   }
-  const key = serviceRoleKey ?? anonymousKey;
-  _e2eClient = createClient(url, key, {
+  _e2eClient = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return _e2eClient;
