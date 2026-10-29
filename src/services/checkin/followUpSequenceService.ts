@@ -145,6 +145,7 @@ async function sendFollowUp(
   }
 
   // 2. Queue WhatsApp via send-whatsapp edge function (if phone available)
+  let whatsappStatus: 'sent' | 'failed' | 'not_configured' = 'not_configured';
   if (client.phone) {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -167,34 +168,75 @@ async function sendFollowUp(
 
         if (!response.ok) {
           console.error('WhatsApp send failed:', await response.text());
+          whatsappStatus = 'failed';
+        } else {
+          const result = await response.json();
+          if (result.status === 'not_configured') {
+            whatsappStatus = 'not_configured';
+          } else if (result.success === true) {
+            whatsappStatus = 'sent';
+          } else {
+            whatsappStatus = 'failed';
+          }
         }
+      } else {
+        whatsappStatus = 'failed';
       }
     } catch (whatsappErr) {
       console.error('WhatsApp queue error:', whatsappErr);
+      whatsappStatus = 'failed';
     }
   }
 
-  // 3. Log to coach_alerts with type='follow_up_sent'
-  const { error: alertError } = await generateAlert({
-    client_id: clientId,
-    trainer_id: coachId,
-    alert_type: 'system',
-    severity: variant === 'escalation' ? 'red' : 'yellow',
-    title,
-    message,
-    metadata: {
-      variant,
-      follow_up_type: 'follow_up_sent',
-      client_name: clientName,
-      phone: client.phone,
-    },
-  });
+  // 3. Log to coach_alerts with type='follow_up_sent' ONLY when WhatsApp was
+  //    actually sent. When the provider is not_configured, log a distinct
+  //    alert so the coach sees that no message was delivered.
+  if (whatsappStatus !== 'not_configured') {
+    const { error: alertError } = await generateAlert({
+      client_id: clientId,
+      trainer_id: coachId,
+      alert_type: 'system',
+      severity: variant === 'escalation' ? 'red' : 'yellow',
+      title,
+      message,
+      metadata: {
+        variant,
+        follow_up_type: 'follow_up_sent',
+        client_name: clientName,
+        phone: client.phone,
+        whatsapp_status: whatsappStatus,
+      },
+    });
 
-  if (alertError) {
-    console.error('Failed to log follow-up alert:', alertError);
+    if (alertError) {
+      console.error('Failed to log follow-up alert:', alertError);
+    }
+  } else {
+    const { error: alertError } = await generateAlert({
+      client_id: clientId,
+      trainer_id: coachId,
+      alert_type: 'system',
+      severity: 'yellow',
+      title: 'Follow-up: WhatsApp not configured for ' + clientName,
+      message: 'A follow-up was triggered for ' + clientName + ', but WhatsApp is not configured. No message was sent.',
+      metadata: {
+        variant,
+        follow_up_type: 'follow_up_not_configured',
+        client_name: clientName,
+        phone: client.phone,
+        whatsapp_status: 'not_configured',
+      },
+    });
+
+    if (alertError) {
+      console.error('Failed to log follow-up alert:', alertError);
+    }
   }
 
-  return { success: true, error: null };
+  // The overall result reflects whether the follow-up was successfully delivered
+  // (in-app notification was always sent; WhatsApp status is tracked separately).
+  const success = whatsappStatus !== 'failed';
+  return { success, error: null };
 }
 
 // ---------------------------------------------------------------------------

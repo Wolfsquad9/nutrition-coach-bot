@@ -61,31 +61,18 @@ serve(async (req) => {
     }
     const { clientPhone, planData, planType } = parseResult.data;
 
-    // TODO: Integrate with Twilio or Make.com webhook
-    // For now, this is a skeleton endpoint
-    
-    console.log("WhatsApp send request:", {
-      userId,
-      phone: clientPhone,
-      planType: planType || "complete",
-      dataSize: JSON.stringify(planData).length
-    });
-
-    // Placeholder response
-    // Replace with actual Twilio/Make.com integration:
-    // const twilioResponse = await fetch("https://api.twilio.com/...", {
-    //   method: "POST",
-    //   headers: { ... },
-    //   body: JSON.stringify({ ... })
-    // });
-
+    // No WhatsApp provider is integrated in this codebase. There is no
+    // real delivery channel; the endpoint is a stub. Any client that calls
+    // this endpoint must treat the response as not_configured. The
+    // follow-up sequence must NOT record follow_up_sent based on this
+    // response.
     return new Response(
       JSON.stringify({
-        success: true,
-        message: "WhatsApp send endpoint ready for integration",
+        success: false,
+        status: "not_configured",
+        error: "no WhatsApp provider configured",
         clientPhone,
         planType: planType || "complete",
-        note: "Replace this with actual Twilio/Make.com webhook call"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
