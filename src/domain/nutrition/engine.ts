@@ -53,6 +53,7 @@ export interface NutritionProfileInput {
   activityLevel: ActivityLevel;
   primaryGoal: PrimaryGoal;
   weeklyWeightChange?: number;
+  trainingDaysPerWeek?: number;
 }
 
 /** Fully reconciled, rounded daily target produced by the engine. */
@@ -168,8 +169,12 @@ export const FAT_FLOOR_G_PER_KG = 0.6;
 export function resolveProteinPriority(
   primaryGoal: PrimaryGoal,
   activityLevel: ActivityLevel,
+  trainingDaysPerWeek?: number,
 ): ProteinPriority {
   if (primaryGoal === 'fat_loss') return 'priority';
+  if (trainingDaysPerWeek !== undefined && trainingDaysPerWeek >= 4) {
+    if (primaryGoal === 'muscle_gain') return 'priority';
+  }
   if (activityLevel === 'very_active' || activityLevel === 'extra_active') return 'priority';
   return 'normal';
 }
@@ -560,7 +565,7 @@ export function computeDailyTargets(input: NutritionProfileInput): DailyTarget {
   const bmr = calculateBMR(input.weightKg, input.heightCm, input.age, input.gender);
   const tdee = calculateTDEE(bmr, input.activityLevel);
   const targetCalories = calculateTargetCalories(tdee, input.primaryGoal, input.weeklyWeightChange);
-  const priority = resolveProteinPriority(input.primaryGoal, input.activityLevel);
+  const priority = resolveProteinPriority(input.primaryGoal, input.activityLevel, input.trainingDaysPerWeek);
   return reconcileTarget(targetCalories, input.weightKg, priority);
 }
 
@@ -730,7 +735,7 @@ export function resolveNutritionDecision(input: NutritionProfileInput): Nutritio
   const floorBoundActive = preFloorTarget < MIN_TARGET_KCAL;
   const capBoundActive = preFloorTarget > MAX_TARGET_KCAL;
 
-  const priority = resolveProteinPriority(input.primaryGoal, input.activityLevel);
+  const priority = resolveProteinPriority(input.primaryGoal, input.activityLevel, input.trainingDaysPerWeek);
   const daily = reconcileTarget(targetCalories, input.weightKg, priority);
   const waterLiters = calculateWaterIntake(input.weightKg, input.activityLevel);
 
@@ -847,6 +852,7 @@ export function calculateNutritionMetrics(client: Client): NutritionMetrics {
     activityLevel: client.activityLevel,
     primaryGoal: client.primaryGoal,
     weeklyWeightChange: client.weeklyWeightChange,
+    trainingDaysPerWeek: client.trainingDaysPerWeek,
   };
   return calculateProfile(input);
 }
@@ -865,6 +871,7 @@ export function buildNutritionProfileInput(client: Client): NutritionProfileInpu
     activityLevel: client.activityLevel,
     primaryGoal: client.primaryGoal,
     weeklyWeightChange: client.weeklyWeightChange,
+    trainingDaysPerWeek: client.trainingDaysPerWeek,
   };
 }
 

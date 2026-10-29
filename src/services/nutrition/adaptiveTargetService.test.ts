@@ -163,6 +163,7 @@ describe('canonical engine is the single production target source', () => {
       activityLevel: CLIENT.activityLevel,
       primaryGoal: CLIENT.primaryGoal,
       weeklyWeightChange: CLIENT.weeklyWeightChange,
+      trainingDaysPerWeek: CLIENT.trainingDaysPerWeek,
     });
   });
 
