@@ -177,6 +177,27 @@ describe('buildGroceryListFromPlan', () => {
   });
 });
 
+describe('mapWeeklyMealPlanToSnapshot — ingredient calorie consistency', () => {
+  it('uses canonical 4-4-9 derived calories for macrosPer100g, not the stored ingredient calories field', () => {
+    // chicken-breast stored calories = 165, but 31*4 + 0*4 + 3.6*9 = 156.4
+    // The stored value diverges from macro-derived; the snapshot must use canonical.
+    const dailyPlan: DailyMealPlan = {
+      breakfast: emptyMeal,
+      lunch: makeMealData([chicken], 'Grilled chicken'),
+      dinner: emptyMeal,
+      snack: emptyMeal,
+    };
+    const weekly = buildWeeklyPlan([buildDay(1, dailyPlan)]);
+    const result = mapWeeklyMealPlanToSnapshot(weekly);
+
+    const ingredient = result[0].meals[0].recipes[0].recipe.ingredients[0];
+    const derived = chicken.macros.protein * 4 + chicken.macros.carbs * 4 + chicken.macros.fat * 9;
+    expect(ingredient.macrosPer100g.calories).toBeCloseTo(derived, 4);
+    // Explicitly not equal to the stored (divergent) value
+    expect(ingredient.macrosPer100g.calories).not.toBe(chicken.macros.calories);
+  });
+});
+
 describe('mapSnapshotToWeeklyPlan', () => {
   it('reconstructs weekly TARGET as 7x daily and TOTAL as the sum of day totals', () => {
     // Three days with distinct totals. A "single day == weekly" bug (the old

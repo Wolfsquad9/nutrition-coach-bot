@@ -16,7 +16,7 @@ import type {
   GroceryItem,
 } from '@/types';
 import type { MealData, MealTimeType, IngredientData } from '@/data/ingredientDatabase';
-import { sumMacros, DAYS_PER_WEEK } from '@/domain/nutrition/engine';
+import { sumMacros, caloriesFromMacros, DAYS_PER_WEEK } from '@/domain/nutrition/engine';
 
 const MEAL_ORDER: MealTimeType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -42,7 +42,11 @@ function mapMealDataToMeal(
     unit: 'g',
     category: mapIngredientCategory(ing.category),
     macrosPer100g: {
-      calories: ing.macros.calories,
+      calories: caloriesFromMacros({
+        protein: ing.macros.protein,
+        carbs: ing.macros.carbs,
+        fat: ing.macros.fat,
+      }),
       protein: ing.macros.protein,
       carbs: ing.macros.carbs,
       fat: ing.macros.fat,

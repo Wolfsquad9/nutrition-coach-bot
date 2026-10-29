@@ -1620,9 +1620,10 @@ describe('PHASE 9 · legacy ingredient calories never regain authority (Task 8)'
     const meals = mapWeeklyMealPlanToSnapshot(weeklyPlan);
     expect(meals).toHaveLength(1);
     const lunch = meals[0].meals[0];
-    // Ingredient grams survive the mapping unchanged (incl. legacy metadata):
+    // Ingredient per-100g calories now use canonical 4-4-9 derivation, not the
+    // stored legacy field (which diverges: 100 ≠ 7*4+60*4+1*9 = 277, 5 ≠ 20*9 = 180):
     expect(lunch.recipes[0].recipe.ingredients.map((i) => i.macrosPer100g.calories)).toEqual([
-      100, 5,
+      277, 180,
     ]);
     // Meal totals remain the canonical aggregation of those grams:
     expect(lunch.recipes[0].adjustedMacros.calories).toBe(mealMacros.calories);
