@@ -51,12 +51,19 @@ export function assertMealVarietyLoopbackTarget(rawUrl: string | undefined): str
 export function getE2eSupabaseClient() {
   if (_e2eClient) return _e2eClient;
   const url = assertMealVarietyLoopbackTarget(process.env.VITE_SUPABASE_URL);
-  const key = process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) {
+  // E2E cleanup RPCs delete from auth.users, which is RLS-restricted. An anon
+  // key cannot do this. Use the service_role key for the cleanup client —
+  // the trusted admin context that can bypass RLS. See the migration
+  // 20260730000000_e2e_rpc_remediation.sql for the privilege change.
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonymousKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || (!serviceRoleKey && !anonymousKey)) {
     throw new Error(
-      'E2E cleanup requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in env'
+      'E2E cleanup requires VITE_SUPABASE_URL and either ' +
+        'SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY in env',
     );
   }
+  const key = serviceRoleKey ?? anonymousKey;
   _e2eClient = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
