@@ -24,14 +24,16 @@ function getFollowUpStatus(alert: CoachAlert): { label: string; variant: 'defaul
   const meta = alert.metadata as Record<string, unknown>;
   const followUpType = meta.follow_up_type as string | undefined;
   if (!followUpType) return null;
+
+  // Check whatsapp_status first — a failed delivery must not be shown as sent
+  const whatsappStatus = meta.whatsapp_status as string | undefined;
+  if (followUpType === 'follow_up_sent' && whatsappStatus === 'failed') {
+    return { label: 'Failed', variant: 'destructive' };
+  }
+
   const config = followUpStatusConfig[followUpType];
   if (config) return config;
-  // Fallback for unknown follow-up types
-  if (followUpType === 'follow_up_sent') {
-    const status = meta.whatsapp_status as string | undefined;
-    if (status === 'failed') return { label: 'Failed', variant: 'destructive' };
-    if (status === 'sent') return { label: 'Sent', variant: 'secondary' };
-  }
+
   return null;
 }
 
