@@ -352,6 +352,18 @@ export function useNutritionPlanState() {
         return { success: false, error: "No draft to lock" };
       }
 
+      // Defensive check: block locking for infeasible nutrition targets.
+      // When protein + fat kcal exceed the calorie target, the engine flags
+      // the target as infeasible (isFeasible === false). Locking such a plan
+      // would persist nutritionally invalid data for the athlete.
+      const draftMetrics = clientMetricsRef.current;
+      if (draftMetrics?.isFeasible === false) {
+        return {
+          success: false,
+          error: "Infeasible nutrition target: the calculated calorie target cannot accommodate the required protein and fat allocation. Adjust the client profile or weight-change goal before generating.",
+        };
+      }
+
       const attempt = retryAttempt ?? createLockAttempt();
       const lockRequest = (async () => {
         setUiState("SAVING");

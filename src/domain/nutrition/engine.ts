@@ -623,6 +623,7 @@ export function calculateProfile(input: NutritionProfileInput): NutritionMetrics
     fatGrams: decision.macros.fatGrams,
     fiberGrams: decision.nutrition.fiberGrams,
     waterLiters: decision.nutrition.waterLiters,
+    isFeasible: decision.feasibility.isFeasible,
   };
 }
 

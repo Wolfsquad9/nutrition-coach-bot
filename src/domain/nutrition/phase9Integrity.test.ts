@@ -1713,7 +1713,10 @@ describe('PHASE 9 · engine behaves deterministically at the validation edges', 
   it('minimum and maximum valid bodyweight produce finite, non-negative output', () => {
     for (const weightKg of [MIN_WEIGHT_KG, MAX_WEIGHT_KG]) {
       const metrics = calculateProfile({ ...PROFILE_INPUT, weightKg });
-      for (const v of Object.values(metrics)) expect(Number.isFinite(v)).toBe(true);
+      for (const key of ['tdee', 'bmr', 'targetCalories', 'proteinGrams', 'carbsGrams', 'fatGrams', 'fiberGrams', 'waterLiters'] as const) {
+        expect(Number.isFinite(metrics[key])).toBe(true);
+      }
+      expect(typeof metrics.isFeasible).toBe('boolean');
       expect(metrics.proteinGrams).toBeGreaterThanOrEqual(0);
       expect(metrics.carbsGrams).toBeGreaterThanOrEqual(0);
       expect(metrics.fatGrams).toBeGreaterThanOrEqual(0);

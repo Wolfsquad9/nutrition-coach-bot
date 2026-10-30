@@ -162,10 +162,24 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
     const validation = ingredientValidation.validateForPlanType('daily');
     if (!validation.valid) return toast({ title: 'Not enough ingredients', description: validation.message, variant: 'destructive' });
 
+    const metrics = effectiveMetrics;
+    // Defensive check: block generation for infeasible nutrition targets.
+    // When protein + fat kcal exceed the calorie target, the engine flags
+    // the target as infeasible (isFeasible === false). Generating a meal
+    // plan from such a target would produce zero-carb, nutritionally
+    // invalid output. Block here and surface a clear error to the coach.
+    if (metrics?.isFeasible === false) {
+      toast({
+        title: 'Infeasible nutrition target',
+        description: 'The calculated calorie target cannot accommodate the required protein and fat allocation. Adjust the client profile or weight-change goal before generating.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsGeneratingDaily(true);
     try {
       const eligibleFoods = getEligibleIngredientIds();
-      const metrics = effectiveMetrics;
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,
@@ -200,12 +214,22 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
     const validation = ingredientValidation.validateForPlanType('weekly');
     if (!validation.valid) return toast({ title: 'Not enough ingredients', description: validation.message, variant: 'destructive' });
 
+    const metrics = effectiveMetrics;
+    // Defensive check: block generation for infeasible nutrition targets.
+    if (metrics?.isFeasible === false) {
+      toast({
+        title: 'Infeasible nutrition target',
+        description: 'The calculated calorie target cannot accommodate the required protein and fat allocation. Adjust the client profile or weight-change goal before generating.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsGeneratingWeekly(true);
     setDailyMealPlan(null);
 
     try {
       const eligibleFoods = getEligibleIngredientIds();
-      const metrics = effectiveMetrics;
       const macroTargets = {
         calories: metrics.targetCalories,
         protein: metrics.proteinGrams,

@@ -358,6 +358,7 @@ describe('calculateProfile (client -> NutritionMetrics)', () => {
       fatGrams: 48,
       fiberGrams: 30,
       waterLiters: 3,
+      isFeasible: true,
     });
   });
 

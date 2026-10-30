@@ -57,6 +57,13 @@ export interface NutritionMetrics {
   fatGrams: number;
   fiberGrams: number;
   waterLiters: number;
+  /**
+   * Whether the energy target can cover the prescribed protein target AND the
+   * fat floor. False when protein + fat kcal exceed the target (carbs reduced
+   * to zero). Undefined for legacy/historical snapshots that predate this
+   * field. Treat undefined as "not verified" — do not block on missing data.
+   */
+  isFeasible?: boolean;
 }
 
 export interface MacroTargets {
