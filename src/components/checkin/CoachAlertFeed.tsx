@@ -7,9 +7,33 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Info, CheckCircle, Eye } from 'lucide-react';
+import { Loader2, AlertTriangle, Info, CheckCircle, Eye, MessageSquare } from 'lucide-react';
 import { getCoachAlerts, markAlertRead, dismissAlert } from '@/services/checkin/alertService';
 import type { CoachAlert } from '@/types/checkin';
+
+// Status labels for follow-up alerts based on metadata.follow_up_type
+// and metadata.whatsapp_status. These ensure the coach sees a truthful
+// status, never a misleading success state.
+const followUpStatusConfig: Record<string, { label: string; variant: 'default' | 'destructive' | 'outline' | 'secondary' }> = {
+  follow_up_sent: { label: 'Sent (provider accepted)', variant: 'secondary' },
+  follow_up_not_configured: { label: 'Not configured', variant: 'outline' },
+};
+
+function getFollowUpStatus(alert: CoachAlert): { label: string; variant: 'default' | 'destructive' | 'outline' | 'secondary' } | null {
+  if (!alert.metadata || typeof alert.metadata !== 'object') return null;
+  const meta = alert.metadata as Record<string, unknown>;
+  const followUpType = meta.follow_up_type as string | undefined;
+  if (!followUpType) return null;
+  const config = followUpStatusConfig[followUpType];
+  if (config) return config;
+  // Fallback for unknown follow-up types
+  if (followUpType === 'follow_up_sent') {
+    const status = meta.whatsapp_status as string | undefined;
+    if (status === 'failed') return { label: 'Failed', variant: 'destructive' };
+    if (status === 'sent') return { label: 'Sent', variant: 'secondary' };
+  }
+  return null;
+}
 
 interface Props {
   trainerId: string;
@@ -94,6 +118,18 @@ export default function CoachAlertFeed({ trainerId, onNavigateToClient }: Props)
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                     {alert.message}
                   </p>
+                  {(() => {
+                    const status = getFollowUpStatus(alert);
+                    if (!status) return null;
+                    return (
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant={status.variant} className="text-xs">
+                          <MessageSquare className="h-3 w-3 mr-1" />
+                          {status.label}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
                   <div className="flex items-center gap-2 mt-2">
                     {!alert.read && (
                       <Button
