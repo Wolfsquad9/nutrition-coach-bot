@@ -160,7 +160,7 @@ jobs:
         # The loopback guard in e2e/helpers/supabase.ts passes (rejecting any
         # remote host before auth/mutation/cleanup), and the test suite executes
         # instead of skipping.
-        run: MEAL_VARIETY_E2E=1 npx playwright test e2e/meal-variety.spec.ts
+        run: MEAL_VARIETY_E2E=1 npx playwright test e2e/meal-variety.spec.ts e2e/nutrition-workflow.spec.ts
 
       - name: Upload Playwright report
         if: failure()
