@@ -125,6 +125,18 @@ const fakeMacros: MacroTargets = {
   fat: 75,
 };
 
+const canonicalMetrics = {
+  tdee: 2500,
+  bmr: 1800,
+  targetCalories: 2200,
+  proteinGrams: 165,
+  carbsGrams: 220,
+  fatGrams: 75,
+  fiberGrams: 30,
+  waterLiters: 3,
+  isFeasible: true,
+};
+
 const makeMealData = (name: string, cals: number) => ({
   ingredients: [
     {
@@ -243,7 +255,7 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
 
     // ── Step 2: Set draft plan ──
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs'], canonicalMetrics);
     });
 
     expect(result.current.lifecycleState).toBe('DRAFT');
@@ -343,7 +355,7 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken'], canonicalMetrics);
     });
 
     let lockResult: { success: boolean; error: string | null } = { success: true, error: null };
@@ -368,7 +380,7 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
 
     // ── Draft → Lock ──
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs'], canonicalMetrics);
     });
     expect(result.current.lifecycleState).toBe('DRAFT');
 
@@ -448,7 +460,7 @@ describe('Nutrition plan lifecycle: EMPTY → DRAFT → LOCKED → discard → r
 
     // ── Draft → Lock (first time) ──
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['chicken', 'eggs'], canonicalMetrics);
     });
 
     const lockedAtDate = new Date();

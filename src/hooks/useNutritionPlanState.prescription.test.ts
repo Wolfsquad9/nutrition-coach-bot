@@ -64,6 +64,18 @@ vi.mock('@/services/supabaseOverrideService', () => ({
 
 const macros: MacroTargets = { calories: 2209, protein: 160, carbs: 284, fat: 48 };
 
+const canonicalMetrics = {
+  tdee: 2759,
+  bmr: 1780,
+  targetCalories: 2209,
+  proteinGrams: 160,
+  carbsGrams: 284,
+  fatGrams: 48,
+  fiberGrams: 30,
+  waterLiters: 3,
+  isFeasible: true,
+};
+
 function makeWeeklyPlan(): WeeklyMealPlanResult {
   const emptyMealData = {
     ingredients: [],
@@ -240,7 +252,7 @@ describe('active prescription lifecycle', () => {
     // Draft A, B, C — none of them may touch the prescription basis.
     for (const rate of [-0.6363636363636364, -0.7, -0.5]) {
       act(() => {
-        result.current.setDraftPlan(makeWeeklyPlan(), macros, ['chicken'], undefined, {
+        result.current.setDraftPlan(makeWeeklyPlan(), macros, ['chicken'], canonicalMetrics, {
           weeklyRateKg: rate,
         });
       });
@@ -297,7 +309,7 @@ describe('lock establishes a new active prescription', () => {
         makeWeeklyPlan(),
         { ...macros, calories: 2059 },
         ['chicken'],
-        undefined,
+        canonicalMetrics,
         { weeklyRateKg: -0.6363636363636364 },
       );
     });
@@ -358,7 +370,7 @@ describe('lock establishes a new active prescription', () => {
     const before = JSON.stringify(result.current.activePrescription);
 
     act(() => {
-      result.current.setDraftPlan(makeWeeklyPlan(), macros, [], undefined, { weeklyRateKg: -0.8 });
+      result.current.setDraftPlan(makeWeeklyPlan(), macros, [], canonicalMetrics, { weeklyRateKg: -0.8 });
     });
     await act(async () => {
       await result.current.lockPlan('client-1', {

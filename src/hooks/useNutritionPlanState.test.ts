@@ -76,6 +76,19 @@ vi.mock('@/services/supabaseOverrideService', () => ({
 
 const fakeMacros: MacroTargets = { calories: 2000, protein: 150, carbs: 200, fat: 70 };
 
+const canonicalMetrics: NutritionMetrics = {
+  tdee: 2500,
+  bmr: 1800,
+  targetCalories: 2200,
+  proteinGrams: 165,
+  carbsGrams: 250,
+  fatGrams: 73,
+  fiberGrams: 30,
+  waterLiters: 3,
+  isFeasible: true,
+};
+
+
 const fakeMealData = {
   ingredients: [
     {
@@ -195,7 +208,7 @@ describe('lockPlan snapshot atomicity', () => {
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
 
     expect(result.current.isDraft).toBe(true);
@@ -218,7 +231,7 @@ describe('lockPlan snapshot atomicity', () => {
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
 
     let lockResult: { success: boolean; error: string | null } = { success: false, error: 'init' };
@@ -237,7 +250,7 @@ describe('lockPlan snapshot atomicity', () => {
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
 
     let lockResult: { success: boolean; error: string | null } = { success: true, error: null };
@@ -262,7 +275,7 @@ describe('lockPlan snapshot atomicity', () => {
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
 
     let firstLock: Promise<{ success: boolean; error: string | null }>;
@@ -288,7 +301,7 @@ describe('lockPlan snapshot atomicity', () => {
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
 
     await act(async () => {
@@ -376,7 +389,7 @@ describe('lockPlan snapshot atomicity', () => {
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
 
     expect(result.current.resolvedWeeklyPlan).toBe(fakeWeeklyPlan);
@@ -453,7 +466,7 @@ describe('lockPlan snapshot atomicity', () => {
 
     const { result } = renderHook(() => useNutritionPlanState());
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
 
     await act(async () => {
@@ -633,16 +646,6 @@ describe('lockPlan snapshot atomicity', () => {
 
     const { result } = renderHook(() => useNutritionPlanState());
 
-    const canonicalMetrics: NutritionMetrics = {
-      tdee: 2500,
-      bmr: 1800,
-      targetCalories: 2200,
-      proteinGrams: 165,
-      carbsGrams: 250,
-      fatGrams: 73,
-      fiberGrams: 30,
-      waterLiters: 3,
-    };
 
     act(() => {
       result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
@@ -710,7 +713,7 @@ describe('loadPlanForClient stale-load epoch (regression)', () => {
 
     // The coach generates a draft while the load is still pending.
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], canonicalMetrics);
     });
     expect(result.current.isDraft).toBe(true);
 

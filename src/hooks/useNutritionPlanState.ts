@@ -356,8 +356,10 @@ export function useNutritionPlanState() {
       // When protein + fat kcal exceed the calorie target, the engine flags
       // the target as infeasible (isFeasible === false). Locking such a plan
       // would persist nutritionally invalid data for the athlete.
+      // Missing feasibility (undefined/null) is treated the same way: no new
+      // plan may be locked when we cannot confirm the target is feasible.
       const draftMetrics = clientMetricsRef.current;
-      if (draftMetrics?.isFeasible === false) {
+      if (!draftMetrics?.isFeasible) {
         return {
           success: false,
           error: "Infeasible nutrition target: the calculated calorie target cannot accommodate the required protein and fat allocation. Adjust the client profile or weight-change goal before generating.",

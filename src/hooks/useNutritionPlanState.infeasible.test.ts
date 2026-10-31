@@ -111,32 +111,33 @@ describe('Infeasible nutrition target blocking', () => {
     expect(lockResult.error).toBeNull();
   });
 
-  it('allows lock when clientMetrics.isFeasible is undefined (legacy/historical)', async () => {
-    const legacyMetrics: NutritionMetrics = {
-      tdee: 2500,
-      bmr: 1800,
-      targetCalories: 2200,
-      proteinGrams: 165,
-      carbsGrams: 250,
-      fatGrams: 73,
+  it('blocks lock when clientMetrics.isFeasible is undefined (missing feasibility)', async () => {
+    const incompleteMetrics: NutritionMetrics = {
+      tdee: 2759,
+      bmr: 1780,
+      targetCalories: 2209,
+      proteinGrams: 160,
+      carbsGrams: 284,
+      fatGrams: 48,
       fiberGrams: 30,
       waterLiters: 3,
-      // isFeasible is undefined — should not block
+      // isFeasible deliberately undefined — should now be blocked
     };
 
     const { result } = renderHook(() => useNutritionPlanState());
 
     act(() => {
-      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], legacyMetrics);
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], incompleteMetrics);
     });
 
-    let lockResult: { success: boolean; error: string | null } = { success: false, error: 'init' };
+    let lockResult: { success: boolean; error: string | null } = { success: true, error: null };
     await act(async () => {
       lockResult = await result.current.lockPlan('client-1', fakeClientInfo);
     });
 
-    expect(lockResult.success).toBe(true);
-    expect(lockResult.error).toBeNull();
+    expect(lockResult.success).toBe(false);
+    expect(lockResult.error).toContain('Infeasible nutrition target');
+    expect(result.current.isLocked).toBe(false);
   });
 
   it('blocks lock when clientMetrics is null but macroTargets indicate infeasibility', async () => {
@@ -153,7 +154,52 @@ describe('Infeasible nutrition target blocking', () => {
       lockResult = await result.current.lockPlan('client-1', fakeClientInfo);
     });
 
-    // Should succeed when no metrics are provided (backward compat)
-    expect(lockResult.success).toBe(true);
+    // Missing feasibility must now be blocked (fail-closed)
+    expect(lockResult.success).toBe(false);
+  });
+  it('blocks lock when clientMetrics.isFeasible is undefined', async () => {
+    const incompleteMetrics: NutritionMetrics = {
+      tdee: 2759,
+      bmr: 1780,
+      targetCalories: 2209,
+      proteinGrams: 160,
+      carbsGrams: 284,
+      fatGrams: 48,
+      fiberGrams: 30,
+      waterLiters: 3,
+      // isFeasible deliberately undefined
+    };
+
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet'], incompleteMetrics);
+    });
+
+    let lockResult: { success: boolean; error: string | null } = { success: true, error: null };
+    await act(async () => {
+      lockResult = await result.current.lockPlan('client-1', fakeClientInfo);
+    });
+
+    expect(lockResult.success).toBe(false);
+    expect(lockResult.error).toContain('Infeasible nutrition target');
+    expect(result.current.isLocked).toBe(false);
+  });
+
+  it('blocks lock when clientMetrics is null', async () => {
+    const { result } = renderHook(() => useNutritionPlanState());
+
+    act(() => {
+      result.current.setDraftPlan(fakeWeeklyPlan, fakeMacros, ['poulet']);
+    });
+
+    let lockResult: { success: boolean; error: string | null } = { success: true, error: null };
+    await act(async () => {
+      lockResult = await result.current.lockPlan('client-1', fakeClientInfo);
+    });
+
+    expect(lockResult.success).toBe(false);
+    expect(lockResult.error).toContain('Infeasible nutrition target');
+    expect(result.current.isLocked).toBe(false);
   });
 });

@@ -163,12 +163,12 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
     if (!validation.valid) return toast({ title: 'Not enough ingredients', description: validation.message, variant: 'destructive' });
 
     const metrics = effectiveMetrics;
-    // Defensive check: block generation for infeasible nutrition targets.
-    // When protein + fat kcal exceed the calorie target, the engine flags
-    // the target as infeasible (isFeasible === false). Generating a meal
-    // plan from such a target would produce zero-carb, nutritionally
-    // invalid output. Block here and surface a clear error to the coach.
-    if (metrics?.isFeasible === false) {
+    // Defensive check: block generation for infeasible or unverifiable
+    // nutrition targets. When protein + fat kcal exceed the calorie target,
+    // the engine flags the target as infeasible (isFeasible === false).
+    // Missing feasibility (undefined/null) is treated the same way: no new
+    // plan may be generated when we cannot confirm the target is feasible.
+    if (!metrics?.isFeasible) {
       toast({
         title: 'Infeasible nutrition target',
         description: 'The calculated calorie target cannot accommodate the required protein and fat allocation. Adjust the client profile or weight-change goal before generating.',
@@ -215,8 +215,12 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
     if (!validation.valid) return toast({ title: 'Not enough ingredients', description: validation.message, variant: 'destructive' });
 
     const metrics = effectiveMetrics;
-    // Defensive check: block generation for infeasible nutrition targets.
-    if (metrics?.isFeasible === false) {
+    // Defensive check: block generation for infeasible or unverifiable
+    // nutrition targets. When protein + fat kcal exceed the calorie target,
+    // the engine flags the target as infeasible (isFeasible === false).
+    // Missing feasibility (undefined/null) is treated the same way: no new
+    // plan may be generated when we cannot confirm the target is feasible.
+    if (!metrics?.isFeasible) {
       toast({
         title: 'Infeasible nutrition target',
         description: 'The calculated calorie target cannot accommodate the required protein and fat allocation. Adjust the client profile or weight-change goal before generating.',
