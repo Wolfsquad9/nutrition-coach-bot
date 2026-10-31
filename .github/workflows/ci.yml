@@ -112,8 +112,12 @@ jobs:
               return None
           url = get_val('API_URL') or get_val('SUPABASE_URL')
           key = get_val('ANON_KEY') or get_val('SUPABASE_ANON_KEY')
+          service_role_key = get_val('SERVICE_ROLE_KEY') or get_val('SUPABASE_SERVICE_ROLE_KEY')
           if not url or not key:
               print("Missing Supabase credentials from local stack", file=sys.stderr)
+              sys.exit(1)
+          if not service_role_key:
+              print("Missing SERVICE_ROLE_KEY from local Supabase stack", file=sys.stderr)
               sys.exit(1)
           try:
               parsed = urlsplit(url)
@@ -139,6 +143,7 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as f:
               f.write(f"VITE_SUPABASE_URL={url}\n")
               f.write(f"VITE_SUPABASE_ANON_KEY={key}\n")
+              f.write(f"SUPABASE_SERVICE_ROLE_KEY={service_role_key}\n")
           PY
 
       - name: Apply migrations and seed data
@@ -179,6 +184,7 @@ jobs:
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -189,6 +195,14 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
+
+      - name: "Preflight: verify service role secret exists"
+        run: |
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::Missing SUPABASE_SERVICE_ROLE_KEY secret. Configure it in repository secrets."
+            exit 1
+          fi
+          echo "SUPABASE_SERVICE_ROLE_KEY is configured"
 
       - name: Install dependencies
         run: npm ci
