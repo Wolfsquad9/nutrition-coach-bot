@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getMealCompletions, type MealCompletion } from '@/services/checkin/mealCompletionService';
 import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanState';
 import { useAdaptiveNutritionTarget } from '@/hooks/useAdaptiveNutritionTarget';
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
@@ -81,6 +82,48 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const { toast } = useToast();
 
   const planState = useNutritionPlanState();
+
+  // Meal completions for coach view
+  const [mealCompletions, setMealCompletions] = useState<MealCompletion[]>([]);
+  const [mealCompletionsLoading, setMealCompletionsLoading] = useState(false);
+  const [mealCompletionsError, setMealCompletionsError] = useState<string | null>(null);
+
+  // Fetch meal completions when the plan changes or client changes
+  useEffect(() => {
+    if (!planState.versionId) {
+      setMealCompletions([]);
+      setMealCompletionsLoading(false);
+      setMealCompletionsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setMealCompletionsLoading(true);
+    setMealCompletionsError(null);
+
+    getMealCompletions(activeClientId, planState.versionId)
+      .then((result) => {
+        if (cancelled) return;
+        setMealCompletions(result.completions ?? []);
+        setMealCompletionsLoading(false);
+        if (result.error) setMealCompletionsError(result.error);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMealCompletionsError(err instanceof Error ? err.message : 'Failed to load meal completions');
+        setMealCompletionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeClientId, planState.versionId]);
+
+  // Load the plan when the client changes
+  useEffect(() => {
+    if (planState.isLoading) return;
+    planState.loadPlanForClient(activeClientId);
+  }, [activeClientId]);
 
   /**
    * Eligibility boundary — the single source of truth for which ingredients may
