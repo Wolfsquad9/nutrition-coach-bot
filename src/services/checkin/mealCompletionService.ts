@@ -33,6 +33,11 @@ export async function upsertMealCompletion(
   input: UpsertMealCompletionInput
 ): Promise<{ completion: MealCompletion | null; error: string | null }> {
   try {
+    // Validate input: client_id and plan_version_id must be provided
+    if (!input.client_id || !input.plan_version_id) {
+      return { completion: null, error: 'Client and plan version are required' };
+    }
+
     const { data, error } = await supabase
       .from('meal_completions')
       .upsert(

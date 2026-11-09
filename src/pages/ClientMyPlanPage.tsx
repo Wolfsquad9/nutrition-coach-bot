@@ -100,14 +100,21 @@ export default function ClientMyPlanPage() {
 
   const handleToggleCompletion = useCallback(async (dayOffset: number, mealSlot: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
     if (!clientId || !versionId) return;
-    await upsertMealCompletion({
+
+    const upsertResult = await upsertMealCompletion({
       client_id: clientId,
       plan_version_id: versionId,
       day_offset: dayOffset,
       meal_slot: mealSlot,
       completed: !isMealCompleted(dayOffset, mealSlot),
     });
-    // Reload completions
+
+    if (upsertResult.error) {
+      setError(upsertResult.error);
+      return;
+    }
+
+    // Reload completions only on successful upsert
     const result = await getMealCompletions(clientId, versionId);
     if (result.completions) setMealCompletions(result.completions);
   }, [clientId, versionId, mealCompletions]);
