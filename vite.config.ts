@@ -44,4 +44,12 @@ server: {
       },
     },
   },
+  // Inject Vercel's build-time VERCEL_ENV as a client-visible constant.
+  // Vite only exposes VITE_* prefixed variables via import.meta.env, so
+  // VERCEL_ENV (set authoritatively by Vercel during builds) must be
+  // injected explicitly via define. Only the environment classification
+  // is exposed — no secrets or unrelated variables.
+  define: {
+    __VERCEL_ENV__: JSON.stringify(process.env.VERCEL_ENV ?? ''),
+  },
 }));

@@ -29,6 +29,42 @@ export interface UpsertMealCompletionInput {
   completed: boolean;
 }
 
+/**
+ * Temporary diagnostic gate.
+ *
+ * Enabled when:
+ *   - Local development (import.meta.env.DEV === true) AND
+ *     VITE_MEAL_COMPLETION_DEBUG === '1', OR
+ *   - A Vercel Preview build (__VERCEL_ENV__ === 'preview') AND
+ *     VITE_MEAL_COMPLETION_DEBUG === '1'
+ *
+ * Disabled in all other environments, including Vercel Production.
+ *
+ * __VERCEL_ENV__ is injected at build time by Vite's define from
+ * process.env.VERCEL_ENV, which Vercel sets authoritatively during
+ * builds ('preview' or 'production'). It is not a manually configured
+ * VITE_* variable, so Production protection depends on the actual
+ * Vercel deployment environment rather than an operator-entered value.
+ *
+ * VITE_MEAL_COMPLETION_DEBUG is the master switch: it must be explicitly
+ * set to '1' in any environment for diagnostics to run. It is not set in
+ * any .env file, so diagnostics are disabled by default.
+ */
+declare const __VERCEL_ENV__: string;
+
+const MEAL_COMPLETION_DEBUG =
+  import.meta.env.VITE_MEAL_COMPLETION_DEBUG === '1' &&
+  (import.meta.env.DEV || __VERCEL_ENV__ === 'preview');
+
+/**
+ * Capture the authenticated user's ID from the existing Supabase session.
+ * No new authentication mechanism is created.
+ */
+async function getAuthenticatedUserId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user?.id ?? null;
+}
+
 export async function upsertMealCompletion(
   input: UpsertMealCompletionInput
 ): Promise<{ completion: MealCompletion | null; error: string | null }> {
@@ -36,6 +72,20 @@ export async function upsertMealCompletion(
     // Validate input: client_id and plan_version_id must be provided
     if (!input.client_id || !input.plan_version_id) {
       return { completion: null, error: 'Client and plan version are required' };
+    }
+
+    const authenticatedUserId = await getAuthenticatedUserId();
+
+    if (MEAL_COMPLETION_DEBUG) {
+      console.debug('[MEAL_COMPLETION_DEBUG] upsert attempt', {
+        authenticatedUserId,
+        client_id: input.client_id,
+        plan_version_id: input.plan_version_id,
+        day_offset: input.day_offset,
+        meal_slot: input.meal_slot,
+        completed: input.completed,
+        timestamp: new Date().toISOString(),
+      });
     }
 
     const { data, error } = await supabase
@@ -57,11 +107,45 @@ export async function upsertMealCompletion(
       .single();
 
     if (error) {
+      if (MEAL_COMPLETION_DEBUG) {
+        console.debug('[MEAL_COMPLETION_DEBUG] upsert error', {
+          authenticatedUserId,
+          client_id: input.client_id,
+          plan_version_id: input.plan_version_id,
+          day_offset: input.day_offset,
+          meal_slot: input.meal_slot,
+          completed: input.completed,
+          error: {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
       return { completion: null, error: error.message };
     }
 
     return { completion: data as unknown as MealCompletion, error: null };
   } catch (err: unknown) {
+    if (MEAL_COMPLETION_DEBUG) {
+      console.debug('[MEAL_COMPLETION_DEBUG] upsert exception', {
+        authenticatedUserId: undefined,
+        client_id: input.client_id,
+        plan_version_id: input.plan_version_id,
+        day_offset: input.day_offset,
+        meal_slot: input.meal_slot,
+        completed: input.completed,
+        error: {
+          message: err instanceof Error ? err.message : String(err),
+          code: undefined,
+          details: undefined,
+          hint: undefined,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
     return {
       completion: null,
       error: err instanceof Error ? err.message : 'Failed to upsert meal completion',
