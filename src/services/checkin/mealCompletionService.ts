@@ -2,12 +2,10 @@
  * Meal Completion Service
  *
  * CRUD operations for the meal_completions table.
- * - INSERT / UPDATE go through upsert with ON CONFLICT on the unique constraint
- *   (client_id, plan_version_id, day_offset, meal_slot)
+ * - UPDATE changes only completed; a missing row is inserted separately
  * - RLS enforces athlete ownership and current-version at the database level
  */
 import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
 
 export interface MealCompletion {
   id: string;
@@ -75,9 +73,22 @@ export async function upsertMealCompletion(
     }
 
     const authenticatedUserId = await getAuthenticatedUserId();
+    if (!authenticatedUserId) {
+      return { completion: null, error: 'Not authenticated' };
+    }
+
+    const updateExistingCompletion = () =>
+      supabase
+        .from('meal_completions')
+        .update({ completed: input.completed })
+        .eq('client_id', input.client_id)
+        .eq('plan_version_id', input.plan_version_id)
+        .eq('day_offset', input.day_offset)
+        .eq('meal_slot', input.meal_slot)
+        .select('*');
 
     if (MEAL_COMPLETION_DEBUG) {
-      console.debug('[MEAL_COMPLETION_DEBUG] upsert attempt', {
+      console.debug('[MEAL_COMPLETION_DEBUG] write attempt', {
         authenticatedUserId,
         client_id: input.client_id,
         plan_version_id: input.plan_version_id,
@@ -88,27 +99,11 @@ export async function upsertMealCompletion(
       });
     }
 
-    const { data, error } = await supabase
-      .from('meal_completions')
-      .upsert(
-        {
-          client_id: input.client_id,
-          plan_version_id: input.plan_version_id,
-          day_offset: input.day_offset,
-          meal_slot: input.meal_slot,
-          completed: input.completed,
-          completed_at: input.completed ? new Date().toISOString() : null,
-        },
-        {
-          onConflict: 'client_id, plan_version_id, day_offset, meal_slot',
-        }
-      )
-      .select('*')
-      .single();
+    const { data: updatedRows, error: updateError } = await updateExistingCompletion();
 
-    if (error) {
+    if (updateError) {
       if (MEAL_COMPLETION_DEBUG) {
-        console.debug('[MEAL_COMPLETION_DEBUG] upsert error', {
+        console.debug('[MEAL_COMPLETION_DEBUG] update error', {
           authenticatedUserId,
           client_id: input.client_id,
           plan_version_id: input.plan_version_id,
@@ -116,21 +111,76 @@ export async function upsertMealCompletion(
           meal_slot: input.meal_slot,
           completed: input.completed,
           error: {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
+            message: updateError.message,
+            code: updateError.code,
+            details: updateError.details,
+            hint: updateError.hint,
           },
           timestamp: new Date().toISOString(),
         });
       }
-      return { completion: null, error: error.message };
+      return { completion: null, error: updateError.message };
     }
 
-    return { completion: data as unknown as MealCompletion, error: null };
+    if (updatedRows?.length) {
+      return { completion: updatedRows[0] as MealCompletion, error: null };
+    }
+
+    const { data: insertedCompletion, error: insertError } = await supabase
+      .from('meal_completions')
+      .insert({
+        client_id: input.client_id,
+        plan_version_id: input.plan_version_id,
+        day_offset: input.day_offset,
+        meal_slot: input.meal_slot,
+        completed: input.completed,
+      })
+      .select('*')
+      .single();
+
+    if (insertError?.code === '23505') {
+      const { data: retriedRows, error: retryError } = await updateExistingCompletion();
+      if (retryError) {
+        return { completion: null, error: retryError.message };
+      }
+      if (retriedRows?.length) {
+        return { completion: retriedRows[0] as MealCompletion, error: null };
+      }
+      return {
+        completion: null,
+        error: 'Meal completion could not be updated after a concurrent insert',
+      };
+    }
+
+    if (insertError) {
+      if (MEAL_COMPLETION_DEBUG) {
+        console.debug('[MEAL_COMPLETION_DEBUG] insert error', {
+          authenticatedUserId,
+          client_id: input.client_id,
+          plan_version_id: input.plan_version_id,
+          day_offset: input.day_offset,
+          meal_slot: input.meal_slot,
+          completed: input.completed,
+          error: {
+            message: insertError.message,
+            code: insertError.code,
+            details: insertError.details,
+            hint: insertError.hint,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+      return { completion: null, error: insertError.message };
+    }
+
+    if (!insertedCompletion) {
+      return { completion: null, error: 'Meal completion insert returned no record' };
+    }
+
+    return { completion: insertedCompletion as MealCompletion, error: null };
   } catch (err: unknown) {
     if (MEAL_COMPLETION_DEBUG) {
-      console.debug('[MEAL_COMPLETION_DEBUG] upsert exception', {
+      console.debug('[MEAL_COMPLETION_DEBUG] write exception', {
         authenticatedUserId: undefined,
         client_id: input.client_id,
         plan_version_id: input.plan_version_id,

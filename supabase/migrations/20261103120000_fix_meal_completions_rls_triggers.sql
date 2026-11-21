@@ -111,7 +111,7 @@ END $$;
 -- 4. RLS policies (idempotent via CREATE POLICY IF NOT EXISTS)
 
 -- Athlete INSERT (WITH CHECK enforces ownership + current version)
-CREATE POLICY IF NOT EXISTS meal_completions_client_insert
+CREATE POLICY meal_completions_client_insert
   ON public.meal_completions FOR INSERT
   WITH CHECK (
     EXISTS (
@@ -127,7 +127,7 @@ CREATE POLICY IF NOT EXISTS meal_completions_client_insert
   );
 
 -- Athlete SELECT
-CREATE POLICY IF NOT EXISTS meal_completions_client_read
+CREATE POLICY meal_completions_client_read
   ON public.meal_completions FOR SELECT
   USING (
     EXISTS (
@@ -138,7 +138,7 @@ CREATE POLICY IF NOT EXISTS meal_completions_client_read
   );
 
 -- Athlete UPDATE (USING + WITH CHECK for concurrent upsert safety)
-CREATE POLICY IF NOT EXISTS meal_completions_client_update
+CREATE POLICY meal_completions_client_update
   ON public.meal_completions FOR UPDATE
   USING (
     EXISTS (
@@ -161,7 +161,7 @@ CREATE POLICY IF NOT EXISTS meal_completions_client_update
   );
 
 -- Coach SELECT (coach -> client via profiles.trainer_id)
-CREATE POLICY IF NOT EXISTS meal_completions_coach_read
+CREATE POLICY meal_completions_coach_read
   ON public.meal_completions FOR SELECT
   USING (
     EXISTS (
