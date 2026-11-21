@@ -207,6 +207,48 @@ export type Database = {
           },
         ]
       }
+      meal_completions: {
+        Row: {
+          id: string
+          client_id: string
+          plan_version_id: string
+          day_offset: number
+          meal_slot: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          plan_version_id: string
+          day_offset: number
+          meal_slot: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+          completed: boolean
+          completed_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          plan_version_id?: string
+          day_offset?: number
+          meal_slot?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+          completed?: boolean
+          completed_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_completions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ],
+      },
       client_progress_entries: {
         Row: {
           body_fat_pct: number | null

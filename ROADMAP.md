@@ -85,6 +85,13 @@ Rationale: athlete side is read-only; first genuine athlete value. Depends on:
 P0-1–P0-4. Done when: one shipped workflow with defined metric + source data.
 Discovery-gated if scope unclear.
 
+**Status 2026-10-29: complete** — Meal completion logging implemented
+(see CURRENT_STATE.md §2). Athletes can mark meals completed/uncompleted on
+`/my-plan`; choices persist across refreshes. Records scoped to plan version,
+no inheritance to new versions. Coaches view status on `/clients/:clientId/nutrition`.
+Browser verification outstanding; `npm run typecheck` and `npm run build`
+pass (zero errors). TypeSupabase types regenerated from local DB.
+
 P1-2 · Explicit definitions + reliable sources for any new adherence/progress
 metric. Rationale: never repeat the stub pattern. Depends on: P0-2. Done when:
 every displayed metric cites source table + formula.

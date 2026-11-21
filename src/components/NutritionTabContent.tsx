@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getMealCompletions, type MealCompletion } from '@/services/checkin/mealCompletionService';
 import { useNutritionPlanState, type PlanState } from '@/hooks/useNutritionPlanState';
 import { useAdaptiveNutritionTarget } from '@/hooks/useAdaptiveNutritionTarget';
 import { useIngredientValidation, INGREDIENT_MINIMUMS } from '@/hooks/useIngredientValidation';
@@ -81,6 +82,48 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   const { toast } = useToast();
 
   const planState = useNutritionPlanState();
+
+  // Meal completions for coach view
+  const [mealCompletions, setMealCompletions] = useState<MealCompletion[]>([]);
+  const [mealCompletionsLoading, setMealCompletionsLoading] = useState(false);
+  const [mealCompletionsError, setMealCompletionsError] = useState<string | null>(null);
+
+  // Fetch meal completions when the plan changes or client changes
+  useEffect(() => {
+    if (!planState.versionId) {
+      setMealCompletions([]);
+      setMealCompletionsLoading(false);
+      setMealCompletionsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setMealCompletionsLoading(true);
+    setMealCompletionsError(null);
+
+    getMealCompletions(activeClientId, planState.versionId)
+      .then((result) => {
+        if (cancelled) return;
+        setMealCompletions(result.completions ?? []);
+        setMealCompletionsLoading(false);
+        if (result.error) setMealCompletionsError(result.error);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMealCompletionsError(err instanceof Error ? err.message : 'Failed to load meal completions');
+        setMealCompletionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeClientId, planState.versionId]);
+
+  // Load the plan when the client changes
+  useEffect(() => {
+    if (planState.isLoading) return;
+    planState.loadPlanForClient(activeClientId);
+  }, [activeClientId]);
 
   /**
    * Eligibility boundary — the single source of truth for which ingredients may
@@ -427,6 +470,48 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
       )}
 
       {hasWeeklyPlan && !planState.isLoading && <WeeklyMealPlanDisplay weeklyPlan={planState.resolvedWeeklyPlan!} />}
+
+      {/* Coach meal completions display */}
+      {hasWeeklyPlan && !planState.isLoading && planState.versionId && planState.resolvedWeeklyPlan?.days?.length > 0 && !mealCompletionsLoading && !mealCompletionsError && (
+        <Card className="p-4 shadow-card mb-4">
+          <h4 className="font-semibold text-sm mb-3">Meal Completions</h4>
+          {/* Responsive day cards: 1 col mobile, 2 col tablet, 3 col desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {planState.resolvedWeeklyPlan.days.map((day) => (
+              <div key={day.dayNumber} className="border rounded bg-card p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-primary">{day.dayName}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {['breakfast', 'lunch', 'dinner', 'snack'].map(mealSlot => {
+                    const completion = mealCompletions.find(
+                      c => c.day_offset === day.dayNumber - 1 && c.meal_slot === mealSlot
+                    );
+                    const isCompleted = completion?.completed;
+                    return (
+                      <div key={mealSlot} className="flex flex-col items-center gap-0.5">
+                        <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-tight">
+                          {mealSlot.charAt(0).toUpperCase() + mealSlot.slice(1)}
+                        </span>
+                        <span
+                          className={isCompleted
+                            ? 'bg-success/10 text-success border-success/20 rounded py-0.5 px-1 text-xs'
+                            : isCompleted === false
+                              ? 'border border-border rounded py-0.5 px-1 text-xs text-muted-foreground'
+                              : 'bg-muted/50 text-muted-foreground rounded py-0.5 px-1 text-xs'}
+                        >
+                          {isCompleted ? 'Completed' : isCompleted === false ? 'Not completed' : 'Not recorded'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {hasDailyPlan && !planState.isLoading && <DailyMealPlanDisplay {...dailyMealPlan} />}
 
       {planState.snapshot && planState.snapshot.groceryList && !planState.isLoading && (

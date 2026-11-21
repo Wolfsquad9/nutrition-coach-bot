@@ -39,6 +39,14 @@ eligibility, never overrides allergens/diet, never changes macro convergence;
 `traditional` = byte-identical legacy weekly path; daily generation unaffected.
 
 **Athlete:** weekly/daily plan view (`ClientMyPlanPage` → `fetchCurrentPlan`);
+**new in P1-1D (2026-10-29):** Meal completion logging. Athletes can mark
+individual meals in their current locked nutrition plan as completed or not
+completed; the choice persists across page refreshes. Missing completion records
+display as "Not recorded," not "Skipped." Coaches can view meal completion
+status in the existing client nutrition route (`/clients/:clientId/nutrition`).
+Completion records are scoped to the specific plan version and do not carry over
+to a newly locked version.
+
 **new in `099ef2e`:** `Meal variety: More/Traditional variety` badge rendered
 ONLY when the persisted payload carries the key — legacy payloads show nothing.
 Plus grocery/prep lists, training session logging (insert-gated completion
@@ -153,7 +161,9 @@ so the casts are checked by the compiler.
    traced) — partially verified.
 4. No E2E covers generation → lock → athlete view (specs: auth/invite/cross-role/
    cleanup/shared-plan only) — confirmed gap by spec inventory.
-5. Meal variety has never been seen by a user — no differentiation claim allowed.
+5. 
+6. Browser verification of P1-1D meal completion against the running local application — not yet performed. Code, migration, typecheck, and build are verified (see §4: Validation status). Hosted/production database untouched.
+Meal variety has never been seen by a user — no differentiation claim allowed.
 6. Sentry delivery to any real project — unverified (no test event sent).
 7. Phase 3A scope — unknown (label only; see ROADMAP).
 
