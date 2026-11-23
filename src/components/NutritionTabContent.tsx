@@ -168,13 +168,7 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
   // Daily generation is deliberately unaffected by this control.
   const [mealVariety, setMealVariety] = useState<MealVarietyPreference>('more');
 
-  useEffect(() => {
-    if (activeClientId) {
-      planState.loadPlanForClient(activeClientId);
-      setDailyMealPlan(null);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeClientId]);
+  
 
   /** Eligibility-resolved pool used by every generation path in this tab. */
   const getEligibleIngredientIds = useCallback(
