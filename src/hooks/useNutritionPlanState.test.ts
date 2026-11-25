@@ -761,6 +761,7 @@ describe('loadPlanForClient stale-load epoch (regression)', () => {
       resolveNextFetchCurrentPlan({ plan: fakeLockedPlanPayload, planId: 'p1', versionId: null, createdAt: lockedAtIso, snapshot: null, payloadHash: 'hash_test', versionNumber: 1, error: null });
     });
     expect(result.current.weeklyPlan).toBeNull();
+    expect(result.current.isLoading).toBe(true);
 
     // The newer load resolves with an (identical-shape) result — it applies.
     await act(async () => {
@@ -768,6 +769,86 @@ describe('loadPlanForClient stale-load epoch (regression)', () => {
     });
     expect(result.current.weeklyPlan).toEqual(fakeWeeklyPlan);
     expect(result.current.planId).toBe('p2');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('does not clear shared loading state when a stale snapshot load completes', async () => {
+    const { result } = renderHook(() => useNutritionPlanState());
+    let resolveSnapshot: (value: { snapshot: null; error: null }) => void = () => {};
+    const snapshotPromise = new Promise<{ snapshot: null; error: null }>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    mockFetchCurrentPlan.mockResolvedValueOnce({
+      plan: fakeLockedPlanPayload,
+      planId: 'p1',
+      versionId: 'v1',
+      createdAt: lockedAtIso,
+      snapshot: null,
+      payloadHash: 'hash_test',
+      versionNumber: 1,
+      error: null,
+    });
+    mockFetchPersistedSnapshot.mockReturnValueOnce(snapshotPromise);
+
+    let loadA: Promise<void>;
+    await act(async () => {
+      loadA = result.current.loadPlanForClient('client-a');
+    });
+    await waitFor(() => expect(mockFetchPersistedSnapshot).toHaveBeenCalledWith('v1'));
+
+    deferNextFetchCurrentPlan();
+    let loadB: Promise<void>;
+    await act(async () => {
+      loadB = result.current.loadPlanForClient('client-b');
+    });
+    await waitFor(() => expect(pendingFetchCurrentPlan()).toBe(1));
+
+    await act(async () => {
+      resolveSnapshot({ snapshot: null, error: null });
+      await loadA;
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.error).toBeNull();
+
+    await act(async () => {
+      resolveNextFetchCurrentPlan({ plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null });
+      await loadB;
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('does not clear shared loading state when a stale load rejects', async () => {
+    const { result } = renderHook(() => useNutritionPlanState());
+    let rejectLoadA: (error: Error) => void = () => {};
+    const loadAPromise = new Promise<never>((_resolve, reject) => {
+      rejectLoadA = reject;
+    });
+    mockFetchCurrentPlan.mockImplementationOnce(() => loadAPromise);
+    let loadA: Promise<void>;
+    await act(async () => {
+      loadA = result.current.loadPlanForClient('client-a');
+    });
+
+    deferNextFetchCurrentPlan();
+    let loadB: Promise<void>;
+    await act(async () => {
+      loadB = result.current.loadPlanForClient('client-b');
+    });
+    await waitFor(() => expect(pendingFetchCurrentPlan()).toBe(1));
+
+    await act(async () => {
+      rejectLoadA(new Error('stale request failed'));
+      await loadA;
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.error).toBeNull();
+
+    await act(async () => {
+      resolveNextFetchCurrentPlan({ plan: null, planId: null, versionId: null, createdAt: null, snapshot: null, error: null });
+      await loadB;
+    });
     expect(result.current.isLoading).toBe(false);
   });
 });

@@ -293,6 +293,7 @@ export function useNutritionPlanState() {
       // epoch makes usePlanFetch's staleness checks drop the in-flight
       // response instead of overwriting the newer draft with it.
       loadRequestIdRef.current += 1;
+      setUiState("IDLE");
 
       // Phase 8: capture the draft's effective weekly rate so locking THIS
       // draft persists its prescription record. The ACTIVE PRESCRIPTION itself
@@ -314,7 +315,7 @@ export function useNutritionPlanState() {
       setLockedUntil(null);
       setSnapshot(null);
     },
-    [lifecycleState]
+    [lifecycleState, setUiState]
   );
 
   const discardDraft = useCallback(async (clientId?: string) => {

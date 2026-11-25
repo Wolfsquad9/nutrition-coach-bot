@@ -119,10 +119,16 @@ export function NutritionTabContent({ activeClientId, activeClient, clientRestri
     };
   }, [activeClientId, planState.versionId]);
 
-  // Load the plan when the client changes
+  // Load the plan when the client changes.
+  // P1: Always initiate a plan load when the active client changes.
+  // The loadRequestIdRef mechanism in usePlanFetch invalidates any stale
+  // responses from the previous client, so a late response from client A
+  // cannot overwrite client B's state after switching.
+  // P2: Clear the previous client's daily plan so it is not visible or
+  // actionable under the new client.
   useEffect(() => {
-    if (planState.isLoading) return;
     planState.loadPlanForClient(activeClientId);
+    setDailyMealPlan(null);
   }, [activeClientId]);
 
   /**
