@@ -128,7 +128,7 @@ export function usePlanFetch(
       const [planResult, lockResult] = await Promise.all([fetchPromise, lockPromise]);
 
       if (currentRequestId !== loadRequestIdRef.current) {
-        setUiState("IDLE");
+        // A newer request owns the shared UI state.
         return;
       }
 
@@ -157,7 +157,7 @@ export function usePlanFetch(
         ]);
 
         if (currentRequestId !== loadRequestIdRef.current) {
-          setUiState("IDLE");
+          // A newer request owns the shared UI state.
           return;
         }
 
@@ -214,7 +214,7 @@ export function usePlanFetch(
       setUiState("IDLE");
     } catch (err) {
       if (currentRequestId !== loadRequestIdRef.current) {
-        setUiState("IDLE");
+        // A newer request owns the shared UI state.
         return;
       }
       console.error(err);
